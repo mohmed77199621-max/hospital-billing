@@ -62,29 +62,26 @@ body{font-family:'Noto Kufi Arabic',sans-serif;background:#eef2f7;color:var(--t)
   .no-print{display:none!important}
   body{background:#fff!important;margin:0!important;padding:0!important}
   .hdr,.modal,#patients-section{display:none!important}
-  #print-area{display:block!important;width:100%!important;margin:0!important;padding:0!important}
+  #print-area{display:block!important}
   #main-content{display:none!important}
-  /* إجبار الصفحة على مقاس A4 رأسي وإلغاء الهوامش لتوفير مساحة */
-  @page{size:A4 portrait;margin:0mm!important}
+  @page{size:A4 portrait;margin:8mm 10mm}
 }
 #print-area{display:none}
-
-/* تنسيق الفاتورة لضمان التجمع في صفحة واحدة */
-.inv-wrap{font-family:'Noto Kufi Arabic',sans-serif;direction:rtl;color:#000;font-size:9.5pt!important;line-height:1.25!important;padding:8mm!important;box-sizing:border-box}
-.inv-hdr{text-align:center;border-bottom:2px solid #0f2d5e;padding-bottom:3px;margin-bottom:5px}
-.inv-hdr div{font-size:11.5pt!important;font-weight:900}
+/* Invoice */
+.inv-wrap{font-family:'Noto Kufi Arabic',sans-serif;direction:rtl;color:#0d0d0d;font-size:8pt;line-height:1.3}
+.inv-hdr{text-align:center;border-bottom:2px solid #0f2d5e;padding-bottom:6px;margin-bottom:8px}
 .inv-meta table,.inv-totals table,.inv-items{width:100%;border-collapse:collapse}
-.inv-meta td{padding:3px 5px!important;border:1px solid #000!important;font-size:9pt!important;font-weight:700}
+.inv-meta td{padding:3px 6px;border:1px solid #ccc;font-size:7.5pt}
 .lh{background:#e8eef7;font-weight:900;width:22%}
-.inv-sec{background:#0f2d5e;color:#fff;padding:2px 5px!important;font-weight:900;font-size:9.5pt!important;margin:4px 0 2px}
-.inv-items th{background:#dde6f5;padding:3px 2px!important;font-weight:900!important;border:1px solid #000!important;font-size:8.5pt!important;color:#000}
-.inv-items td{padding:3px 2px!important;border:1px solid #000!important;font-size:8.5pt!important;font-weight:700!important;color:#000}
+.inv-sec{background:#0f2d5e;color:#fff;padding:3px 8px;font-weight:900;font-size:7.5pt;margin:5px 0 3px}
+.inv-items th{background:#dde6f5;padding:3px 5px;font-weight:800;border:1px solid #b5c5e0;font-size:7pt}
+.inv-items td{padding:2px 5px;border:1px solid #d5e0ee;font-size:7pt}
 .inv-items tr:nth-child(even) td{background:#f7f9fc}
-.inv-totals td{padding:3px 5px!important;border:1px solid #000!important;font-size:9pt!important}
-.tl{background:#f0f4f8;font-weight:900}
-.inv-grand{background:#0f2d5e!important;color:#fff!important;font-weight:900!important;font-size:11pt!important}
-.inv-sigs{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-top:10px}
-.inv-sig{text-align:center;border-top:1px dashed #000;padding-top:3px;font-size:9pt!important;font-weight:900;color:#000}
+.inv-totals td{padding:4px 7px;border:1px solid #ccc;font-size:8pt}
+.tl{background:#f0f4f8;font-weight:800}
+.inv-grand{background:#0f2d5e!important;color:#e8a800!important;font-weight:900!important;font-size:10.5pt!important}
+.inv-sigs{display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px;margin-top:16px}
+.inv-sig{text-align:center;border-top:1px dashed #888;padding-top:7px;font-size:8pt;font-weight:800;color:#333}
 @media(max-width:900px){#main-grid{grid-template-columns:1fr!important}.g4{grid-template-columns:1fr 1fr!important}}
 @media(max-width:600px){.g2{grid-template-columns:1fr 1fr!important}.g4{grid-template-columns:1fr 1fr!important}}
 </style>
