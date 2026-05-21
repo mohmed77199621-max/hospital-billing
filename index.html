@@ -4,8 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>نظام حسابات مستشفى سوهاج العام</title>
-<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Kufi+Arabic:wght@300;400;500;700;900&display=swap" rel="stylesheet">
 <style>
@@ -62,26 +60,27 @@ body{font-family:'Noto Kufi Arabic',sans-serif;background:#eef2f7;color:var(--t)
 /* Print */
 @media print{
   .no-print{display:none!important}
-  body{background:#fff!important}
+  body{background:#fff!important;margin:0!important;padding:0!important}
   .hdr,.modal,#patients-section{display:none!important}
   #print-area{display:block!important}
   #main-content{display:none!important}
+  @page{size:A4 portrait;margin:8mm 10mm}
 }
 #print-area{display:none}
 /* Invoice */
-.inv-wrap{font-family:'Noto Kufi Arabic',sans-serif;direction:rtl;color:#0d0d0d;font-size:9.5pt;line-height:1.5}
-.inv-hdr{text-align:center;border-bottom:3px solid #0f2d5e;padding-bottom:10px;margin-bottom:14px}
+.inv-wrap{font-family:'Noto Kufi Arabic',sans-serif;direction:rtl;color:#0d0d0d;font-size:8pt;line-height:1.3}
+.inv-hdr{text-align:center;border-bottom:2px solid #0f2d5e;padding-bottom:6px;margin-bottom:8px}
 .inv-meta table,.inv-totals table,.inv-items{width:100%;border-collapse:collapse}
-.inv-meta td{padding:4px 7px;border:1px solid #ccc;font-size:8.5pt}
+.inv-meta td{padding:3px 6px;border:1px solid #ccc;font-size:7.5pt}
 .lh{background:#e8eef7;font-weight:900;width:22%}
-.inv-sec{background:#0f2d5e;color:#fff;padding:5px 10px;font-weight:900;font-size:8.5pt;margin:8px 0 4px}
-.inv-items th{background:#dde6f5;padding:5px 7px;font-weight:800;border:1px solid #b5c5e0;font-size:7.5pt}
-.inv-items td{padding:4px 7px;border:1px solid #d5e0ee;font-size:8pt}
+.inv-sec{background:#0f2d5e;color:#fff;padding:3px 8px;font-weight:900;font-size:7.5pt;margin:5px 0 3px}
+.inv-items th{background:#dde6f5;padding:3px 5px;font-weight:800;border:1px solid #b5c5e0;font-size:7pt}
+.inv-items td{padding:2px 5px;border:1px solid #d5e0ee;font-size:7pt}
 .inv-items tr:nth-child(even) td{background:#f7f9fc}
-.inv-totals td{padding:5px 8px;border:1px solid #ccc;font-size:8.5pt}
+.inv-totals td{padding:4px 7px;border:1px solid #ccc;font-size:8pt}
 .tl{background:#f0f4f8;font-weight:800}
 .inv-grand{background:#0f2d5e!important;color:#e8a800!important;font-weight:900!important;font-size:10.5pt!important}
-.inv-sigs{display:grid;grid-template-columns:1fr 1fr 1fr;gap:30px;margin-top:28px}
+.inv-sigs{display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px;margin-top:16px}
 .inv-sig{text-align:center;border-top:1px dashed #888;padding-top:7px;font-size:8pt;font-weight:800;color:#333}
 @media(max-width:900px){#main-grid{grid-template-columns:1fr!important}.g4{grid-template-columns:1fr 1fr!important}}
 @media(max-width:600px){.g2{grid-template-columns:1fr 1fr!important}.g4{grid-template-columns:1fr 1fr!important}}
@@ -90,7 +89,7 @@ body{font-family:'Noto Kufi Arabic',sans-serif;background:#eef2f7;color:var(--t)
 <body>
 
 <!-- Loading Overlay -->
-<div id="loading">
+<div id="loading" style="display:none">
   <div class="spinner"></div>
   <div style="font-size:.9rem;font-weight:700">جاري الاتصال بقاعدة البيانات...</div>
   <div style="font-size:.72rem;color:rgba(255,255,255,.6);margin-top:6px">مستشفى سوهاج العام</div>
@@ -159,7 +158,7 @@ body{font-family:'Noto Kufi Arabic',sans-serif;background:#eef2f7;color:var(--t)
       <div class="card">
         <div class="sec-title">أجور الخدمات والإقامة الثابتة (ج.م)</div>
         <div class="g4">
-          <div><label class="lbl">إقامة يومية × الأيام</label><input type="number" id="f_stay" value="0" oninput="calcTotal()" class="inp inp-blue" min="0"></div>
+          <div><label class="lbl">إقامة (يدوي)</label><input type="number" id="f_stay" value="0" oninput="calcTotal()" class="inp inp-blue" min="0"></div>
           <div><label class="lbl">إشراف طبي</label><input type="number" id="f_med" value="0" oninput="calcTotal()" class="inp inp-blue" min="0"></div>
           <div><label class="lbl">إشراف تمريض</label><input type="number" id="f_nur" value="0" oninput="calcTotal()" class="inp inp-blue" min="0"></div>
           <div><label class="lbl">أجر الطبيب</label><input type="number" id="f_doc" value="0" oninput="calcTotal()" class="inp inp-blue" min="0"></div>
@@ -289,6 +288,8 @@ body{font-family:'Noto Kufi Arabic',sans-serif;background:#eef2f7;color:var(--t)
   </div>
 </div>
 
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
 <script>
 /* ========== FIREBASE INIT ========== */
 const firebaseConfig = {
@@ -302,7 +303,8 @@ const firebaseConfig = {
 };
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
-db.enablePersistence({synchronizeTabs:true}).catch(e=>console.log('Persist:',e.code));
+// الصفحة تشتغل فوراً بدون انتظار Firebase
+
 
 /* ========== DEFAULT DATA ========== */
 const DB0 = {"أدوية":[{"name":"ادرينالين ا","price":6.61},{"name":"اركسترا 2.5 ا","price":54.77},{"name":"استيل سيستاين ا","price":48.79},{"name":"افيل برافين ض الحساسية","price":4.48},{"name":"البيومين بشري","price":1256.85},{"name":"التبلاز اكستيلير","price":10828.86},{"name":"ال -كارنتين ا","price":7.76},{"name":"امري ك (ف.ك)أ","price":3.98},{"name":"اميرون -كواردرون","price":3.7},{"name":"امينوفيللين أ","price":6.07},{"name":"انتودين","price":10.3},{"name":"انسولين مائي","price":112.0},{"name":"اوكسي توسيف أ","price":6.72},{"name":"ابيلوج - فتتوين أ","price":3.66},{"name":"ايزوبتن -فيراباميل أ","price":44.91},{"name":"ايمتركس","price":3.92},{"name":"بروتوفكس -زوركال أ","price":36.96},{"name":"بريمبران -ميكلوبرام أ","price":2.74},{"name":"بوتاسيوم كلوريد أ","price":4.2},{"name":"بي كوم -ليفابيون أ","price":4.13},{"name":"تبجاميكلين","price":197.12},{"name":"ثرومبكس أ","price":50.03},{"name":"جاست ريج أ","price":7.18},{"name":"جليكو فوس","price":31.92},{"name":"دانست ايمرست أ","price":6.72},{"name":"دوبامين أ","price":11.48},{"name":"ديبوتركس -دوبياتامين","price":31.36},{"name":"ديكسا ميثازون أ","price":5.6},{"name":"ديكلوفين أ","price":3.92},{"name":"زوميجيول أ","price":14.56},{"name":"كساببرون -دايسنون أ","price":11.2},{"name":"سبازموفري أ","price":11.2},{"name":"سربرو لايسين أ","price":133.0},{"name":"سيدوناز- ستربتوكيناز","price":2525.1},{"name":"صوديوم بيكربونات","price":11.67},{"name":"فلوبرتين","price":8.69},{"name":"فورت ميند -سومازينا","price":10.33},{"name":"كافينو سبير","price":24.64},{"name":"كالسيوم أ","price":18.48},{"name":"كارديكسيل -ديجوكسين أ","price":6.27},{"name":"كلكسان 40","price":108.64},{"name":"كلكسان 60","price":128.8},{"name":"كليندامايمين 300","price":22.4},{"name":"كيبليبسي- يتراتام أ","price":15.68},{"name":"لابي بريس","price":33.6},{"name":"لانكس - لازيفار أ20مجم","price":4.93},{"name":"لوسيفورت","price":22.77},{"name":"ماغنسيوم سلفات أ","price":11.67},{"name":"ميمولال -سربيرو سيتام أ","price":3.18},{"name":"نترونال فيال","price":40.32},{"name":"نورادرينالين 4مجم","price":17.92},{"name":"نورادرينالين 8مجم","price":34.72},{"name":"هيدروكوربتزون أ","price":21.28},{"name":"هيبارين أ","price":43.67},{"name":"ابراوتروبيام","price":5.54},{"name":"اتروفنت","price":3.81},{"name":"بليمكورت","price":24.74},{"name":"فاركولين","price":15.68},{"name":"اسيكلو فيرفيال","price":90.23},{"name":"تارجو سيدفيال","price":450.7},{"name":"تافنيك فيال","price":281.76},{"name":"سوليمد رول 1جم","price":291.2},{"name":"سوليمد رول 500مجم","price":162.4},{"name":"سبفبيم -ماكسبيم","price":55.94},{"name":"سبفوتاكس 1جم","price":22.4},{"name":"سبفترياكسون 1جم","price":22.4},{"name":"فلوموكس","price":11.92},{"name":"فانكو مايسين 500","price":56.0},{"name":"كلاسيد 500","price":231.42},{"name":"كيفاديم -سيفندين","price":30.24},{"name":"ليفوفلوكساسين","price":28.0},{"name":"ميروينم 500مجم","price":95.2},{"name":"ميروينم 1جم","price":145.6},{"name":"يونكتام -التراسيلين","price":24.64},{"name":"امينوفين كبار","price":93.48},{"name":"بي كي ميرز -امانتدين","price":168.0},{"name":"سموف كابفين","price":296.4},{"name":"برفنجان وريد","price":33.6},{"name":"فلاجيل وريد","price":23.52},{"name":"افروزوليد امل","price":168.0},{"name":"ديفلوكان","price":30.24},{"name":"موكسيفلوكس I.v","price":95.2},{"name":"اتراكيم","price":19.04},{"name":"اتروبين","price":5.54},{"name":"افدرين","price":4.48},{"name":"بيوكين -ماركين أ","price":16.8},{"name":"بيوكين -ماركين فيال","price":14.3},{"name":"ديبرفان -بروبوفول","price":62.7},{"name":"بيثدين 50","price":4.76},{"name":"يبيثدين 100","price":8.74},{"name":"فنتانيل","price":19.04},{"name":"مورفين 10","price":14.9},{"name":"ميداثيتك","price":7.0},{"name":"ايزوفلوران 1سم","price":3.7},{"name":"سيفو فلوران 1سم","price":10.59},{"name":"هالوثان 1سم","price":0.57},{"name":"زيلوكين -ليدوكايين 1سم","price":0.36},{"name":"نيو ستجمين فيال 1سم","price":3.18},{"name":"كيتامين -كتلا 1سم","price":3.36},{"name":"ملح 9%","price":20.72},{"name":"ملح 3%","price":22.92},{"name":"جلكوز10%","price":25.76},{"name":"جلكوز 25%","price":30.24},{"name":"جلكوز ملحي","price":21.28},{"name":"رينجر","price":19.04},{"name":"رينجر لاكتال","price":11.52},{"name":"مانيتول","price":46.66},{"name":"بانسول","price":46.66},{"name":"نيومنت","price":23.52},{"name":"الزمندا قطارة","price":20.61},{"name":"بيفاترامين بخاخ","price":48.94},{"name":"جلسرين لبوس","price":0.5},{"name":"ماء مقطر","price":12.03},{"name":"نيترودريوم لزقة","price":12.12},{"name":"ونكيور بوردر","price":28.56},{"name":"ثروميكس جيل","price":55.91},{"name":"منتوبروفين جيل","price":5.21},{"name":"جنتامايسين كريم","price":13.52},{"name":"هيلاريم كريم","price":19.21},{"name":"استيل سيستاين كيس","price":3.19},{"name":"سليمارين كيس","price":0.83},{"name":"لاكتوفرين كيس","price":2.18},{"name":"هيدراسيك كيس","price":2.72},{"name":"ors كيس معالجة جفاف","price":2.63},{"name":"ازيثرومايسيف شراب","price":17.92},{"name":"ايمكسكلاف شراب","price":28.21},{"name":"بروفين شراب","price":13.91},{"name":"بروموهكسيف شراب","price":11.98},{"name":"برنكوتيرول شراب","price":3.92},{"name":"بوتاسيوم كلوريد شراب","price":7.87},{"name":"جولدن فير حديد شراب","price":9.79},{"name":"ريسبربدون شراب","price":7.84},{"name":"زنك شراب","price":11.53},{"name":"زيلون -بديكورت شراب","price":26.88},{"name":"سيتال شراب","price":7.19},{"name":"فلاجيل شراب","price":23.34},{"name":"ماكسيلاز شراب","price":17.68},{"name":"ميوكوسول شراب","price":7.83},{"name":"اجركس -اسيوسيد 75مجم ق","price":0.34},{"name":"اسيرين بروتكت 100مجم ق","price":1.42},{"name":"اكسفورج HCT ق","price":1.1},{"name":"الدكتون -سبيرو نولاكتون ق","price":1.1},{"name":"الدومين -ميثيل دوباف","price":2.8},{"name":"الفترين -امبيزيم ق","price":1.23},{"name":"ايجيبرو ق","price":0.56},{"name":"بارامول ق","price":0.39},{"name":"بروفين 400 ق","price":2.08},{"name":"بلافكس ق","price":10.23},{"name":"بون كير - وان الفا ق","price":3.44},{"name":"ترياكور ق","price":3.26},{"name":"تريتاس 2.5 ق","price":1.39},{"name":"تريتاس 1.25","price":2.16},{"name":"تريتاس","price":3.5},{"name":"داونستيلوون","price":1.86},{"name":"ديكلاك150مجم","price":3.36},{"name":"ديسفلاتيل ق","price":0.67},{"name":"سبا نيلا -فامتاريل ق","price":4.26},{"name":"فاروكال -كالسيمات ق","price":0.26},{"name":"كابوتريل 25 مجم ق","price":0.78},{"name":"كارديكسين ق","price":0.26},{"name":"كارفيد ق","price":0.2},{"name":"كلاتكس ق","price":1.22},{"name":"فلاجيل ق","price":0.84},{"name":"ميتاكارديا ق","price":0.82},{"name":"نور فاسك - ريجيكور ق","price":0.73},{"name":"نيقيلوب ق","price":1.96},{"name":"صبغة اومنيباك","price":540.79},{"name":"صبغة اومنيسكان","price":504.2},{"name":"سلفاديازين كريم","price":5.56},{"name":"ميتا لبزه 25 مجم","price":21657.72},{"name":"ديباكين ق","price":3.7},{"name":"سيكو سيتام ق","price":2.63},{"name":"تجربتول ق","price":1.57},{"name":"محلول امينوليببان","price":152.49},{"name":"اير ستابكس تريوق","price":1.79},{"name":"دياميكرون ق","price":1.22},{"name":"ميجا موكس ق","price":10.1},{"name":"لازكس 40مجم أ","price":24.64},{"name":"حديد قرص","price":0.86},{"name":"سيفترياكسون 500مجم","price":16.24},{"name":"لوكيلما اكياس","price":198.78},{"name":"انتودين ق","price":0.67},{"name":"كليندامايمين900","price":48.72},{"name":"جلكوز 5%","price":15.91}],"مستلزمات":[{"name":"سرنجة انسولين","price":4.0},{"name":"سرنجة 3سم","price":1.21},{"name":"سرنجة 5سم","price":1.47},{"name":"سرنجة 10سم","price":1.89},{"name":"سرنجة 20سم","price":3.67},{"name":"سرنجة 50سم بالابرة","price":6.39},{"name":"سرنجة رايل بوز قسطرة","price":8.4},{"name":"ابرة بزل بنج نصفي م 22","price":32.23},{"name":"ابرة بزل بنج نصفي م 25","price":48.5},{"name":"كانيولا كبار 18","price":6.46},{"name":"كانيولا كبار 20","price":6.46},{"name":"كانيولا كبار 22","price":6.46},{"name":"كانيولا اطفال 24","price":7.9},{"name":"كانيولا اطفال 26","price":7.9},{"name":"نيزل كانيولا حديث الولادة","price":3.23},{"name":"نيزل كبار","price":9.63},{"name":"نيزل اطفال","price":7.68},{"name":"انبوبة تغذية رايل كبار","price":6.14},{"name":"انبوبة تغذية رايل صغار","price":4.61},{"name":"انبوبة حنجرية بالون","price":27.83},{"name":"انبوبة حنجرية بدون بالون","price":16.76},{"name":"جهاز محاليل كبار","price":6.3},{"name":"جهاز محاليل بالمنظم سلوسبت","price":30.71},{"name":"شفاط جراحي جهاز تجميع سوائل","price":76.77},{"name":"خرطوم شفط باليانكر","price":26.93},{"name":"كيس جمع بول","price":8.14},{"name":"ماسك اكسجين كبار","price":14.74},{"name":"ماسك اكسجين اطفال","price":14.7},{"name":"ماسك بخار نيوبلايزر كبار","price":17.36},{"name":"ماسك بخار نيوبلايزر اطفال","price":17.36},{"name":"ماسك سباب انفي وفمي","price":2536.61},{"name":"ماسك تخدي دراجر","price":60.4},{"name":"وصلة تنفس صناعي كبار","price":92.4},{"name":"وصلة ثلاثية","price":7.35},{"name":"وصلة وريد 150 سم","price":4.98},{"name":"وصلة شريانية 100مم","price":10.75},{"name":"وصلة حرف T للتخدير","price":8.08},{"name":"وصلة تخدير خرطومين بالباج كبار","price":78.76},{"name":"وصلة تخدير خرطومين بالباج اطفال","price":350.18},{"name":"ممر هوائي","price":10.5},{"name":"امبوباج كبار","price":406.6},{"name":"قسطرة نيلتون عادية تشفيط","price":5.67},{"name":"قسطرة بولية فولي","price":23.03},{"name":"قسطرة فولي اطفال","price":24.57},{"name":"قسطرة سيليكون","price":75.23},{"name":"قسطرة سيليكون منحنية الطرف","price":49.61},{"name":"قسطرة cvpاطفال","price":767.7},{"name":"قسطرة سرة اطفال","price":65.72},{"name":"مشبك سرة","price":1.38},{"name":"نظارة فوتو حديثة ولادة","price":5.04},{"name":"قسطرة خطوة واحدة زي الخنزير","price":455.9},{"name":"قسطرة حالب مفتوح","price":216.83},{"name":"دعامة حالب طويلة المدي","price":1643.7},{"name":"دعامة حالب قصيرة المدي","price":342.08},{"name":"موسع حالب","price":185.84},{"name":"شيش منظار كلي","price":1976.4},{"name":"طقم نفرستومي","price":1538.12},{"name":"باسكت نيتول دورميا","price":2891.68},{"name":"سلك مرشد sensor","price":1935.28},{"name":"سلك مرشد cebra","price":1677.25},{"name":"ابرة شيبا","price":189.4},{"name":"جراب كاميرا","price":24.57},{"name":"كلبس جراحي وسط","price":67.19},{"name":"كلبس جراحي وسط وكبير","price":80.62},{"name":"كلبس جراحي كبير","price":86.62},{"name":"سلاح شيفر","price":2111.54},{"name":"وصلة مضخة","price":1535.67},{"name":"جيبسونا 10 سم","price":23.47},{"name":"جيبسونا 15 سم","price":34.42},{"name":"جيبسونا20 سم","price":49.12},{"name":"رباط ضاغط 15 سم","price":23.8},{"name":"رباط ضاغط 10سم","price":16.43},{"name":"رباط ضاغط 7.5سم","price":11.76},{"name":"جوانتي لاتكس علبة","price":154.91},{"name":"جوانتي لاتكس زوج","price":3.1},{"name":"جوانتي معقم 7","price":14.92},{"name":"جوانتي معقم 7.5","price":14.92},{"name":"جوانتي معقم 8","price":14.92},{"name":"جوانتي معقم 8.5","price":14.92},{"name":"جوانتي معقم مزدوج 7","price":41.77},{"name":"جوانتي معقم مزدوج 8","price":41.77},{"name":"جاون طبيب معقم","price":42.99},{"name":"جاون مريض نظيف عزل","price":59.24},{"name":"دريسنج","price":4.91},{"name":"فوط بطن30x30","price":11.82},{"name":"قطن 1 كيلو","price":107.48},{"name":"بلاستره 5 سم","price":30.71},{"name":"بلاستره 10 سم","price":56.64},{"name":"بلاسترحرا اختبار تعقيم بكر لاصق","price":56.42},{"name":"شاش 11سم","price":6.91},{"name":"شاش عريض 1متر","price":12.28},{"name":"شاش فازلين 10x10","price":1.75},{"name":"شاش فازلين 10x20","price":3.37},{"name":"شاش فازلين 10x30","price":6.06},{"name":"مريلة عمليات بلاستيك ماكنتوش","price":2.76},{"name":"اوفيد","price":0.92},{"name":"اسورة معصم","price":1.38},{"name":"اوفر هيد رجالي","price":0.92},{"name":"اوفر هيد حريمي","price":0.55},{"name":"ماسك جراحي","price":0.49},{"name":"فرش جراحي معقم","price":214.96},{"name":"فرش عمليات سي ارم","price":35.02},{"name":"مفرش عمليات جراحي ركبة","price":307.08},{"name":"مفرش عمليات جراحي فخذ","price":307.08},{"name":"مفرش عمليات جراحي عمود فقري","price":160.65},{"name":"مفرش عمليات جراحي كتف","price":214.74},{"name":"مفرش عمليات جراحي مفاصل","price":307.08},{"name":"مفرش سرير","price":15.35},{"name":"مفرش عمليات رول 50","price":63.44},{"name":"بيتادين مطهر 10% زجاجة","price":68.25},{"name":"بيتادين مطهر 7.5% لتر","price":367.5},{"name":"بيتادين منظف 7.5% 1سم","price":0.73},{"name":"كحول","price":57.45},{"name":"جاون سايدكس +شرائط اختبار","price":2882.25},{"name":"مشرط","price":4.54},{"name":"الكترو","price":2.5},{"name":"بديا ثرمي","price":48.5},{"name":"كابل دياثرمي","price":344.22},{"name":"عازل دياثرمي","price":48.5},{"name":"خافض لسان","price":3.78},{"name":"سيفتي بوكس 12 لتر","price":42.99},{"name":"سيفتي بوكس 6 لتر","price":32.24},{"name":"بكر موجات صوتية","price":438.1},{"name":"جيل موجات صوتية","price":85.98},{"name":"بكر رسم قلب 5سم","price":30.71},{"name":"بكر رسم قلب 11 سم","price":52.2},{"name":"بكر رسم قلب 6.3 سم","price":34.55},{"name":"بكر رسم قلب 8X6","price":52.2},{"name":"محلول بيرتوني 106%","price":31.25},{"name":"محلول بيرتوني 4.5%","price":35.94},{"name":"فيلم ورق مطبوع زيروكس 17x14","price":18.86},{"name":"فيلم ورق مطبوع زيروكس 14x11","price":16.16},{"name":"شرائح غلق الجلد ستريب","price":74.48},{"name":"سرنجة حقن الصبغة","price":782.32},{"name":"ماسك فنتوري","price":26.25},{"name":"دباسة جلد","price":255.29},{"name":"كاشف كميائي","price":90.09},{"name":"داي فلو","price":25.74},{"name":"وصلة وريديدية 200سم","price":6.33},{"name":"امبوباج اطفال","price":457.56},{"name":"جيل معقم انبوبة","price":118.26},{"name":"فكريل 5 قطع","price":49.61},{"name":"فكريل 5راوند","price":42.88},{"name":"فكريل 1 قاطع","price":43.31},{"name":"فكريل 1 راوند","price":42.53},{"name":"فكريل 2 قاطع","price":50.31},{"name":"فكريل 2 راوند","price":42.88},{"name":"فكريل2/0 قاطع","price":47.25},{"name":"فكريل2/0 راوند","price":42.88},{"name":"فكريل3/0 قاطع","price":42.88},{"name":"فكريل3/0 راوند","price":42.53},{"name":"فكريل4/0","price":40.25},{"name":"فكريل6/0","price":107.0},{"name":"فكريل5/0","price":42.88},{"name":"برولين 5راوند","price":31.5},{"name":"بروين 1 قاطع","price":31.5},{"name":"برولين 1راوند","price":19.25},{"name":"برولين 2/0 راوند","price":31.5},{"name":"برولين 7/0 راوند","price":393.3},{"name":"حرير 5قاطع","price":23.62},{"name":"حرير 1 راوند","price":23.19},{"name":"حرير 1 قاطع","price":23.62},{"name":"حرير 2/0 قاطع","price":23.62},{"name":"حرير 3/0 قاطع","price":28.46},{"name":"بولي دياكيسينون PDS راوند","price":288.78},{"name":"بولي دياكيسينون PDS راوند5/0","price":173.88},{"name":"بولي دياكيسينون PDS راوند4/0","price":254.13},{"name":"بولي دياكيسينون PDS راوند3/0","price":356.67},{"name":"مونوكريل 3/0 قاطع","price":124.83},{"name":"شبكة برولين 11x6","price":128.4},{"name":"شبكة برولين 15x15","price":214.0},{"name":"شبكة برولين 30x30","price":615.25}],"أشعة":[{"name":"اشعة عادية","price":45.0},{"name":"اشعة مسالك عادية","price":55.0},{"name":"اشعة مقطعية علي المخ","price":180.0},{"name":"اشعة مقطعية علي الراس والمخ","price":225.0},{"name":"مقطعية علي اي منطقة اخري بالجسم","price":260.0},{"name":"اشعة مقطعية علي البطن والحوض","price":370.0},{"name":"اشعة ثلاثية الابعاد علي اي منطقة اخري بالجسم","price":330.0},{"name":"اشعة مقطعية علي الصدر","price":270.0},{"name":"اشعة مقطعية علي المسالك البولية","price":350.0},{"name":"رنين علي المخ او اي جزء منه","price":450.0},{"name":"رنين علي المخ جزء محدد","price":550.0},{"name":"رنين علي المخ + شراين المخ","price":800.0},{"name":"رنين علي المخ + اوردة المخ","price":800.0},{"name":"رنين علي الفقرات اي منطقة","price":525.0},{"name":"رنين علي جميع الفقرات","price":1200.0},{"name":"رنين علي العظام او المفاصل او الاطراف","price":575.0},{"name":"رنين علي البطن او الحوض او الصدر","price":600.0},{"name":"رنين علي البطن والحوض","price":850.0},{"name":"رنين علي الشراين او الاوردة للطرف الواحد","price":650.0},{"name":"رنين علي الرقبة","price":500.0},{"name":"الاشعة التلفزيونية علي البطن او الحوض","price":70.0},{"name":"الاشعة التلفزيونية علي البطن والحوض","price":100.0},{"name":"الاشعة التلفزيونية علي الخصية مع دوبلر","price":150.0},{"name":"اشعة تلفزيونية علي الخصية","price":140.0},{"name":"اشعة تلفزيونية علي ثدي واحد","price":70.0},{"name":"اشعة تلفزيونية علي ثدين","price":130.0},{"name":"اشعة تلفزيونية علي الكتفين والركبة","price":150.0},{"name":"اشعة تلفزيونية علي الغدة الدرقية","price":100.0},{"name":"ايكو للكبار","price":200.0},{"name":"ايكو للاطفال","price":250.0}],"تحاليل":[{"name":"صورة دم كاملة CBC","price":55.0},{"name":"سرعة ترسيب ESR","price":25.0},{"name":"كرات دم حمراء","price":25.0},{"name":"هيموجلبين Hb","price":25.0},{"name":"زمن الثرومبوبلاستين الجزئي ptt","price":55.0},{"name":"زمن الثرومبومبين pt","price":40.0},{"name":"وظائف كلي","price":50.0},{"name":"وظائف كبد","price":50.0},{"name":"غازات بالدم","price":140.0},{"name":"املاح","price":145.0}],"أجهزة":[{"name":"مونتور بالساعة","price":60.0},{"name":"تنفس صناعي بالساعة","price":60.0},{"name":"دايثرمي كي كهربائي","price":70.0},{"name":"مثقاب عظام","price":140.0},{"name":"منشار عظام","price":140.0},{"name":"منظار عظام","price":600.0},{"name":"منظار جراحة الصدر","price":600.0},{"name":"مناظير البطن الجراحية","price":600.0},{"name":"منظار الجيوب الانفية","price":400.0},{"name":"منظار مرى ومعدة واثني عشر","price":300.0},{"name":"مضخة كهربائية","price":60.0}],"خدمات أخري":[]};
@@ -326,27 +328,29 @@ function setStatus(state){
 }
 
 /* ========== INIT ========== */
-async function init(){
-  try {
-    const snap=await db.collection('settings').doc('main').get();
-    if(snap.exists){
-      const d=snap.data();
-      if(d.itemDB)itemDB=d.itemDB;
-      if(d.depts&&d.depts.length)depts=d.depts;
-    }
-  }catch(e){console.log('Settings load:',e);}
-  renderDepts(); renderBill();
-  // Real-time patients listener
+function init(){
+  // شغّل الصفحة فوراً
+  renderDepts(); renderBill(); renderPatients();
+  setStatus('wait');
+  // حاول تحميل الإعدادات من Firebase في الخلفية
+  db.collection('settings').doc('main').get()
+    .then(snap=>{
+      if(snap.exists){
+        const d=snap.data();
+        if(d.itemDB)itemDB=d.itemDB;
+        if(d.depts&&d.depts.length)depts=d.depts;
+        renderDepts();
+      }
+    }).catch(e=>console.log('Settings:',e));
+  // مستمع المرضي في الخلفية
   db.collection('patients').orderBy('savedAt','desc')
     .onSnapshot(snap=>{
       patients=snap.docs.map(doc=>({...doc.data(),firestoreId:doc.id}));
       renderPatients();
       setStatus('ok');
-      $('loading').classList.add('hidden');
     },err=>{
-      console.error(err);
+      console.error('Firebase:',err);
       setStatus('err');
-      $('loading').classList.add('hidden');
     });
 }
 
@@ -367,8 +371,12 @@ function renderDepts(){
 
 /* ========== DAYS ========== */
 function calcDays(){
-  const a=Vv('p_entry'),b=Vv('p_exit');
-  $('stay_days').innerText=(a&&b)?Math.max(0,Math.ceil((new Date(b)-new Date(a))/86400000)):0;
+  const ent=Vv('p_entry'), ex=Vv('p_exit');
+  if(!ent||!ex){$('stay_days').innerText='0';calcTotal();return;}
+  const d1=new Date(ent), d2=new Date(ex);
+  let diff=Math.ceil((d2-d1)/(1000*60*60*24));
+  if(diff<=0) diff=1;
+  $('stay_days').innerText=diff;
   calcTotal();
 }
 
@@ -421,7 +429,7 @@ function renderBill(){
 function getFixed(){
   const days=parseInt($('stay_days').innerText)||0;
   return [
-    {label:`إقامة يومية (${days} يوم × ${fmt(Vv('f_stay'))} ج.م)`,val:(parseFloat(Vv('f_stay'))||0)*days,key:'stay'},
+    {label:"إقامة",val:parseFloat(Vv("f_stay"))||0,key:"stay"},
     {label:'إشراف طبي'        ,val:parseFloat(Vv('f_med'))||0,   key:'med'},
     {label:'إشراف تمريض'      ,val:parseFloat(Vv('f_nur'))||0,   key:'nur'},
     {label:'أجر الطبيب'       ,val:parseFloat(Vv('f_doc'))||0,   key:'doc'},
@@ -520,23 +528,62 @@ function buildInvoice(pt){
 function previewInvoice(){$('prev-content').innerHTML=buildInvoice(null);$('prev-modal').style.display='flex';}
 function closePrev(){$('prev-modal').style.display='none';}
 function printCurrentInvoice(pt){
-  const CSS=`@import url('https://fonts.googleapis.com/css2?family=Noto+Kufi+Arabic:wght@400;700;900&display=swap');
-  *{box-sizing:border-box;margin:0;padding:0}body{font-family:'Noto Kufi Arabic',sans-serif;padding:16px}
-  .inv-wrap{direction:rtl;color:#0d0d0d;font-size:9.5pt;line-height:1.5}
-  .inv-hdr{text-align:center;border-bottom:3px solid #0f2d5e;padding-bottom:10px;margin-bottom:14px}
+  const html=buildInvoice(pt||null);
+  const w=window.open('','_blank','width=950,height=750');
+  if(!w){alert('يرجى السماح بالنوافذ المنبثقة في المتصفح');return;}
+  w.document.write(`<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Kufi+Arabic:wght@400;700;900&display=swap" rel="stylesheet">
+<style>
+  @page{size:A4 portrait;margin:8mm}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Noto Kufi Arabic',sans-serif;background:#fff}
+  #wrapper{width:195mm;margin:0 auto;transform-origin:top right}
+  /* التعديل: تكبير خط الفاتورة عند الطباعة بشكل واضح وكبير جداً */
+  .inv-wrap{font-family:'Noto Kufi Arabic',sans-serif;direction:rtl;color:#000;font-size:13pt!important;line-height:1.6!important}
+  .inv-hdr{text-align:center;border-bottom:3px solid #0f2d5e;padding-bottom:10px;margin-bottom:15px}
+  .inv-hdr div{font-size:15pt!important;font-weight:900}
   .inv-meta table,.inv-totals table,.inv-items{width:100%;border-collapse:collapse}
-  .inv-meta td{padding:4px 7px;border:1px solid #ccc;font-size:8.5pt}.lh{background:#e8eef7;font-weight:900;width:22%}
-  .inv-sec{background:#0f2d5e;color:#fff;padding:5px 10px;font-weight:900;font-size:8.5pt;margin:8px 0 4px}
-  .inv-items th{background:#dde6f5;padding:5px 7px;font-weight:800;border:1px solid #b5c5e0;font-size:7.5pt}
-  .inv-items td{padding:4px 7px;border:1px solid #d5e0ee;font-size:8pt}.inv-items tr:nth-child(even) td{background:#f7f9fc}
-  .inv-totals td{padding:5px 8px;border:1px solid #ccc;font-size:8.5pt}.tl{background:#f0f4f8;font-weight:800}
-  .inv-grand{background:#0f2d5e!important;color:#e8a800!important;font-weight:900!important;font-size:10.5pt!important}
-  .inv-sigs{display:grid;grid-template-columns:1fr 1fr 1fr;gap:30px;margin-top:28px}
-  .inv-sig{text-align:center;border-top:1px dashed #888;padding-top:7px;font-size:8pt;font-weight:800;color:#333}`;
-  $('print-area').innerHTML=`<style>${CSS}</style>${buildInvoice(pt||null)}`;
+  .inv-meta td{padding:8px 10px!important;border:1.5px solid #000!important;font-size:12pt!important;font-weight:700}
+  .lh{background:#e8eef7;font-weight:900;width:22%}
+  .inv-sec{background:#0f2d5e;color:#fff;padding:6px 12px!important;font-weight:900;font-size:13pt!important;margin:12px 0 6px}
+  .inv-items th{background:#dde6f5;padding:8px 6px!important;font-weight:900!important;border:1.5px solid #000!important;font-size:11pt!important;color:#000}
+  .inv-items td{padding:8px 6px!important;border:1.5px solid #000!important;font-size:11pt!important;font-weight:700!important;color:#000}
+  .inv-items tr:nth-child(even) td{background:#f7f9fc}
+  .inv-totals td{padding:8px 12px!important;border:1.5px solid #000!important;font-size:13pt!important}
+  .tl{background:#f0f4f8;font-weight:900}
+  .inv-grand{background:#0f2d5e!important;color:#fff!important;font-weight:900!important;font-size:16pt!important}
+  .inv-sigs{display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px;margin-top:30px}
+  .inv-sig{text-align:center;border-top:1.5px dashed #000;padding-top:10px;font-size:12pt!important;font-weight:900;color:#000}
+</style>
+</head>
+<body>
+<div id="wrapper">${html}</div>
+<script>
+window.onload=function(){
+  var wrapper=document.getElementById('wrapper');
+  // A4 مع هوامش 8mm = 277mm ارتفاع، 195mm عرض
+  var maxH=277*3.7795;
+  var maxW=195*3.7795;
+  var h=wrapper.scrollHeight;
+  var w=wrapper.scrollWidth;
+  var scale=Math.min(maxH/h, maxW/w, 1);
+  if(scale<1){
+    wrapper.style.transform='scale('+scale+')';
+    wrapper.style.transformOrigin='top right';
+    // تعويض المساحة بعد التصغير
+    wrapper.style.marginBottom=((h*scale)-h)+'px';
+  }
+  setTimeout(function(){window.print();window.close();},700);
+};
+<\/script>
+</body></html>`);
+  w.document.close();
   closePrev();
-  setTimeout(()=>{window.print();setTimeout(()=>$('print-area').innerHTML='',1500);},400);
 }
+
 
 /* ========== SAVE / EDIT / DELETE ========== */
 function getFormData(){
@@ -632,28 +679,44 @@ function renderPatients(){
 /* ========== EXCEL EXPORT ========== */
 function exportAllExcel(){
   if(!patients.length){alert('لا يوجد مرضي محفوظون');return;}
-  const hdr=['اسم المريض','تاريخ الدخول','تاريخ الخروج','مدة الإقامة (يوم)',
-    'الإقامة (ج.م)','إجمالي الأدوية','إجمالي المستلزمات','إجمالي الأشعة',
-    'إجمالي التحاليل','إجمالي الأجهزة','قيمة الإشراف الطبي',
-    'إجمالي خدمات أخري','إشراف التمريض','إجمالي الفاتورة','رقم الخطاب / القرار'];
+  const hdr=[
+    'اسم المريض','القسم الطبي','نوع الخدمة','رقم الخطاب / القرار',
+    'تاريخ الدخول','تاريخ الخروج','مدة الإقامة (يوم)',
+    'الإقامة (ج.م)','إشراف طبي','إشراف تمريض',
+    'أجر الطبيب','أجر التخدير','فتح غرفة العمليات','نوع العملية',
+    'رسم القلب','علاج طبيعي','أكسجين / أجهزة','بنك الدم',
+    'إجمالي الأدوية','إجمالي المستلزمات','إجمالي الأشعة',
+    'إجمالي التحاليل','إجمالي الأجهزة','إجمالي خدمات أخري',
+    'إجمالي الفاتورة'
+  ];
   const rows=patients.map(pt=>{
     const c={'أدوية':0,'مستلزمات':0,'أشعة':0,'تحاليل':0,'أجهزة':0,'خدمات أخري':0};
     (pt.items||[]).forEach(i=>{if(i.cat in c)c[i.cat]+=i.total;});
-    return [pt.name,pt.entry||'',pt.exit||'',pt.days||0,
-      parseFloat(fmt((pt.fStay||0)*(pt.days||0))),parseFloat(fmt(c['أدوية'])),
-      parseFloat(fmt(c['مستلزمات'])),parseFloat(fmt(c['أشعة'])),
-      parseFloat(fmt(c['تحاليل'])),parseFloat(fmt(c['أجهزة'])),
-      pt.fMed||0,parseFloat(fmt(c['خدمات أخري'])),pt.fNur||0,
-      parseFloat(fmt(pt.total)),pt.letter||''];
+    const stay=parseFloat(fmt(pt.fStay||0));
+    return [
+      pt.name||'', pt.dept||'', pt.stype||'', pt.letter||'',
+      pt.entry||'', pt.exit||'', pt.days||0,
+      stay, pt.fMed||0, pt.fNur||0,
+      pt.fDoc||0, pt.fAnes||0, pt.fOr||0, pt.optype||'',
+      pt.fEcg||0, pt.fPhysio||0, pt.fOxy||0, pt.fBlood||0,
+      parseFloat(fmt(c['أدوية'])), parseFloat(fmt(c['مستلزمات'])),
+      parseFloat(fmt(c['أشعة'])), parseFloat(fmt(c['تحاليل'])),
+      parseFloat(fmt(c['أجهزة'])), parseFloat(fmt(c['خدمات أخري'])),
+      parseFloat(fmt(pt.total))
+    ];
   });
-  const tot=['الإجمالي','','','',
-    rows.reduce((a,r)=>a+r[4],0),rows.reduce((a,r)=>a+r[5],0),
-    rows.reduce((a,r)=>a+r[6],0),rows.reduce((a,r)=>a+r[7],0),
-    rows.reduce((a,r)=>a+r[8],0),rows.reduce((a,r)=>a+r[9],0),
-    rows.reduce((a,r)=>a+r[10],0),rows.reduce((a,r)=>a+r[11],0),
-    rows.reduce((a,r)=>a+r[12],0),rows.reduce((a,r)=>a+r[13],0),''];
+  // صف الإجماليات (الأعمدة الرقمية فقط من عمود 6 للنهاية)
+  const numStart=6;
+  const tot=['الإجمالي الكلي','','','','','',''];
+  for(let i=numStart;i<hdr.length;i++){
+    const val=rows.reduce((a,r)=>a+(typeof r[i]==='number'?r[i]:0),0);
+    tot.push(i===13?'':parseFloat(fmt(val))); // عمود نوع العملية نصي
+  }
   const ws=XLSX.utils.aoa_to_sheet([hdr,...rows,tot]);
-  ws['!cols']=hdr.map((_,i)=>({wch:[20,12,12,12,14,14,14,14,14,14,16,14,14,14,18][i]||14}));
+  // عرض الأعمدة
+  ws['!cols']=hdr.map((_,i)=>({wch:[22,16,14,18,12,12,12,12,12,12,12,12,14,16,12,12,12,12,14,14,12,12,12,14,14][i]||14}));
+  // تجميد الصف الأول
+  ws['!freeze']={xSplit:0,ySplit:1};
   const wb=XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb,ws,'سجل المرضي');
   XLSX.writeFile(wb,'سجل_مرضي_سوهاج_'+new Date().toISOString().slice(0,10)+'.xlsx');
@@ -713,7 +776,7 @@ function delDept(i){
   depts.splice(i,1);renderDepts();renderSetDepts();saveSettings();
 }
 
-window.onload=init;
+window.onload = init;
 </script>
 </body>
 </html>
