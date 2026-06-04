@@ -140,20 +140,32 @@ body{font-family:'Noto Kufi Arabic',sans-serif;background:#eef2f7;color:var(--t)
               <option>اقتصادي</option><option>نفقة دولة</option><option>تأمين صحي</option><option>مجاني</option>
             </select>
           </div>
+          <div><label class="lbl">ملاحظات</label><textarea id="p_notes" class="inp" rows="2" placeholder="أي ملاحظات إضافية..." style="resize:vertical;min-height:54px"></textarea></div>
           <div><label class="lbl">رقم الخطاب / القرار</label><input type="text" id="p_letter" class="inp"></div>
-          <div><label class="lbl">نوع العملية</label><input type="text" id="p_optype" class="inp" placeholder="كبرى / صغرى / ..."></div>
+          <div><label class="lbl">نوع العملية</label>
+            <select id="p_optype" class="inp">
+              <option value="">— اختر نوع العملية —</option>
+              <option>بسيطة</option>
+              <option>صغرى</option>
+              <option>متوسطة</option>
+              <option>كبرى</option>
+              <option>ذات مهارة</option>
+              <option>ذات طابع خاص</option>
+              <option>متقدمة</option>
+            </select>
+          </div>
         </div>
       </div>
 
       <div class="card">
         <div class="sec-title">فترة الإقامة</div>
         <div class="g2">
-          <div><label class="lbl">تاريخ الدخول</label><input type="date" id="p_entry" class="inp" style="font-size:.79rem" onchange="calcDays()"></div>
-          <div><label class="lbl">تاريخ الخروج</label><input type="date" id="p_exit" class="inp" style="font-size:.79rem" onchange="calcDays()"></div>
+          <div><label class="lbl">تاريخ الدخول</label><input type="date" id="p_entry" class="inp" style="font-size:.79rem"></div>
+          <div><label class="lbl">تاريخ الخروج</label><input type="date" id="p_exit" class="inp" style="font-size:.79rem"></div>
         </div>
         <div class="days-badge">
           <span style="font-size:.72rem;font-weight:700;color:var(--tm)">عدد أيام الإقامة</span>
-          <span id="stay_days" style="font-size:1.6rem;font-weight:900;color:var(--p)">0</span>
+          <input type="number" id="stay_days" value="0" min="0" step="0.5" oninput="calcTotal()" style="font-size:1.4rem;font-weight:900;color:var(--p);width:80px;border:1.5px solid var(--b);border-radius:8px;text-align:center;background:#f0f4ff;padding:4px 8px;font-family:'Noto Kufi Arabic',sans-serif">
         </div>
       </div>
     </div>
@@ -187,7 +199,7 @@ body{font-family:'Noto Kufi Arabic',sans-serif;background:#eef2f7;color:var(--t)
             <input type="text" id="i_q" oninput="filterDD()" onfocus="filterDD()" onblur="hideDD()" placeholder="اكتب للبحث..." class="inp">
             <div id="i_dd" class="dd-list"></div>
           </div>
-          <input type="number" id="i_qty" value="1" min="1" class="inp" style="text-align:center">
+          <input type="number" id="i_qty" value="1" min="0.01" step="0.01" class="inp" style="text-align:center">
           <button onclick="addItem()" class="btn btn-p" style="padding:0;justify-content:center;width:42px;height:38px;font-size:1.2rem;flex-shrink:0">+</button>
         </div>
 
@@ -196,7 +208,7 @@ body{font-family:'Noto Kufi Arabic',sans-serif;background:#eef2f7;color:var(--t)
             <thead><tr>
               <th style="text-align:right">#</th>
               <th style="text-align:right">اسم الصنف</th>
-              <th>الفئة</th><th>الكمية</th><th>سعر الوحدة</th>
+              <th>الكود</th><th>الفئة</th><th>الكمية</th><th>سعر الوحدة</th>
               <th style="text-align:left">الإجمالي</th>
               <th class="no-print"></th>
             </tr></thead>
@@ -228,13 +240,23 @@ body{font-family:'Noto Kufi Arabic',sans-serif;background:#eef2f7;color:var(--t)
   <!-- PATIENTS LIST -->
   <div id="patients-section" class="card no-print">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:10px">
-      <div class="sec-title" style="margin-bottom:0">سجل المرضي المحفوظون</div>
-      <div style="display:flex;gap:8px;align-items:center">
-        <span id="pt-count" class="badge bp">0 مريض</span>
-        <input type="text" id="pt-search" class="inp" style="width:200px;font-size:.78rem" placeholder="بحث باسم المريض..." oninput="renderPatients()">
+      <div class="sec-title" style="margin-bottom:0">سجل المرضى المحفوظون</div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <span id="pt-count" class="badge bp">جاري التحميل...</span>
+        <input type="text" id="pt-search" class="inp" style="width:200px;font-size:.78rem" placeholder="بحث باسم أو رقم تذكرة..." oninput="renderPatients()">
+        <button class="btn btn-o btn-sm" onclick="loadPatients(true)" title="تحديث القائمة">🔄 تحديث</button>
       </div>
     </div>
     <div id="patients-list"><div style="text-align:center;padding:24px;color:var(--tm);font-size:.82rem">جاري التحميل من قاعدة البيانات...</div></div>
+    <!-- زر تحميل المزيد -->
+    <div id="load-more-info" style="display:none;text-align:center;padding:6px 0 2px;font-size:.72rem;color:var(--tm)">
+      يعرض النظام آخر <strong>2000</strong> مريض — اضغط للتحميل السابق
+    </div>
+    <div style="text-align:center;margin-top:10px">
+      <button id="load-more-btn" onclick="loadPatients(false)" class="btn btn-o" style="display:none;font-size:.78rem;gap:6px">
+        ⬇ تحميل 2000 مريض إضافيين
+      </button>
+    </div>
   </div>
 </div>
 
@@ -271,7 +293,13 @@ body{font-family:'Noto Kufi Arabic',sans-serif;background:#eef2f7;color:var(--t)
         <div style="background:#f0f4ff;padding:14px;border-radius:10px">
           <div style="font-size:.74rem;font-weight:900;color:var(--p);margin-bottom:10px">➕ إضافة صنف</div>
           <select id="s_cat" class="inp" style="margin-bottom:7px"><option>أدوية</option><option>مستلزمات</option><option>أشعة</option><option>تحاليل</option><option>أجهزة</option><option>خدمات أخري</option></select>
+          <select id="s_list" class="inp" style="margin-bottom:7px">
+            <option value="all">للجميع (نفقة + تأمين)</option>
+            <option value="nafaqa">نفقة الدولة فقط</option>
+            <option value="tamin">تأمين صحي / اقتصادي / مجاني فقط</option>
+          </select>
           <input type="text" id="s_name" placeholder="اسم الصنف" class="inp" style="margin-bottom:7px">
+          <input type="text" id="s_code" placeholder="كود الصنف (اختياري)" class="inp" style="margin-bottom:7px">
           <input type="number" id="s_price" placeholder="السعر (ج.م)" class="inp" style="margin-bottom:7px" min="0" step="0.01">
           <button onclick="addNewItem()" class="btn btn-p" style="width:100%;justify-content:center">إضافة</button>
         </div>
@@ -317,6 +345,8 @@ const DB0 = {"أدوية":[{"name":"ادرينالين ا","price":6.61},{"name"
 let itemDB = JSON.parse(JSON.stringify(DB0));
 let depts = ["الجراحة العامة","العناية المركزة","الأطفال","الباطنة","النساء والتوليد","المسالك البولية","العظام","الأعصاب","القلب والأوعية","طب الطوارئ"];
 let billItems = [], patients = [], editId = null, selItem = null;
+let lastDoc = null, allLoaded = false, loadingMore = false;
+const PAGE_SIZE = 2000;
 
 /* ========== HELPERS ========== */
 const $=id=>document.getElementById(id);
@@ -334,10 +364,8 @@ function setStatus(state){
 
 /* ========== INIT ========== */
 function init(){
-  // شغّل الصفحة فوراً
   renderDepts(); renderBill(); renderPatients();
   setStatus('wait');
-  // حاول تحميل الإعدادات من Firebase في الخلفية
   db.collection('settings').doc('main').get()
     .then(snap=>{
       if(snap.exists){
@@ -347,16 +375,50 @@ function init(){
         renderDepts();
       }
     }).catch(e=>console.log('Settings:',e));
-  // مستمع المرضي في الخلفية
-  db.collection('patients').orderBy('savedAt','desc')
-    .onSnapshot(snap=>{
-      patients=snap.docs.map(doc=>({...doc.data(),firestoreId:doc.id}));
-      renderPatients();
-      setStatus('ok');
-    },err=>{
-      console.error('Firebase:',err);
-      setStatus('err');
-    });
+  loadPatients(true);
+}
+
+/* ========== LOAD PATIENTS (Paginated) ========== */
+async function loadPatients(reset=false){
+  if(loadingMore) return;
+  if(!reset && allLoaded) return;
+  loadingMore=true;
+  updateLoadMoreBtn('loading');
+  try{
+    let q=db.collection('patients').orderBy('savedAt','desc').limit(PAGE_SIZE);
+    if(!reset && lastDoc) q=q.startAfter(lastDoc);
+    const snap=await q.get();
+    if(reset){ patients=[]; lastDoc=null; allLoaded=false; }
+    if(snap.empty && reset){ renderPatients(); setStatus('ok'); loadingMore=false; updateLoadMoreBtn('done'); return; }
+    snap.docs.forEach(doc=>patients.push({...doc.data(),firestoreId:doc.id}));
+    lastDoc=snap.docs[snap.docs.length-1]||null;
+    allLoaded=snap.docs.length<PAGE_SIZE;
+    renderPatients();
+    setStatus('ok');
+  }catch(err){
+    console.error('Firebase:',err);
+    setStatus('err');
+  }
+  loadingMore=false;
+  updateLoadMoreBtn(allLoaded?'done':'more');
+}
+
+function updateLoadMoreBtn(state){
+  const btn=$('load-more-btn');
+  const info=$('load-more-info');
+  if(!btn) return;
+  if(state==='loading'){
+    btn.disabled=true;
+    btn.innerHTML='⏳ جاري التحميل...';
+  } else if(state==='more'){
+    btn.disabled=false;
+    btn.innerHTML='⬇ تحميل 2000 مريض إضافيين';
+    btn.style.display='inline-flex';
+    if(info) info.style.display='block';
+  } else {
+    btn.style.display='none';
+    if(info) info.style.display='none';
+  }
 }
 
 /* ========== SETTINGS SAVE (debounced) ========== */
@@ -374,31 +436,38 @@ function renderDepts(){
   $('p_dept').innerHTML=depts.map(x=>`<option>${x}</option>`).join('');
 }
 
-/* ========== DAYS ========== */
+/* ========== DAYS (manual) ========== */
 function calcDays(){
-  const ent=Vv('p_entry'), ex=Vv('p_exit');
-  if(!ent||!ex){$('stay_days').innerText='0';calcTotal();return;}
-  const d1=new Date(ent), d2=new Date(ex);
-  let diff=Math.ceil((d2-d1)/(1000*60*60*24));
-  if(diff<=0) diff=1;
-  $('stay_days').innerText=diff;
+  // kept for compatibility - days are now manual
   calcTotal();
 }
 
 /* ========== DROPDOWN ========== */
 function filterDD(){
   const cat=Vv('i_cat'),q=Vv('i_q').toLowerCase();
-  const list=(itemDB[cat]||[]).filter(x=>x.name.toLowerCase().includes(q));
+  const stype=Vv('p_stype')||'';
+  const isNafaqa=stype==='نفقة دولة';
+  const list=(itemDB[cat]||[]).filter(x=>{
+    const lt=x.list||'all';
+    if(isNafaqa) return lt==='all'||lt==='nafaqa';
+    else return lt==='all'||lt==='tamin';
+  }).filter(x=>x.name.toLowerCase().includes(q)||(x.code||'').toLowerCase().includes(q));
   const dd=$('i_dd');
   if(list.length){
-    dd.innerHTML=list.map(x=>`<div class="dd-item" onmousedown="pickItem(this)" data-name="${x.name.replace(/"/g,'&quot;')}" data-price="${x.price}">${x.name} &mdash; <b>${x.price} ج.م</b></div>`).join('');
+    dd.innerHTML=list.map(x=>{
+      const codeTag=x.code?`<span style="background:#eef2ff;color:var(--p);font-size:.62rem;padding:1px 5px;border-radius:3px;margin-left:4px">${x.code}</span>`:'';
+      return `<div class="dd-item" onmousedown="pickItem(this)"
+        data-name="${x.name.replace(/"/g,'&quot;')}"
+        data-price="${x.price}"
+        data-code="${(x.code||'').replace(/"/g,'&quot;')}">${codeTag}${x.name} &mdash; <b>${x.price} ج.م</b></div>`;
+    }).join('');
     dd.style.display='block';
-  }else dd.style.display='none';
+  } else dd.style.display='none';
 }
 function hideDD(){setTimeout(()=>$('i_dd').style.display='none',160);}
 function pickItem(el){
   $('i_q').value=el.dataset.name;
-  selItem={name:el.dataset.name,price:parseFloat(el.dataset.price)};
+  selItem={name:el.dataset.name, price:parseFloat(el.dataset.price), code:el.dataset.code||''};
   $('i_dd').style.display='none';
 }
 function resetSel(){$('i_q').value='';selItem=null;}
@@ -406,8 +475,15 @@ function resetSel(){$('i_q').value='';selItem=null;}
 /* ========== BILL ========== */
 function addItem(){
   if(!selItem){alert('يرجى اختيار صنف من القائمة');return;}
-  const qty=Math.max(1,parseInt(Vv('i_qty'))||1);
-  billItems.push({id:Date.now(),name:selItem.name,cat:Vv('i_cat'),price:selItem.price,qty,total:selItem.price*qty});
+  const qty=Math.max(0.01,parseFloat(Vv('i_qty'))||1);
+  const cat=Vv('i_cat');
+  const existing=billItems.find(x=>x.name===selItem.name && x.cat===cat);
+  if(existing){
+    existing.qty=parseFloat((existing.qty+qty).toFixed(4));
+    existing.total=parseFloat((existing.price*existing.qty).toFixed(4));
+  } else {
+    billItems.push({id:Date.now(),name:selItem.name,code:selItem.code||'',cat,price:selItem.price,qty,total:selItem.price*qty});
+  }
   renderBill(); resetSel(); $('i_qty').value=1;
 }
 function delItem(id){billItems=billItems.filter(x=>x.id!==id);renderBill();}
@@ -420,6 +496,7 @@ function renderBill(){
   tb.innerHTML=billItems.map((i,n)=>`<tr>
     <td style="color:var(--tm);font-size:.72rem">${n+1}</td>
     <td style="font-weight:700">${i.name}</td>
+    <td style="text-align:center;font-size:.7rem;color:var(--p);font-weight:700">${i.code?`<span style="background:#eef2ff;padding:1px 6px;border-radius:4px">${i.code}</span>`:'-'}</td>
     <td style="text-align:center"><span class="badge bp">${i.cat}</span></td>
     <td style="text-align:center;font-weight:600">${i.qty}</td>
     <td style="text-align:center;color:var(--tm)">${fmt(i.price)}</td>
@@ -432,7 +509,7 @@ function renderBill(){
 
 /* ========== TOTALS ========== */
 function getFixed(){
-  const days=parseInt($('stay_days').innerText)||0;
+  const days=parseFloat($('stay_days').value)||0;
   return [
     {label:"إقامة",val:parseFloat(Vv("f_stay"))||0,key:"stay"},
     {label:'إشراف طبي'        ,val:parseFloat(Vv('f_med'))||0,   key:'med'},
@@ -463,9 +540,10 @@ function buildInvoice(pt){
   const stype =live?Vv('p_stype'):pt.stype;
   const letter=live?Vv('p_letter'):pt.letter;
   const optype=live?Vv('p_optype'):pt.optype;
+  const notes =live?Vv('p_notes') :pt.notes;
   const entry =live?fmtDate(Vv('p_entry')):pt.entry;
   const exitD =live?fmtDate(Vv('p_exit')) :pt.exit;
-  const days  =live?(parseInt($('stay_days').innerText)||0):pt.days;
+  const days  =live?(parseFloat($('stay_days').value)||0):pt.days;
   const fixed =live?getFixed():pt.fixed;
   const items =live?billItems:pt.items;
   const feesSum=fixed.reduce((a,x)=>a+x.val,0);
@@ -474,7 +552,7 @@ function buildInvoice(pt){
   const cats=['أدوية','مستلزمات','أشعة','تحاليل','أجهزة','خدمات أخري'];
 
   const fixedRows=fixed.map((f,n)=>`<tr>
-    <td style="text-align:center;color:#888">${n+1}</td><td>${f.label}</td>
+    <td style="text-align:center;color:#888">${n+1}</td><td style="text-align:center;color:#888">—</td><td>${f.label}</td>
     <td style="text-align:center">—</td><td style="text-align:center">—</td>
     <td style="text-align:center;font-weight:700">${fmt(f.val)}</td></tr>`).join('');
 
@@ -484,10 +562,10 @@ function buildInvoice(pt){
     const ct=g.reduce((a,x)=>a+x.total,0);
     catSec+=`<div class="inv-sec">${cat} — ${g.length} صنف</div>
     <table class="inv-items" style="margin-bottom:6px">
-      <thead><tr><th style="width:36px;text-align:center">#</th><th style="text-align:right">اسم الصنف</th><th style="width:55px;text-align:center">الكمية</th><th style="width:80px;text-align:center">سعر الوحدة</th><th style="width:85px;text-align:center">الإجمالي (ج.م)</th></tr></thead>
+      <thead><tr><th style="width:28px;text-align:center">#</th><th style="width:60px;text-align:center">الكود</th><th style="text-align:right">اسم الصنف</th><th style="width:48px;text-align:center">الكمية</th><th style="width:72px;text-align:center">سعر الوحدة</th><th style="width:80px;text-align:center">الإجمالي (ج.م)</th></tr></thead>
       <tbody>
-        ${g.map((i,n)=>`<tr><td style="text-align:center;color:#888">${n+1}</td><td>${i.name}</td><td style="text-align:center">${i.qty}</td><td style="text-align:center">${fmt(i.price)}</td><td style="text-align:center;font-weight:700">${fmt(i.total)}</td></tr>`).join('')}
-        <tr style="background:#dde6f5;font-weight:900"><td colspan="4" style="text-align:left;padding:5px 8px">إجمالي ${cat}</td><td style="text-align:center;padding:5px 8px">${fmt(ct)}</td></tr>
+        ${g.map((i,n)=>`<tr><td style="text-align:center;color:#888">${n+1}</td><td style="text-align:center;font-weight:700;color:#1a4a8a">${i.code||'—'}</td><td>${i.name}</td><td style="text-align:center">${i.qty}</td><td style="text-align:center">${fmt(i.price)}</td><td style="text-align:center;font-weight:700">${fmt(i.total)}</td></tr>`).join('')}
+        <tr style="background:#dde6f5;font-weight:900"><td colspan="5" style="text-align:left;padding:5px 8px">إجمالي ${cat}</td><td style="text-align:center;padding:5px 8px">${fmt(ct)}</td></tr>
       </tbody></table>`;
   });
 
@@ -508,9 +586,9 @@ function buildInvoice(pt){
   </div>
   ${fixed.length?`<div class="inv-sec">أجور الخدمات والإقامة الثابتة</div>
   <table class="inv-items" style="margin-bottom:6px">
-    <thead><tr><th style="width:36px;text-align:center">#</th><th style="text-align:right">البيان</th><th style="width:55px;text-align:center">الكمية</th><th style="width:80px;text-align:center">سعر الوحدة</th><th style="width:85px;text-align:center">الإجمالي (ج.م)</th></tr></thead>
+    <thead><tr><th style="width:28px;text-align:center">#</th><th style="width:60px;text-align:center">الكود</th><th style="text-align:right">البيان</th><th style="width:48px;text-align:center">الكمية</th><th style="width:72px;text-align:center">سعر الوحدة</th><th style="width:80px;text-align:center">الإجمالي (ج.م)</th></tr></thead>
     <tbody>${fixedRows}
-      <tr style="background:#dde6f5;font-weight:900"><td colspan="4" style="text-align:left;padding:5px 8px">إجمالي الخدمات الثابتة</td><td style="text-align:center;padding:5px 8px">${fmt(feesSum)}</td></tr>
+      <tr style="background:#dde6f5;font-weight:900"><td colspan="5" style="text-align:left;padding:5px 8px">إجمالي الخدمات الثابتة</td><td style="text-align:center;padding:5px 8px">${fmt(feesSum)}</td></tr>
     </tbody></table>`:''}
   ${catSec}
   <div class="inv-totals" style="margin-top:10px">
@@ -520,8 +598,9 @@ function buildInvoice(pt){
       <tr><td class="inv-grand" style="padding:9px 10px">▌ الإجمالي الكلي المطلوب</td><td class="inv-grand" style="text-align:center;padding:9px 10px">${grand.toLocaleString('ar-EG',{minimumFractionDigits:2})} ج.م</td></tr>
     </table>
   </div>
+  ${notes?`<div style="margin-top:8px;padding:7px 10px;border:1px solid #ccc;border-radius:5px;font-size:8pt"><span style="font-weight:900;color:#0f2d5e">ملاحظات: </span>${notes}</div>`:''}
   <div class="inv-sigs">
-    <div class="inv-sig">توقيع الصيدلي<br><span style="font-size:7pt;color:#888;font-weight:400">الاسم: ...............................</span></div>
+    <div class="inv-sig">توقيع صيدلي التسعير<br><span style="font-size:7pt;color:#888;font-weight:400">الاسم: ...............................</span></div>
     <div class="inv-sig">مدخل البيانات<br><span style="font-size:7pt;color:#888;font-weight:400">الاسم: ...............................</span></div>
     <div class="inv-sig">الشئون المالية — يعتمد<br><span style="font-size:7pt;color:#888;font-weight:400">الاسم: ...............................</span></div>
   </div>
@@ -593,14 +672,15 @@ function printCurrentInvoice(pt){
 
 /* ========== SAVE / EDIT / DELETE ========== */
 function getFormData(){
-  const days=parseInt($('stay_days').innerText)||0;
+  const days=parseFloat($('stay_days').value)||0;
   const fixed=getFixed();
   const feesSum=fixed.reduce((a,x)=>a+x.val,0);
   const itemsSum=billItems.reduce((a,x)=>a+x.total,0);
   return {
     name:Vv('p_name').trim(), ticket:Vv('p_ticket').trim(),
     dept:Vv('p_dept'),        stype:Vv('p_stype'),
-    letter:Vv('p_letter').trim(), optype:Vv('p_optype').trim(),
+    letter:Vv('p_letter').trim(), optype:Vv('p_optype'),
+    notes:Vv('p_notes').trim(),
     entry:fmtDate(Vv('p_entry')), exit:fmtDate(Vv('p_exit')),
     entryRaw:Vv('p_entry'),   exitRaw:Vv('p_exit'),
     days, fixed:JSON.parse(JSON.stringify(fixed)),
@@ -624,6 +704,7 @@ async function savePatient(){
     else{await db.collection('patients').add(pt);}
     editId=null; clearForm();
     alert('✅ تم حفظ بيانات المريض:\n'+name+'\nالإجمالي: '+fmt(pt.total)+' ج.م');
+    await loadPatients(true);
   }catch(e){alert('❌ خطأ في الحفظ:\n'+e.message);setStatus('err');}
 }
 
@@ -632,9 +713,10 @@ function editPatient(fid){
   editId=fid;
   $('p_name').value=pt.name||'';   $('p_ticket').value=pt.ticket||'';
   $('p_letter').value=pt.letter||''; $('p_optype').value=pt.optype||'';
+  $('p_notes').value=pt.notes||'';
   [...$('p_dept').options].forEach(o=>{if(o.value===pt.dept)o.selected=true;});
   [...$('p_stype').options].forEach(o=>{if(o.value===pt.stype)o.selected=true;});
-  $('p_entry').value=pt.entryRaw||''; $('p_exit').value=pt.exitRaw||''; calcDays();
+  $('p_entry').value=pt.entryRaw||''; $('p_exit').value=pt.exitRaw||''; $('stay_days').value=pt.days||0; calcTotal();
   const fm={fStay:'f_stay',fMed:'f_med',fNur:'f_nur',fDoc:'f_doc',fAnes:'f_anes',fOr:'f_or',fEcg:'f_ecg',fPhysio:'f_physio',fOxy:'f_oxy',fBlood:'f_blood'};
   Object.entries(fm).forEach(([k,id])=>$(id).value=pt[k]||0);
   billItems=JSON.parse(JSON.stringify(pt.items||[]));
@@ -644,24 +726,30 @@ function editPatient(fid){
 async function deletePatient(fid){
   const pt=patients.find(p=>p.firestoreId===fid);
   if(!pt||!confirm('تأكيد حذف المريض:\n'+(pt.name||'')+'؟\nلا يمكن التراجع عن الحذف'))return;
-  try{await db.collection('patients').doc(fid).delete();}
+  try{
+    await db.collection('patients').doc(fid).delete();
+    await loadPatients(true);
+  }
   catch(e){alert('❌ خطأ في الحذف:\n'+e.message);}
 }
 
 function clearForm(){
   editId=null;
-  ['p_name','p_ticket','p_letter','p_optype','p_entry','p_exit'].forEach(id=>$(id).value='');
+  ['p_name','p_ticket','p_letter','p_entry','p_exit'].forEach(id=>$(id).value='');
+  $('p_notes').value=''; $('p_optype').value='';
   ['f_stay','f_med','f_nur','f_doc','f_anes','f_or','f_ecg','f_physio','f_oxy','f_blood'].forEach(id=>$(id).value=0);
-  billItems=[]; $('stay_days').innerText=0; renderBill();
+  billItems=[]; $('stay_days').value=0; renderBill();
 }
 
 function renderPatients(){
   const q=(Vv('pt-search')||'').toLowerCase();
-  const list=q?patients.filter(p=>(p.name||'').toLowerCase().includes(q)):patients;
-  $('pt-count').innerText=patients.length+' مريض';
+  const list=q?patients.filter(p=>(p.name||'').toLowerCase().includes(q)||(p.ticket||'').includes(q)):patients;
+  $('pt-count').innerText=patients.length+(allLoaded?'':'+')+' مريض محمّل';
   const el=$('patients-list');
   if(!list.length){
-    el.innerHTML=`<div style="text-align:center;padding:24px;color:var(--tm);font-size:.82rem">${q?'لا نتائج':'لا يوجد مرضي محفوظون بعد'}</div>`;return;
+    el.innerHTML=`<div style="text-align:center;padding:24px;color:var(--tm);font-size:.82rem">${q?'لا نتائج':'لا يوجد مرضى محفوظون بعد'}</div>`;
+    updateLoadMoreBtn(allLoaded?'done':'more');
+    return;
   }
   el.innerHTML=list.map(pt=>`
     <div class="pt-row" data-fid="${pt.firestoreId}">
@@ -680,27 +768,28 @@ function renderPatients(){
         <button onclick="deletePatient('${pt.firestoreId}')" class="btn btn-r btn-sm">🗑 حذف</button>
       </div>
     </div>`).join('');
+  updateLoadMoreBtn(allLoaded?'done':'more');
 }
 
 /* ========== EXCEL EXPORT ========== */
 function exportAllExcel(){
   if(!patients.length){alert('لا يوجد مرضي محفوظون');return;}
   const hdr=[
-    'اسم المريض','القسم الطبي','نوع الخدمة','رقم الخطاب / القرار',
+    'رقم التذكرة','اسم المريض','القسم الطبي','نوع الخدمة','رقم الخطاب / القرار',
     'تاريخ الدخول','تاريخ الخروج','مدة الإقامة (يوم)',
     'الإقامة (ج.م)','إشراف طبي','إشراف تمريض',
     'أجر الطبيب','أجر التخدير','فتح غرفة العمليات','نوع العملية',
     'رسم القلب','علاج طبيعي','أكسجين / أجهزة','بنك الدم',
     'إجمالي الأدوية','إجمالي المستلزمات','إجمالي الأشعة',
     'إجمالي التحاليل','إجمالي الأجهزة','إجمالي خدمات أخري',
-    'إجمالي الفاتورة'
+    'إجمالي الفاتورة','ملاحظات'
   ];
   const rows=patients.map(pt=>{
     const c={'أدوية':0,'مستلزمات':0,'أشعة':0,'تحاليل':0,'أجهزة':0,'خدمات أخري':0};
     (pt.items||[]).forEach(i=>{if(i.cat in c)c[i.cat]+=i.total;});
     const stay=parseFloat(fmt(pt.fStay||0));
     return [
-      pt.name||'', pt.dept||'', pt.stype||'', pt.letter||'',
+      pt.ticket||'', pt.name||'', pt.dept||'', pt.stype||'', pt.letter||'',
       pt.entry||'', pt.exit||'', pt.days||0,
       stay, pt.fMed||0, pt.fNur||0,
       pt.fDoc||0, pt.fAnes||0, pt.fOr||0, pt.optype||'',
@@ -708,19 +797,20 @@ function exportAllExcel(){
       parseFloat(fmt(c['أدوية'])), parseFloat(fmt(c['مستلزمات'])),
       parseFloat(fmt(c['أشعة'])), parseFloat(fmt(c['تحاليل'])),
       parseFloat(fmt(c['أجهزة'])), parseFloat(fmt(c['خدمات أخري'])),
-      parseFloat(fmt(pt.total))
+      parseFloat(fmt(pt.total)),
+      pt.notes||''
     ];
   });
   // صف الإجماليات (الأعمدة الرقمية فقط من عمود 6 للنهاية)
-  const numStart=6;
-  const tot=['الإجمالي الكلي','','','','','',''];
+  const numStart=7;
+  const tot=['الإجمالي الكلي','','','','','','',''];
   for(let i=numStart;i<hdr.length;i++){
+    if(i===hdr.length-1){tot.push('');continue;} // عمود الملاحظات نصي
     const val=rows.reduce((a,r)=>a+(typeof r[i]==='number'?r[i]:0),0);
-    tot.push(i===13?'':parseFloat(fmt(val))); // عمود نوع العملية نصي
+    tot.push(i===14?'':parseFloat(fmt(val))); // عمود نوع العملية نصي
   }
   const ws=XLSX.utils.aoa_to_sheet([hdr,...rows,tot]);
-  // عرض الأعمدة
-  ws['!cols']=hdr.map((_,i)=>({wch:[22,16,14,18,12,12,12,12,12,12,12,12,14,16,12,12,12,12,14,14,12,12,12,14,14][i]||14}));
+  ws['!cols']=hdr.map((_,i)=>({wch:[14,22,16,14,18,12,12,12,12,12,12,12,12,14,16,12,12,12,12,14,14,12,12,12,14,14,24][i]||14}));
   // تجميد الصف الأول
   ws['!freeze']={xSplit:0,ySplit:1};
   const wb=XLSX.utils.book_new();
@@ -741,15 +831,37 @@ function renderSetItems(){
   let total=0,html='';
   cats.forEach(cat=>{
     const arr=itemDB[cat]||[];
-    const items=q?arr.filter(x=>x.name.toLowerCase().includes(q)):arr;
+    const items=q?arr.filter(x=>x.name.toLowerCase().includes(q)||(x.code||'').toLowerCase().includes(q)):arr;
     if(!items.length)return; total+=items.length;
-    html+=`<div style="margin-bottom:12px"><div style="font-size:.69rem;font-weight:900;color:var(--tm);padding:4px 9px;background:var(--s2);border-radius:5px;margin-bottom:5px">${cat} — ${items.length} صنف</div>
-    ${items.map(x=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 10px;background:#fff;border-radius:6px;margin-bottom:3px;border:1px solid var(--b)">
-      <span style="font-size:.75rem;font-weight:600">${x.name}</span>
-      <div style="display:flex;align-items:center;gap:8px">
-        <span style="font-size:.75rem;font-weight:800;color:var(--p)">${x.price} ج.م</span>
-        <button onclick="delDBItem('${cat}',${arr.indexOf(x)})" style="background:none;border:none;cursor:pointer;color:#e57373;font-size:.9rem">🗑</button>
-      </div></div>`).join('')}</div>`;
+    html+=`<div style="margin-bottom:12px">
+      <div style="font-size:.69rem;font-weight:900;color:var(--tm);padding:4px 9px;background:var(--s2);border-radius:5px;margin-bottom:5px">${cat} — ${items.length} صنف</div>
+      ${items.map(x=>{
+        const realIdx=arr.indexOf(x);
+        const lt=x.list||'all';
+        const ltLabel=lt==='nafaqa'
+          ?'<span style="background:#fff3cd;color:#856404;font-size:.58rem;padding:1px 5px;border-radius:4px;margin-left:4px">نفقة</span>'
+          :lt==='tamin'
+            ?'<span style="background:#d1ecf1;color:#0c5460;font-size:.58rem;padding:1px 5px;border-radius:4px;margin-left:4px">تأمين</span>'
+            :'<span style="background:#e2e3e5;color:#383d41;font-size:.58rem;padding:1px 5px;border-radius:4px;margin-left:4px">للجميع</span>';
+        const codeStr=x.code?`<span style="background:#eef2ff;color:var(--p);font-size:.58rem;padding:1px 6px;border-radius:4px;font-weight:700;margin-left:4px">🏷 ${x.code}</span>`:'';
+        return `<div id="item-row-${cat}-${realIdx}" style="display:flex;justify-content:space-between;align-items:center;padding:6px 10px;background:#fff;border-radius:6px;margin-bottom:3px;border:1px solid var(--b);gap:6px;flex-wrap:wrap">
+          <div style="flex:1;min-width:0">
+            <span style="font-size:.75rem;font-weight:700">${x.name}</span>
+            <span style="display:inline-flex;gap:3px;margin-right:4px">${ltLabel}${codeStr}</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:5px;flex-shrink:0">
+            <input type="text" value="${x.code||''}" placeholder="كود" title="كود الصنف"
+              style="width:64px;padding:3px 5px;border:1px solid var(--b);border-radius:5px;font-size:.68rem;text-align:center;font-family:'Noto Kufi Arabic',sans-serif"
+              onchange="updateDBCode('${cat}',${realIdx},this.value)">
+            <input type="number" value="${x.price}" min="0" step="0.01" title="السعر"
+              style="width:76px;padding:3px 6px;border:1px solid var(--b);border-radius:5px;font-size:.75rem;font-weight:800;color:var(--p);text-align:center;font-family:'Noto Kufi Arabic',sans-serif"
+              onchange="updateDBPrice('${cat}',${realIdx},this.value)">
+            <span style="font-size:.68rem;color:var(--tm)">ج.م</span>
+            <button onclick="delDBItem('${cat}',${realIdx})" style="background:none;border:none;cursor:pointer;color:#e57373;font-size:.95rem;line-height:1" title="حذف">🗑</button>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>`;
   });
   if($('s_total'))$('s_total').innerText='إجمالي: '+total+' صنف';
   $('s-items-list').innerHTML=html||'<p style="text-align:center;color:var(--tm);font-size:.78rem;padding:14px">لا نتائج</p>';
@@ -758,12 +870,30 @@ function delDBItem(cat,idx){
   if(!confirm('حذف هذا الصنف نهائياً؟'))return;
   itemDB[cat].splice(idx,1); renderSetItems(); saveSettings();
 }
+function updateDBPrice(cat,idx,val){
+  const p=parseFloat(val);
+  if(isNaN(p)||p<0){renderSetItems();return;}
+  itemDB[cat][idx].price=p;
+  saveSettings();
+}
+function updateDBCode(cat,idx,val){
+  const code=val.trim();
+  if(code) itemDB[cat][idx].code=code;
+  else delete itemDB[cat][idx].code;
+  saveSettings();
+  // تحديث العرض بدون إعادة رسم كاملة
+}
 function addNewItem(){
   const cat=Vv('s_cat'),name=Vv('s_name').trim(),price=parseFloat(Vv('s_price'));
+  const listType=Vv('s_list')||'all';
+  const code=Vv('s_code').trim();
   if(!name||isNaN(price)||price<0){alert('يرجى ملء الاسم والسعر بشكل صحيح');return;}
   if(!itemDB[cat])itemDB[cat]=[];
-  itemDB[cat].push({name,price});
-  $('s_name').value='';$('s_price').value='';
+  if(itemDB[cat].find(x=>x.name===name)){alert('هذا الصنف موجود بالفعل في القائمة');return;}
+  const entry={name,price,list:listType};
+  if(code) entry.code=code;
+  itemDB[cat].push(entry);
+  $('s_name').value=''; $('s_price').value=''; $('s_code').value='';
   renderSetItems(); saveSettings();
 }
 function renderSetDepts(){
