@@ -516,6 +516,7 @@ function fillObsFees(){
   const days = parseFloat($('stay_days').value) || 0;
   const fees = OP_FEES[type];
   if(!fees) return;
+  $('f_med').value  = 0;
   $('f_stay').value = (fees.stay || 0) * days;
   $('f_doc').value  = fees.doc;
   $('f_anes').value = fees.anes;
@@ -538,6 +539,8 @@ function fillOpFees(){
     }
     calcTotal(); return;
   }
+  // عند اختيار عملية → احذف الإشراف الطبي
+  $('f_med').value  = 0;
   if(stype === 'اقتصادي') $('f_stay').value = days * ECON_STAY_RATE;
   $('f_doc').value  = fees.doc;
   $('f_anes').value = fees.anes;
