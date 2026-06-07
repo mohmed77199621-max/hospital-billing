@@ -135,6 +135,15 @@ body{font-family:'Noto Kufi Arabic',sans-serif;background:#eef2f7;color:var(--t)
             <div><label class="lbl">رقم التذكرة</label><input type="text" id="p_ticket" class="inp"></div>
             <div><label class="lbl">القسم الطبي</label><select id="p_dept" class="inp" onchange="onDeptChange()"></select></div>
           </div>
+          <!-- قائمة الولادة — تظهر فقط عند اختيار قسم النساء والتوليد -->
+          <div id="obs-wrap" style="display:none">
+            <label class="lbl" style="color:#b06ea0;font-weight:900">🤱 نوع الولادة</label>
+            <select id="p_obs" class="inp" onchange="fillObsFees()" style="border-color:#b06ea0">
+              <option value="">— اختر نوع الولادة —</option>
+              <option>ولادة طبيعي</option>
+              <option>ولادة قيصرية</option>
+            </select>
+          </div>
           <div><label class="lbl">نوع الخدمة</label>
             <select id="p_stype" class="inp" onchange="onStypeChange()">
               <option>اقتصادي</option><option>نفقة دولة</option><option>تأمين صحي</option><option>مجاني</option>
@@ -145,15 +154,13 @@ body{font-family:'Noto Kufi Arabic',sans-serif;background:#eef2f7;color:var(--t)
           <div id="optype-wrap"><label class="lbl">نوع العملية</label>
             <select id="p_optype" class="inp" onchange="fillOpFees()">
               <option value="">— اختر نوع العملية —</option>
-              <option class="op-general">بسيطة</option>
-              <option class="op-general">صغرى</option>
-              <option class="op-general">متوسطة</option>
-              <option class="op-general">كبرى</option>
-              <option class="op-general">ذات مهارة</option>
-              <option class="op-general">ذات طابع خاص</option>
-              <option class="op-general">متقدمة</option>
-              <option class="op-obs" style="display:none">ولادة طبيعي</option>
-              <option class="op-obs" style="display:none">ولادة قيصرية</option>
+              <option>بسيطة</option>
+              <option>صغرى</option>
+              <option>متوسطة</option>
+              <option>كبرى</option>
+              <option>ذات مهارة</option>
+              <option>ذات طابع خاص</option>
+              <option>متقدمة</option>
             </select>
           </div>
         </div>
@@ -167,7 +174,7 @@ body{font-family:'Noto Kufi Arabic',sans-serif;background:#eef2f7;color:var(--t)
         </div>
         <div class="days-badge">
           <span style="font-size:.72rem;font-weight:700;color:var(--tm)">عدد أيام الإقامة</span>
-          <input type="number" id="stay_days" value="0" min="0" step="0.5" oninput="applyEconRates();calcTotal()" style="font-size:1.4rem;font-weight:900;color:var(--p);width:80px;border:1.5px solid var(--b);border-radius:8px;text-align:center;background:#f0f4ff;padding:4px 8px;font-family:'Noto Kufi Arabic',sans-serif">
+          <input type="number" id="stay_days" value="0" min="0" step="0.5" oninput="applyEconRates();if(Vv('p_obs'))fillObsFees();calcTotal()" style="font-size:1.4rem;font-weight:900;color:var(--p);width:80px;border:1.5px solid var(--b);border-radius:8px;text-align:center;background:#f0f4ff;padding:4px 8px;font-family:'Noto Kufi Arabic',sans-serif">
         </div>
       </div>
     </div>
@@ -470,12 +477,11 @@ const ECON_DOC_RATE  = 30;   // أجر طبيب بدون عملية
 function onDeptChange(){
   const dept = Vv('p_dept');
   const isObs = dept === 'النساء والتوليد';
-  // إظهار/إخفاء خيارات قائمة نوع العملية
-  document.querySelectorAll('.op-obs').forEach(o => o.style.display = isObs ? '' : 'none');
-  document.querySelectorAll('.op-general').forEach(o => o.style.display = isObs ? 'none' : '');
-  // إعادة ضبط نوع العملية عند تغيير القسم
+  // إظهار/إخفاء قائمة الولادة
+  $('obs-wrap').style.display = isObs ? '' : 'none';
+  if(!isObs){ $('p_obs').value = ''; }
+  // إعادة ضبط العملية والأجور عند تغيير القسم
   $('p_optype').value = '';
-  // مسح أجور العمليات
   ['f_doc','f_anes','f_or'].forEach(id => { $(id).value = 0; });
   onStypeChange();
 }
@@ -488,18 +494,32 @@ function onStypeChange(){
 
 /* ===== تطبيق أسعار الاقتصادي ===== */
 function applyEconRates(){
-  const stype = Vv('p_stype');
+  const stype  = Vv('p_stype');
   const optype = Vv('p_optype');
-  const days = parseFloat($('stay_days').value) || 0;
+  const days   = parseFloat($('stay_days').value) || 0;
   if(stype !== 'اقتصادي') return;
   // إقامة = 40 × أيام
   $('f_stay').value = days * ECON_STAY_RATE;
-  // إذا لا توجد عملية → أجر طبيب = 30 × أيام
+  // إذا لا توجد عملية → إشراف طبي = 30 × أيام (وليس أجر الطبيب)
   if(!optype){
-    $('f_doc').value  = days * ECON_DOC_RATE;
+    $('f_med').value  = days * ECON_DOC_RATE;
+    $('f_doc').value  = 0;
     $('f_anes').value = 0;
     $('f_or').value   = 0;
   }
+  calcTotal();
+}
+
+/* ===== أجور الولادة ===== */
+function fillObsFees(){
+  const type = Vv('p_obs');
+  const days = parseFloat($('stay_days').value) || 0;
+  const fees = OP_FEES[type];
+  if(!fees) return;
+  $('f_stay').value = (fees.stay || 0) * days;
+  $('f_doc').value  = fees.doc;
+  $('f_anes').value = fees.anes;
+  $('f_or').value   = fees.or;
   calcTotal();
 }
 
@@ -508,21 +528,17 @@ function fillOpFees(){
   const stype = Vv('p_stype');
   const days  = parseFloat($('stay_days').value) || 0;
   const fees  = OP_FEES[type];
-  if(!fees){ 
-    // لا عملية → إذا اقتصادي أعِد حساب أجر الطبيب
+  if(!fees){
+    // لا عملية → إذا اقتصادي أعِد حساب الإشراف الطبي
     if(stype === 'اقتصادي'){
-      $('f_doc').value  = days * ECON_DOC_RATE;
+      $('f_med').value  = days * ECON_DOC_RATE;
+      $('f_doc').value  = 0;
       $('f_anes').value = 0;
       $('f_or').value   = 0;
     }
     calcTotal(); return;
   }
-  // ولادة: سعر اليوم خاص
-  if(fees.stay !== undefined){
-    $('f_stay').value = fees.stay * days;
-  } else if(stype === 'اقتصادي'){
-    $('f_stay').value = days * ECON_STAY_RATE;
-  }
+  if(stype === 'اقتصادي') $('f_stay').value = days * ECON_STAY_RATE;
   $('f_doc').value  = fees.doc;
   $('f_anes').value = fees.anes;
   $('f_or').value   = fees.or;
