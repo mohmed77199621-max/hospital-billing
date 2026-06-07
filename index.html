@@ -133,25 +133,27 @@ body{font-family:'Noto Kufi Arabic',sans-serif;background:#eef2f7;color:var(--t)
           <div><label class="lbl">اسم المريض رباعياً</label><input type="text" id="p_name" class="inp" placeholder="الاسم الكامل للمريض"></div>
           <div class="g2">
             <div><label class="lbl">رقم التذكرة</label><input type="text" id="p_ticket" class="inp"></div>
-            <div><label class="lbl">القسم الطبي</label><select id="p_dept" class="inp"></select></div>
+            <div><label class="lbl">القسم الطبي</label><select id="p_dept" class="inp" onchange="onDeptChange()"></select></div>
           </div>
           <div><label class="lbl">نوع الخدمة</label>
-            <select id="p_stype" class="inp">
+            <select id="p_stype" class="inp" onchange="onStypeChange()">
               <option>اقتصادي</option><option>نفقة دولة</option><option>تأمين صحي</option><option>مجاني</option>
             </select>
           </div>
           <div><label class="lbl">ملاحظات</label><textarea id="p_notes" class="inp" rows="2" placeholder="أي ملاحظات إضافية..." style="resize:vertical;min-height:54px"></textarea></div>
           <div><label class="lbl">رقم الخطاب / القرار</label><input type="text" id="p_letter" class="inp"></div>
-          <div><label class="lbl">نوع العملية</label>
+          <div id="optype-wrap"><label class="lbl">نوع العملية</label>
             <select id="p_optype" class="inp" onchange="fillOpFees()">
               <option value="">— اختر نوع العملية —</option>
-              <option>بسيطة</option>
-              <option>صغرى</option>
-              <option>متوسطة</option>
-              <option>كبرى</option>
-              <option>ذات مهارة</option>
-              <option>ذات طابع خاص</option>
-              <option>متقدمة</option>
+              <option class="op-general">بسيطة</option>
+              <option class="op-general">صغرى</option>
+              <option class="op-general">متوسطة</option>
+              <option class="op-general">كبرى</option>
+              <option class="op-general">ذات مهارة</option>
+              <option class="op-general">ذات طابع خاص</option>
+              <option class="op-general">متقدمة</option>
+              <option class="op-obs" style="display:none">ولادة طبيعي</option>
+              <option class="op-obs" style="display:none">ولادة قيصرية</option>
             </select>
           </div>
         </div>
@@ -165,7 +167,7 @@ body{font-family:'Noto Kufi Arabic',sans-serif;background:#eef2f7;color:var(--t)
         </div>
         <div class="days-badge">
           <span style="font-size:.72rem;font-weight:700;color:var(--tm)">عدد أيام الإقامة</span>
-          <input type="number" id="stay_days" value="0" min="0" step="0.5" oninput="calcTotal()" style="font-size:1.4rem;font-weight:900;color:var(--p);width:80px;border:1.5px solid var(--b);border-radius:8px;text-align:center;background:#f0f4ff;padding:4px 8px;font-family:'Noto Kufi Arabic',sans-serif">
+          <input type="number" id="stay_days" value="0" min="0" step="0.5" oninput="applyEconRates();calcTotal()" style="font-size:1.4rem;font-weight:900;color:var(--p);width:80px;border:1.5px solid var(--b);border-radius:8px;text-align:center;background:#f0f4ff;padding:4px 8px;font-family:'Noto Kufi Arabic',sans-serif">
         </div>
       </div>
     </div>
@@ -449,18 +451,78 @@ function renderDepts(){
 
 /* ========== OPERATION TYPE AUTO-FILL ========== */
 const OP_FEES = {
-  'بسيطة':       {doc:130,  anes:26,  or:100},
-  'صغرى':        {doc:320,  anes:64,  or:140},
-  'متوسطة':      {doc:630,  anes:126, or:180},
-  'كبرى':        {doc:950,  anes:190, or:225},
-  'ذات مهارة':   {doc:1300, anes:260, or:320},
-  'ذات طابع خاص':{doc:1800, anes:360, or:400},
-  'متقدمة':      {doc:2300, anes:460, or:480},
+  'بسيطة':        {doc:130,  anes:26,  or:100},
+  'صغرى':         {doc:320,  anes:64,  or:140},
+  'متوسطة':       {doc:630,  anes:126, or:180},
+  'كبرى':         {doc:950,  anes:190, or:225},
+  'ذات مهارة':    {doc:1300, anes:260, or:320},
+  'ذات طابع خاص': {doc:1800, anes:360, or:400},
+  'متقدمة':       {doc:2300, anes:460, or:480},
+  'ولادة طبيعي':  {stay:28,  doc:350,  anes:0,   or:70},
+  'ولادة قيصرية': {stay:28,  doc:420,  anes:84,  or:87.5},
 };
+
+/* معدل الاقتصادي لليوم */
+const ECON_STAY_RATE = 40;   // إقامة
+const ECON_DOC_RATE  = 30;   // أجر طبيب بدون عملية
+
+/* ===== عند تغيير القسم ===== */
+function onDeptChange(){
+  const dept = Vv('p_dept');
+  const isObs = dept === 'النساء والتوليد';
+  // إظهار/إخفاء خيارات قائمة نوع العملية
+  document.querySelectorAll('.op-obs').forEach(o => o.style.display = isObs ? '' : 'none');
+  document.querySelectorAll('.op-general').forEach(o => o.style.display = isObs ? 'none' : '');
+  // إعادة ضبط نوع العملية عند تغيير القسم
+  $('p_optype').value = '';
+  // مسح أجور العمليات
+  ['f_doc','f_anes','f_or'].forEach(id => { $(id).value = 0; });
+  onStypeChange();
+}
+
+/* ===== عند تغيير نوع الخدمة ===== */
+function onStypeChange(){
+  applyEconRates();
+  calcTotal();
+}
+
+/* ===== تطبيق أسعار الاقتصادي ===== */
+function applyEconRates(){
+  const stype = Vv('p_stype');
+  const optype = Vv('p_optype');
+  const days = parseFloat($('stay_days').value) || 0;
+  if(stype !== 'اقتصادي') return;
+  // إقامة = 40 × أيام
+  $('f_stay').value = days * ECON_STAY_RATE;
+  // إذا لا توجد عملية → أجر طبيب = 30 × أيام
+  if(!optype){
+    $('f_doc').value  = days * ECON_DOC_RATE;
+    $('f_anes').value = 0;
+    $('f_or').value   = 0;
+  }
+  calcTotal();
+}
+
 function fillOpFees(){
-  const type = Vv('p_optype');
-  const fees = OP_FEES[type];
-  if(!fees) return;
+  const type  = Vv('p_optype');
+  const stype = Vv('p_stype');
+  const days  = parseFloat($('stay_days').value) || 0;
+  const fees  = OP_FEES[type];
+  if(!fees){ 
+    // لا عملية → إذا اقتصادي أعِد حساب أجر الطبيب
+    if(stype === 'اقتصادي'){
+      $('f_doc').value  = days * ECON_DOC_RATE;
+      $('f_anes').value = 0;
+      $('f_or').value   = 0;
+    }
+    calcTotal(); return;
+  }
+  // ولادة: سعر اليوم خاص
+  if(fees.stay !== undefined){
+    $('f_stay').value = fees.stay * days;
+  } else if(stype === 'اقتصادي'){
+    $('f_stay').value = days * ECON_STAY_RATE;
+  }
   $('f_doc').value  = fees.doc;
   $('f_anes').value = fees.anes;
   $('f_or').value   = fees.or;
