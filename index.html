@@ -143,7 +143,7 @@ body{font-family:'Noto Kufi Arabic',sans-serif;background:#eef2f7;color:var(--t)
           <div><label class="lbl">ملاحظات</label><textarea id="p_notes" class="inp" rows="2" placeholder="أي ملاحظات إضافية..." style="resize:vertical;min-height:54px"></textarea></div>
           <div><label class="lbl">رقم الخطاب / القرار</label><input type="text" id="p_letter" class="inp"></div>
           <div><label class="lbl">نوع العملية</label>
-            <select id="p_optype" class="inp">
+            <select id="p_optype" class="inp" onchange="fillOpFees()">
               <option value="">— اختر نوع العملية —</option>
               <option>بسيطة</option>
               <option>صغرى</option>
@@ -436,7 +436,25 @@ function renderDepts(){
   $('p_dept').innerHTML=depts.map(x=>`<option>${x}</option>`).join('');
 }
 
-/* ========== DAYS (manual) ========== */
+/* ========== OPERATION TYPE AUTO-FILL ========== */
+const OP_FEES = {
+  'بسيطة':       {doc:130,  anes:26,  or:100},
+  'صغرى':        {doc:320,  anes:64,  or:140},
+  'متوسطة':      {doc:630,  anes:126, or:180},
+  'كبرى':        {doc:950,  anes:190, or:225},
+  'ذات مهارة':   {doc:1300, anes:260, or:320},
+  'ذات طابع خاص':{doc:1800, anes:360, or:400},
+  'متقدمة':      {doc:2300, anes:460, or:480},
+};
+function fillOpFees(){
+  const type = Vv('p_optype');
+  const fees = OP_FEES[type];
+  if(!fees) return;
+  $('f_doc').value  = fees.doc;
+  $('f_anes').value = fees.anes;
+  $('f_or').value   = fees.or;
+  calcTotal();
+}
 function calcDays(){
   // kept for compatibility - days are now manual
   calcTotal();
