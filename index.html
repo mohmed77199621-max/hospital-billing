@@ -558,7 +558,8 @@ function applyAutoRates(){
   const dept   = Vv('p_dept');
   const optype = Vv('p_optype');
   const obs    = Vv('p_obs');
-  const days   = parseFloat($('stay_days').value) || 0;
+  const rawDays = parseFloat($('stay_days').value) || 0;
+  const days = (stype === 'نفقة دولة' && rawDays > 1) ? rawDays - 1 : rawDays;
 
   // أقسام العناية الخاصة — تأمين/نفقة فقط
   if((stype === 'تأمين صحي' || stype === 'نفقة دولة') && ICU_DEPTS[dept]){
