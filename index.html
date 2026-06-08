@@ -144,8 +144,19 @@ body{font-family:'Noto Kufi Arabic',sans-serif;background:#eef2f7;color:var(--t)
               <option>ولادة قيصرية</option>
             </select>
           </div>
+          <!-- قائمة فئة التأمين — تظهر عند اختيار تأمين صحي -->
+          <div id="tamin-wrap" style="display:none">
+            <label class="lbl" style="color:#1565c0;font-weight:900">🏥 فئة التأمين</label>
+            <select id="p_tamin_type" class="inp" style="border-color:#1565c0">
+              <option value="">— اختر الفئة —</option>
+              <option>أطفال</option>
+              <option>طلبة</option>
+              <option>منتفعين</option>
+            </select>
+          </div>
           <div><label class="lbl">نوع الخدمة</label>
             <select id="p_stype" class="inp" onchange="onStypeChange()">
+              <option value="">— اختر نوع الخدمة —</option>
               <option>اقتصادي</option><option>نفقة دولة</option><option>تأمين صحي</option><option>مجاني</option>
             </select>
           </div>
@@ -502,8 +513,9 @@ const FEES_ECON = {
   'كبرى':   {doc:600, anes:120, or:125},
   'ذات مهارة': {doc:1000, anes:200, or:150},
 };
-const ECON_STAY_RATE = 40;    // إقامة يومية اقتصادي
-const ECON_MED_RATE  = 30;    // إشراف طبي يومي بدون عملية
+const ECON_STAY_RATE     = 40;    // إقامة يومية اقتصادي (مع عملية)
+const ECON_STAY_NOOP     = 80;    // إقامة يومية اقتصادي (بدون عملية)
+const ECON_MED_RATE      = 30;    // إشراف طبي يومي بدون عملية
 
 /* أسعار الولادة (مشتركة اقتصادي/تأمين/نفقة) */
 const FEES_OBS = {
@@ -548,6 +560,10 @@ function onDeptChange(){
 
 /* ===== عند تغيير نوع الخدمة ===== */
 function onStypeChange(){
+  const stype = Vv('p_stype');
+  const isTamin = stype === 'تأمين صحي';
+  $('tamin-wrap').style.display = isTamin ? '' : 'none';
+  if(!isTamin) $('p_tamin_type').value = '';
   applyAutoRates();
   calcTotal();
 }
@@ -587,15 +603,15 @@ function applyAutoRates(){
 
   // اقتصادي
   if(stype === 'اقتصادي'){
-    $('f_stay').value = days * ECON_STAY_RATE;
     if(optype && FEES_ECON[optype]){
+      $('f_stay').value = days * ECON_STAY_RATE;  // مع عملية × 40
       const r = FEES_ECON[optype];
       $('f_med').value  = 0;
       $('f_doc').value  = r.doc;
       $('f_anes').value = r.anes;
       $('f_or').value   = r.or;
     } else {
-      // بدون عملية → إشراف طبي فقط
+      $('f_stay').value = days * ECON_STAY_NOOP;  // بدون عملية × 80
       $('f_med').value  = days * ECON_MED_RATE;
       $('f_doc').value  = 0;
       $('f_anes').value = 0;
@@ -896,9 +912,27 @@ function getFormData(){
 }
 
 async function savePatient(){
-  const name=Vv('p_name').trim();
-  if(!name){alert('يرجى إدخال اسم المريض أولاً');return;}
-  const pt={...getFormData(),savedAt:firebase.firestore.FieldValue.serverTimestamp()};
+  const name   = Vv('p_name').trim();
+  const ticket = Vv('p_ticket').trim();
+  const dept   = Vv('p_dept');
+  const stype  = Vv('p_stype');
+  const letter = Vv('p_letter').trim();
+  const days   = parseFloat($('stay_days').value) || 0;
+  const taminType = Vv('p_tamin_type');
+
+  if(!name)  { alert('⚠️ يرجى إدخال اسم المريض');            return; }
+  if(!ticket){ alert('⚠️ يرجى إدخال رقم التذكرة');           return; }
+  if(!dept)  { alert('⚠️ يرجى اختيار القسم الطبي');          return; }
+  if(!stype) { alert('⚠️ يرجى اختيار نوع الخدمة');           return; }
+  if(days<=0){ alert('⚠️ يرجى إدخال عدد أيام الإقامة (أكبر من صفر)'); return; }
+  if((stype==='تأمين صحي'||stype==='نفقة دولة') && !letter){
+    alert('⚠️ يرجى إدخال رقم الخطاب / القرار للتأمين الصحي أو نفقة الدولة'); return;
+  }
+  if(stype==='تأمين صحي' && !taminType){
+    alert('⚠️ يرجى اختيار فئة التأمين (أطفال / طلبة / منتفعين)'); return;
+  }
+
+  const pt={...getFormData(), taminType, savedAt:firebase.firestore.FieldValue.serverTimestamp()};
   setStatus('save');
   try{
     if(editId){await db.collection('patients').doc(editId).set(pt);}
@@ -917,6 +951,12 @@ function editPatient(fid){
   $('p_notes').value=pt.notes||'';
   [...$('p_dept').options].forEach(o=>{if(o.value===pt.dept)o.selected=true;});
   [...$('p_stype').options].forEach(o=>{if(o.value===pt.stype)o.selected=true;});
+  // استعادة فئة التأمين وقائمة الولادة
+  if(pt.stype==='تأمين صحي'){
+    $('tamin-wrap').style.display='';
+    $('p_tamin_type').value=pt.taminType||'';
+  }
+  if(pt.obs){ $('obs-wrap').style.display=''; $('p_obs').value=pt.obs||''; }
   $('p_entry').value=pt.entryRaw||''; $('p_exit').value=pt.exitRaw||''; $('stay_days').value=pt.days||0; calcTotal();
   const fm={fStay:'f_stay',fMed:'f_med',fNur:'f_nur',fDoc:'f_doc',fAnes:'f_anes',fOr:'f_or',fEcg:'f_ecg',fPhysio:'f_physio',fOxy:'f_oxy',fBlood:'f_blood'};
   Object.entries(fm).forEach(([k,id])=>$(id).value=pt[k]||0);
@@ -940,6 +980,7 @@ function clearForm(){
   $('p_notes').value=''; $('p_optype').value='';
   $('p_dept').value=''; $('p_stype').value='';
   $('p_obs').value=''; $('obs-wrap').style.display='none';
+  $('p_tamin_type').value=''; $('tamin-wrap').style.display='none';
   ['f_stay','f_med','f_nur','f_doc','f_anes','f_or','f_ecg','f_physio','f_oxy','f_blood'].forEach(id=>$(id).value=0);
   billItems=[]; $('stay_days').value=0; renderBill();
 }
