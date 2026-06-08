@@ -938,6 +938,8 @@ function clearForm(){
   editId=null;
   ['p_name','p_ticket','p_letter','p_entry','p_exit'].forEach(id=>$(id).value='');
   $('p_notes').value=''; $('p_optype').value='';
+  $('p_dept').value=''; $('p_stype').value='';
+  $('p_obs').value=''; $('obs-wrap').style.display='none';
   ['f_stay','f_med','f_nur','f_doc','f_anes','f_or','f_ecg','f_physio','f_oxy','f_blood'].forEach(id=>$(id).value=0);
   billItems=[]; $('stay_days').value=0; renderBill();
 }
