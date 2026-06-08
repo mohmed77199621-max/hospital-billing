@@ -397,7 +397,17 @@ function init(){
             (itemDB[cat]||[]).forEach(x=>{ if(!x.list || x.list==='all') x.list='nafaqa'; });
           });
         }
-        if(d.depts&&d.depts.length)depts=d.depts;
+        if(d.depts&&d.depts.length){
+          // دمج الأقسام المحفوظة مع الأقسام الجديدة
+          const extraDepts = [
+            'عناية مركزة أطفال','عناية مركزة باطنة','عناية مركزة ICU',
+            'عناية مركزة HUB','عناية مركزة حروق','عناية متوسطة حروق',
+            'عناية مخ والأعصاب','عناية القلب','عناية متوسطة أطفال','المبتسرين'
+          ];
+          const merged = [...d.depts];
+          extraDepts.forEach(nd=>{ if(!merged.includes(nd)) merged.push(nd); });
+          depts = merged;
+        }
         renderDepts();
       }
     }).catch(e=>console.log('Settings:',e));
