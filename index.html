@@ -357,7 +357,13 @@ let itemDB = JSON.parse(JSON.stringify(DB0));
 ['أدوية','مستلزمات'].forEach(cat=>{
   (itemDB[cat]||[]).forEach(x=>{ if(!x.list || x.list==='all') x.list='nafaqa'; });
 });
-let depts = ["الجراحة العامة","العناية المركزة","الأطفال","الباطنة","النساء والتوليد","المسالك البولية","العظام","الأعصاب","القلب والأوعية","طب الطوارئ"];
+let depts = [
+  "الجراحة العامة","الباطنة","الأطفال","النساء والتوليد",
+  "المسالك البولية","العظام","الأعصاب","القلب والأوعية","طب الطوارئ",
+  "عناية مركزة أطفال","عناية مركزة باطنة","عناية مركزة ICU","عناية مركزة HUB","عناية مركزة حروق",
+  "عناية متوسطة حروق","عناية مخ والأعصاب","عناية القلب","عناية متوسطة أطفال",
+  "المبتسرين"
+];
 let billItems = [], patients = [], editId = null, selItem = null;
 let lastDoc = null, allLoaded = false, loadingMore = false;
 const PAGE_SIZE = 2000;
@@ -457,7 +463,12 @@ function renderDepts(){
 }
 
 /* ========== OPERATION TYPE AUTO-FILL ========== */
-const OP_FEES = {
+/* ================================================================
+   جداول الأسعار — قابلة للتعديل
+   ================================================================ */
+
+/* أسعار تأمين/نفقة — عمليات عادية (إقامة × 80) */
+const FEES_TAMIN = {
   'بسيطة':        {doc:130,  anes:26,  or:100},
   'صغرى':         {doc:320,  anes:64,  or:140},
   'متوسطة':       {doc:630,  anes:126, or:180},
@@ -465,88 +476,153 @@ const OP_FEES = {
   'ذات مهارة':    {doc:1300, anes:260, or:320},
   'ذات طابع خاص': {doc:1800, anes:360, or:400},
   'متقدمة':       {doc:2300, anes:460, or:480},
-  'ولادة طبيعي':  {stay:28,  doc:350,  anes:0,   or:70},
-  'ولادة قيصرية': {stay:28,  doc:420,  anes:84,  or:87.5},
+};
+const TAMIN_STAY_RATE = 80;   // إقامة يومية تأمين/نفقة
+const TAMIN_MED_RATE  = 30;   // إشراف طبي يومي بدون عملية
+
+/* أسعار اقتصادي — عمليات عادية (إقامة × 40) */
+const FEES_ECON = {
+  'بسيطة':  {doc:100, anes:20,  or:50},
+  'صغرى':   {doc:250, anes:50,  or:75},
+  'متوسطة': {doc:500, anes:100, or:100},
+  'كبرى':   {doc:600, anes:120, or:125},
+  'ذات مهارة': {doc:1000, anes:200, or:150},
+};
+const ECON_STAY_RATE = 40;    // إقامة يومية اقتصادي
+const ECON_MED_RATE  = 30;    // إشراف طبي يومي بدون عملية
+
+/* أسعار الولادة (مشتركة اقتصادي/تأمين/نفقة) */
+const FEES_OBS = {
+  'ولادة طبيعي':  {stayRate:28, doc:350, anes:0,  or:70},
+  'ولادة قيصرية': {stayRate:28, doc:420, anes:84, or:88},
 };
 
-/* معدل الاقتصادي لليوم */
-const ECON_STAY_RATE = 40;   // إقامة
-const ECON_DOC_RATE  = 30;   // أجر طبيب بدون عملية
+/* أقسام العناية الخاصة — تأمين/نفقة فقط */
+const ICU_DEPTS = {
+  // عناية مركزة
+  'عناية مركزة أطفال':   {stayRate:390, med:50, nur:80},
+  'عناية مركزة باطنة':   {stayRate:390, med:50, nur:80},
+  'عناية مركزة ICU':     {stayRate:390, med:50, nur:80},
+  'عناية مركزة HUB':     {stayRate:390, med:50, nur:80},
+  'عناية مركزة حروق':    {stayRate:390, med:50, nur:80},
+  // عناية متوسطة
+  'عناية متوسطة حروق':   {stayRate:240, med:35, nur:45},
+  'عناية مخ والأعصاب':   {stayRate:240, med:35, nur:45},
+  'عناية القلب':          {stayRate:240, med:35, nur:45},
+  'عناية متوسطة أطفال':  {stayRate:240, med:35, nur:45},
+  // المبتسرين
+  'المبتسرين':            {stayRate:150, med:50, nur:0},
+};
+
+/* للتوافق مع الكود القديم */
+const OP_FEES = {...FEES_TAMIN, ...FEES_OBS};
+
+/* ================================================================
+   دوال الحساب التلقائي
+   ================================================================ */
 
 /* ===== عند تغيير القسم ===== */
 function onDeptChange(){
-  const dept = Vv('p_dept');
+  const dept  = Vv('p_dept');
   const isObs = dept === 'النساء والتوليد';
-  // إظهار/إخفاء قائمة الولادة
   $('obs-wrap').style.display = isObs ? '' : 'none';
-  if(!isObs){ $('p_obs').value = ''; }
-  // إعادة ضبط العملية والأجور عند تغيير القسم
+  if(!isObs) $('p_obs').value = '';
   $('p_optype').value = '';
-  ['f_doc','f_anes','f_or'].forEach(id => { $(id).value = 0; });
-  onStypeChange();
+  ['f_doc','f_anes','f_or','f_med','f_nur'].forEach(id => $(id).value = 0);
+  applyAutoRates();
 }
 
 /* ===== عند تغيير نوع الخدمة ===== */
 function onStypeChange(){
-  applyEconRates();
+  applyAutoRates();
   calcTotal();
 }
 
-/* ===== تطبيق أسعار الاقتصادي ===== */
-function applyEconRates(){
+/* ===== الدالة الرئيسية للحساب التلقائي ===== */
+function applyAutoRates(){
   const stype  = Vv('p_stype');
+  const dept   = Vv('p_dept');
   const optype = Vv('p_optype');
+  const obs    = Vv('p_obs');
   const days   = parseFloat($('stay_days').value) || 0;
-  if(stype !== 'اقتصادي') return;
-  // إقامة = 40 × أيام
-  $('f_stay').value = days * ECON_STAY_RATE;
-  // إذا لا توجد عملية → إشراف طبي = 30 × أيام (وليس أجر الطبيب)
-  if(!optype){
-    $('f_med').value  = days * ECON_DOC_RATE;
+
+  // أقسام العناية الخاصة — تأمين/نفقة فقط
+  if((stype === 'تأمين صحي' || stype === 'نفقة دولة') && ICU_DEPTS[dept]){
+    const r = ICU_DEPTS[dept];
+    $('f_stay').value = days * r.stayRate;
+    $('f_med').value  = days * r.med;
+    $('f_nur').value  = days * r.nur;
     $('f_doc').value  = 0;
     $('f_anes').value = 0;
     $('f_or').value   = 0;
+    calcTotal(); return;
   }
-  calcTotal();
-}
 
-/* ===== أجور الولادة ===== */
-function fillObsFees(){
-  const type = Vv('p_obs');
-  const days = parseFloat($('stay_days').value) || 0;
-  const fees = OP_FEES[type];
-  if(!fees) return;
-  $('f_med').value  = 0;
-  $('f_stay').value = (fees.stay || 0) * days;
-  $('f_doc').value  = fees.doc;
-  $('f_anes').value = fees.anes;
-  $('f_or').value   = fees.or;
-  calcTotal();
-}
+  // ولادة (قسم النساء)
+  if(obs && FEES_OBS[obs]){
+    const r = FEES_OBS[obs];
+    $('f_stay').value = days * r.stayRate;
+    $('f_med').value  = 0;
+    $('f_nur').value  = 0;
+    $('f_doc').value  = r.doc;
+    $('f_anes').value = r.anes;
+    $('f_or').value   = r.or;
+    calcTotal(); return;
+  }
 
-function fillOpFees(){
-  const type  = Vv('p_optype');
-  const stype = Vv('p_stype');
-  const days  = parseFloat($('stay_days').value) || 0;
-  const fees  = OP_FEES[type];
-  if(!fees){
-    // لا عملية → إذا اقتصادي أعِد حساب الإشراف الطبي
-    if(stype === 'اقتصادي'){
-      $('f_med').value  = days * ECON_DOC_RATE;
+  // اقتصادي
+  if(stype === 'اقتصادي'){
+    $('f_stay').value = days * ECON_STAY_RATE;
+    if(optype && FEES_ECON[optype]){
+      const r = FEES_ECON[optype];
+      $('f_med').value  = 0;
+      $('f_doc').value  = r.doc;
+      $('f_anes').value = r.anes;
+      $('f_or').value   = r.or;
+    } else {
+      // بدون عملية → إشراف طبي فقط
+      $('f_med').value  = days * ECON_MED_RATE;
       $('f_doc').value  = 0;
       $('f_anes').value = 0;
       $('f_or').value   = 0;
     }
     calcTotal(); return;
   }
-  // عند اختيار عملية → احذف الإشراف الطبي
-  $('f_med').value  = 0;
-  if(stype === 'اقتصادي') $('f_stay').value = days * ECON_STAY_RATE;
-  $('f_doc').value  = fees.doc;
-  $('f_anes').value = fees.anes;
-  $('f_or').value   = fees.or;
+
+  // تأمين صحي / نفقة دولة — أقسام عادية
+  if(stype === 'تأمين صحي' || stype === 'نفقة دولة'){
+    $('f_stay').value = days * TAMIN_STAY_RATE;
+    if(optype && FEES_TAMIN[optype]){
+      const r = FEES_TAMIN[optype];
+      $('f_med').value  = 0;
+      $('f_doc').value  = r.doc;
+      $('f_anes').value = r.anes;
+      $('f_or').value   = r.or;
+    } else {
+      // بدون عملية → إشراف طبي فقط
+      $('f_med').value  = days * TAMIN_MED_RATE;
+      $('f_doc').value  = 0;
+      $('f_anes').value = 0;
+      $('f_or').value   = 0;
+    }
+    calcTotal(); return;
+  }
+
   calcTotal();
 }
+
+/* ===== عند تغيير نوع العملية ===== */
+function fillOpFees(){
+  applyAutoRates();
+}
+
+/* ===== عند تغيير نوع الولادة ===== */
+function fillObsFees(){
+  applyAutoRates();
+}
+
+/* للتوافق مع applyEconRates القديمة */
+function applyEconRates(){ applyAutoRates(); }
 function calcDays(){
   // kept for compatibility - days are now manual
   calcTotal();
