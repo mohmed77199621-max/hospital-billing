@@ -945,6 +945,9 @@ async function savePatient(){
   if(stype==='تأمين صحي' && !taminType){
     alert('⚠️ يرجى اختيار فئة التأمين (أطفال / طلبة / منتفعين)'); return;
   }
+  if(dept==='العظام' && !group){
+    alert('⚠️ يرجى إدخال المجموعة لقسم العظام'); return;
+  }
 
   const pt={...getFormData(), taminType, group, savedAt:firebase.firestore.FieldValue.serverTimestamp()};
   setStatus('save');
