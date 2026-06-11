@@ -834,20 +834,20 @@ function buildInvoice(pt){
   cats.forEach(cat=>{
     const g=items.filter(i=>i.cat===cat);if(!g.length)return;
     const ct=g.reduce((a,x)=>a+x.total,0);
-    catSec+=`<div class="inv-sec">${cat} — ${g.length} صنف</div>
+    catSec+=`<section class="inv-cat-group"><div class="inv-sec">${cat} — ${g.length} صنف</div>
     <table class="inv-items" style="margin-bottom:5px">
       <thead><tr><th style="width:24px;text-align:center">#</th><th style="width:56px;text-align:center">الكود</th><th style="text-align:right">اسم الصنف</th><th style="width:44px;text-align:center">الكمية</th><th style="width:68px;text-align:center">سعر الوحدة</th><th style="width:78px;text-align:center">الإجمالي (ج.م)</th></tr></thead>
       <tbody>
         ${g.map((i,n)=>`<tr><td style="text-align:center;color:#555">${n+1}</td><td style="text-align:center;font-weight:800;font-size:10.5pt;letter-spacing:0.5px">${i.code||'—'}</td><td>${i.name}</td><td style="text-align:center">${i.qty}</td><td style="text-align:center">${fmt(i.price)}</td><td style="text-align:center;font-weight:700">${fmt(i.total)}</td></tr>`).join('')}
         <tr style="font-weight:900"><td colspan="5" style="text-align:right;padding:4px 8px">إجمالي ${cat}</td><td style="text-align:center;padding:4px 8px;font-weight:900">${fmt(ct)}</td></tr>
-      </tbody></table>`;
+      </tbody></table></section>`;
   });
 
   return `<div class="inv-wrap">
   <div class="inv-hdr">
     <div style="font-size:9pt;font-weight:900">جمهورية مصر العربية — وزارة الصحة والسكان</div>
     <div style="font-size:13pt;font-weight:900;margin:2px 0">مستشفى سوهاج العام</div>
-    <div style="font-size:8.5pt;font-weight:700">فاتورة مطالبة علاجية</div>
+    <div style="font-size:8.8pt;font-weight:700">فاتورة مطالبة علاجية</div>
   </div>
   <div class="inv-meta">
     <table>
@@ -858,13 +858,14 @@ function buildInvoice(pt){
       <tr><td class="lh">مدة الإقامة</td><td colspan="3" style="font-weight:900;font-size:10pt">${days} يوم</td></tr>
     </table>
   </div>
-  ${fixed.length?`<div class="inv-sec">أجور الخدمات والإقامة الثابتة</div>
+  ${fixed.length?`<section class="inv-fixed-group"><div class="inv-sec">أجور الخدمات والإقامة الثابتة</div>
   <table class="inv-items" style="margin-bottom:5px">
     <thead><tr><th style="width:24px;text-align:center">#</th><th style="width:56px;text-align:center">الكود</th><th style="text-align:right">البيان</th><th style="width:44px;text-align:center">الكمية</th><th style="width:68px;text-align:center">سعر الوحدة</th><th style="width:78px;text-align:center">الإجمالي (ج.م)</th></tr></thead>
     <tbody>${fixedRows}
       <tr style="font-weight:900"><td colspan="5" style="text-align:right;padding:4px 8px">إجمالي الخدمات الثابتة</td><td style="text-align:center;padding:4px 8px;font-weight:900">${fmt(feesSum)}</td></tr>
-    </tbody></table>`:''}
+    </tbody></table></section>`:''}
   ${catSec}
+  <div class="inv-summary-block">
   <div class="inv-totals" style="margin-top:8px">
     <table>
       <tr><td class="tl" style="width:75%">إجمالي الخدمات والإقامة الثابتة</td><td style="text-align:center;font-weight:800">${fmt(feesSum)} ج.م</td></tr>
@@ -878,6 +879,7 @@ function buildInvoice(pt){
     <div class="inv-sig">الشئون المالية — يعتمد<br><span style="font-size:8pt;font-weight:400">الاسم: ...............................</span></div>
   </div>
   <div style="text-align:center;font-size:8pt;color:#555;margin-top:10px;border-top:1px solid #999;padding-top:5px">مستشفى سوهاج العام — تاريخ الطباعة: ${new Date().toLocaleDateString('ar-EG')}</div>
+  </div>
 </div>`;
 }
 
@@ -894,41 +896,66 @@ function printCurrentInvoice(pt){
 <meta charset="UTF-8">
 <link href="https://fonts.googleapis.com/css2?family=Noto+Kufi+Arabic:wght@400;700;900&display=swap" rel="stylesheet">
 <style>
-  @page{size:A4 portrait;margin:0mm}
+  @page{size:A4 portrait;margin:12mm 10mm 14mm 10mm}
   *{box-sizing:border-box;margin:0;padding:0}
-  html,body{width:100%;background:#fff;font-family:'Noto Kufi Arabic',sans-serif}
-  /* شاشة العرض: إظهار معاينة */
-  body{background:#e0e0e0;padding:6mm}
-  #wrapper{background:#fff;width:210mm;min-height:auto;margin:0 auto;padding:6mm;box-shadow:0 4px 20px rgba(0,0,0,.2)}
-  /* الطباعة: ملء كامل الورقة */
+  html,body{width:100%;min-height:100%;background:#fff;font-family:'Noto Kufi Arabic',sans-serif}
+  body{background:#e0e0e0;padding:12px}
+  #doc-shell{
+    width:210mm;
+    min-height:297mm;
+    margin:0 auto;
+    background:#fff;
+    box-shadow:0 4px 20px rgba(0,0,0,.18);
+  }
+  #doc-body{
+    padding:12mm 10mm 16mm 10mm;
+    background:#fff;
+  }
   @media print{
-    body{background:#fff!important;padding:0!important;margin:0!important}
-    #wrapper{
-      width:210mm!important;margin:0 auto!important;padding:6mm!important;
-      box-shadow:none!important;min-height:0!important;
-    }
+    html,body{background:#fff!important}
+    body{padding:0!important;margin:0!important}
+    #doc-shell{width:auto!important;min-height:auto!important;box-shadow:none!important;margin:0!important}
+    #doc-body{padding:0 0 12mm 0!important}
     #print-toolbar{display:none!important}
+    .inv-fixed-group,
+    .inv-cat-group,
+    .inv-summary-block{break-inside:avoid;page-break-inside:avoid}
+    .inv-fixed-group + .inv-cat-group,
+    .inv-cat-group + .inv-cat-group{break-before:page;page-break-before:always}
+    .print-footer{position:fixed;left:0;right:0;bottom:0;padding:3mm 10mm 0 10mm;background:#fff}
+    .page-now::after{content: counter(page)}
+    .page-total::after{content: counter(pages)}
   }
   #print-toolbar{position:fixed;top:0;left:0;right:0;background:#0f2d5e;padding:8px 16px;display:flex;gap:10px;justify-content:center;z-index:999;box-shadow:0 2px 8px rgba(0,0,0,.3)}
   .tb-btn{border:none;border-radius:7px;font-family:'Noto Kufi Arabic',sans-serif;font-weight:700;cursor:pointer;padding:7px 18px;font-size:.85rem}
   .tb-print{background:#c8973a;color:#fff}
   .tb-close{background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.3)}
   /* محتوى الفاتورة */
-  .inv-wrap{font-family:'Noto Kufi Arabic',sans-serif;direction:rtl;color:#000;background:#fff;font-size:8.5pt;line-height:1.35}
-  .inv-hdr{text-align:center;border-bottom:2px solid #000;padding-bottom:5px;margin-bottom:6px}
+  .inv-wrap{font-family:'Noto Kufi Arabic',sans-serif;direction:rtl;color:#000;background:#fff;font-size:9.4pt;line-height:1.5}
+  .inv-hdr{text-align:center;border-bottom:2px solid #000;padding-bottom:6px;margin-bottom:10px}
   .inv-meta table,.inv-totals table,.inv-items{width:100%;border-collapse:collapse}
-  .inv-meta td{padding:3px 6px;border:1px solid #000;font-size:8.5pt;background:#fff}
+  .inv-meta td{padding:5px 8px;border:1px solid #000;font-size:9.2pt;background:#fff}
   .lh{font-weight:900;width:20%;background:#fff}
-  .inv-sec{border:1px solid #000;border-bottom:none;padding:3px 8px;font-weight:900;font-size:8.5pt;margin:5px 0 0;background:#fff;color:#000}
-  .inv-items th{background:#fff;padding:3px 4px;font-weight:900;border:1px solid #000;font-size:8pt}
-  .inv-items td{padding:2px 4px;border:1px solid #000;font-size:8pt;background:#fff}
+  .inv-sec{border:1px solid #000;border-bottom:none;padding:5px 8px;font-weight:900;font-size:9.4pt;margin:8px 0 0;background:#fff;color:#000;page-break-after:avoid}
+  .inv-items th{background:#fff;padding:5px 6px;font-weight:900;border:1px solid #000;font-size:8.9pt}
+  .inv-items td{padding:4px 6px;border:1px solid #000;font-size:8.8pt;background:#fff}
   .inv-items tr:nth-child(even) td{background:#fff}
   .inv-items tr{page-break-inside:avoid}
-  .inv-totals td{padding:4px 8px;border:1px solid #000;font-size:9pt;background:#fff}
+  .inv-totals td{padding:6px 8px;border:1px solid #000;font-size:9.3pt;background:#fff}
   .tl{font-weight:900;background:#fff}
   .inv-grand{background:#fff!important;color:#000!important;font-weight:900!important;font-size:12pt!important;border:2px solid #000!important}
-  .inv-sigs{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-top:12px;page-break-inside:avoid}
-  .inv-sig{text-align:center;border-top:1.5px solid #000;padding-top:5px;font-size:8.5pt;font-weight:900;color:#000}
+  .inv-sigs{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-top:16px;page-break-inside:avoid}
+  .inv-sig{text-align:center;border-top:1.5px solid #000;padding-top:6px;font-size:8.6pt;font-weight:900;color:#000}
+  .print-footer{
+    margin-top:12px;
+    padding-top:6px;
+    border-top:1px solid #999;
+    color:#666;
+    font-size:8.3pt;
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+  }
 </style>
 </head>
 <body>
@@ -937,34 +964,17 @@ function printCurrentInvoice(pt){
   <button class="tb-btn tb-close" onclick="window.close()">✕ إغلاق</button>
 </div>
 <div style="margin-top:45px">
-  <div id="wrapper">${html}</div>
+  <div id="doc-shell">
+    <div id="doc-body">
+      ${html}
+      <div class="print-footer">
+        <span>مستشفى سوهاج العام</span>
+        <span>صفحة <span class="page-now"></span> من <span class="page-total"></span></span>
+        <span>تاريخ الطباعة: ${new Date().toLocaleDateString('ar-EG')}</span>
+      </div>
+    </div>
+  </div>
 </div>
-<script>
-// تصغير تلقائي ليناسب صفحة A4 واحدة دائماً
-window.addEventListener('load', function(){
-  var A4_H = 297; // mm
-  var A4_W = 210; // mm
-  var wrapper = document.getElementById('wrapper');
-
-  function autoScale(){
-    wrapper.style.transform = 'none';
-    wrapper.style.transformOrigin = 'top center';
-    var contentH = wrapper.scrollHeight;           // ارتفاع المحتوى بالبكسل
-    var pageH    = A4_H * 3.7795275591;            // 297mm بالبكسل (1mm = 3.78px)
-    if(contentH > pageH){
-      var scale = pageH / contentH;
-      wrapper.style.transformOrigin = 'top center';
-      wrapper.style.transform = 'scale(' + scale + ')';
-      wrapper.style.marginBottom = '-' + (contentH * (1 - scale)) + 'px';
-    }
-  }
-
-  autoScale();
-
-  // عند الطباعة تطبيق نفس الـ scale
-  window.onbeforeprint = autoScale;
-});
-<\/script>
 </body></html>`);
   w.document.close();
   closePrev();
