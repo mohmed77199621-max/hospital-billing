@@ -887,6 +887,7 @@ function buildInvoice(pt){
 function previewInvoice(){$('prev-content').innerHTML=buildInvoice(null);$('prev-modal').style.display='flex';}
 function closePrev(){$('prev-modal').style.display='none';}
 function printCurrentInvoice(pt){
+  const patientName = ((pt&&pt.name)?pt.name:Vv('p_name').trim()) || '—';
   const html=buildInvoice(pt||null);
   const w=window.open('','_blank','width=1000,height=800');
   if(!w){alert('يرجى السماح بالنوافذ المنبثقة في المتصفح');return;}
@@ -967,7 +968,7 @@ function printCurrentInvoice(pt){
       ${html}
       <div class="print-footer">
         <span>مستشفى سوهاج العام</span>
-        <span>صفحة <span class="page-now"></span> من <span class="page-total"></span></span>
+        <span>فاتورة مريض: ${patientName}</span>
         <span>تاريخ الطباعة: ${new Date().toLocaleDateString('ar-EG')}</span>
       </div>
     </div>
