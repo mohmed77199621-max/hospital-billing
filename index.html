@@ -64,29 +64,78 @@ body{font-family:'Noto Kufi Arabic',sans-serif;background:#eef2f7;color:var(--t)
   .hdr,.modal,#patients-section{display:none!important}
   #print-area{display:block!important}
   #main-content{display:none!important}
-  @page{size:A4 portrait;margin:0mm}
-  .inv-wrap{margin:0;padding:6mm;box-sizing:border-box;width:100%;min-height:100vh}
-  .inv-wrap table,.inv-items,.inv-meta table,.inv-totals table{page-break-inside:auto}
-  .inv-items tr{page-break-inside:avoid;page-break-after:auto}
+  @page{size:A4 portrait;margin:10mm}
+  .inv-wrap{margin:0;padding:0;box-sizing:border-box;width:100%}
+  .inv-items tr{page-break-inside:avoid}
   .inv-sigs{page-break-inside:avoid}
   .inv-sec{page-break-after:avoid}
 }
 #print-area{display:none}
-/* Invoice */
-.inv-wrap{font-family:'Noto Kufi Arabic',sans-serif;direction:rtl;color:#0d0d0d;font-size:8pt;line-height:1.3}
-.inv-hdr{text-align:center;border-bottom:2px solid #0f2d5e;padding-bottom:6px;margin-bottom:8px}
+/* ===== Invoice — أبيض نظيف ===== */
+.inv-wrap{
+  font-family:'Noto Kufi Arabic',sans-serif;
+  direction:rtl;color:#000;background:#fff;
+  font-size:9pt;line-height:1.45;
+}
+.inv-hdr{
+  text-align:center;
+  border-bottom:2px solid #000;
+  padding-bottom:6px;margin-bottom:8px;
+}
 .inv-meta table,.inv-totals table,.inv-items{width:100%;border-collapse:collapse}
-.inv-meta td{padding:3px 6px;border:1px solid #ccc;font-size:7.5pt}
-.lh{background:#e8eef7;font-weight:900;width:22%}
-.inv-sec{background:#0f2d5e;color:#fff;padding:3px 8px;font-weight:900;font-size:7.5pt;margin:5px 0 3px}
-.inv-items th{background:#dde6f5;padding:3px 5px;font-weight:800;border:1px solid #b5c5e0;font-size:7pt}
-.inv-items td{padding:2px 5px;border:1px solid #d5e0ee;font-size:7pt}
-.inv-items tr:nth-child(even) td{background:#f7f9fc}
-.inv-totals td{padding:4px 7px;border:1px solid #ccc;font-size:8pt}
-.tl{background:#f0f4f8;font-weight:800}
-.inv-grand{background:#0f2d5e!important;color:#e8a800!important;font-weight:900!important;font-size:10.5pt!important}
-.inv-sigs{display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px;margin-top:16px}
-.inv-sig{text-align:center;border-top:1px dashed #888;padding-top:7px;font-size:8pt;font-weight:800;color:#333}
+.inv-meta td{
+  padding:5px 8px;
+  border:1px solid #000;
+  font-size:9pt;
+  background:#fff;
+}
+.lh{font-weight:900;width:20%;background:#fff}
+.inv-sec{
+  border:1px solid #000;
+  border-bottom:none;
+  padding:4px 8px;
+  font-weight:900;font-size:9.5pt;
+  margin:6px 0 0;
+  background:#fff;
+}
+.inv-items th{
+  background:#fff;
+  padding:5px 5px;
+  font-weight:900;
+  border:1px solid #000;
+  font-size:9pt;
+}
+.inv-items td{
+  padding:4px 5px;
+  border:1px solid #000;
+  font-size:9pt;
+  background:#fff;
+}
+.inv-items tr:nth-child(even) td{background:#fff}
+.inv-totals td{padding:5px 9px;border:1px solid #000;font-size:10pt;background:#fff}
+.tl{font-weight:900;background:#fff}
+.inv-grand{
+  background:#fff!important;
+  color:#000!important;
+  font-weight:900!important;
+  font-size:13pt!important;
+  border:2px solid #000!important;
+}
+.inv-sigs{
+  display:grid;grid-template-columns:1fr 1fr 1fr;
+  gap:20px;margin-top:16px;
+}
+.inv-sig{
+  text-align:center;
+  border-top:1.5px solid #000;
+  padding-top:7px;
+  font-size:9.5pt;font-weight:900;color:#000;
+}
+  text-align:center;
+  border-top:1.5px solid #000;
+  padding-top:6px;
+  font-size:9pt;font-weight:900;color:#000;
+}
 @media(max-width:900px){#main-grid{grid-template-columns:1fr!important}.g4{grid-template-columns:1fr 1fr!important}}
 @media(max-width:600px){.g2{grid-template-columns:1fr 1fr!important}.g4{grid-template-columns:1fr 1fr!important}}
 </style>
@@ -777,7 +826,7 @@ function buildInvoice(pt){
   const cats=['أدوية','مستلزمات','أشعة','تحاليل','أجهزة','خدمات أخري'];
 
   const fixedRows=fixed.map((f,n)=>`<tr>
-    <td style="text-align:center;color:#888">${n+1}</td><td style="text-align:center;color:#888">—</td><td>${f.label}</td>
+    <td style="text-align:center;color:#555">${n+1}</td><td style="text-align:center;color:#555">—</td><td>${f.label}</td>
     <td style="text-align:center">—</td><td style="text-align:center">—</td>
     <td style="text-align:center;font-weight:700">${fmt(f.val)}</td></tr>`).join('');
 
@@ -786,50 +835,49 @@ function buildInvoice(pt){
     const g=items.filter(i=>i.cat===cat);if(!g.length)return;
     const ct=g.reduce((a,x)=>a+x.total,0);
     catSec+=`<div class="inv-sec">${cat} — ${g.length} صنف</div>
-    <table class="inv-items" style="margin-bottom:6px">
-      <thead><tr><th style="width:28px;text-align:center">#</th><th style="width:60px;text-align:center">الكود</th><th style="text-align:right">اسم الصنف</th><th style="width:48px;text-align:center">الكمية</th><th style="width:72px;text-align:center">سعر الوحدة</th><th style="width:80px;text-align:center">الإجمالي (ج.م)</th></tr></thead>
+    <table class="inv-items" style="margin-bottom:5px">
+      <thead><tr><th style="width:24px;text-align:center">#</th><th style="width:56px;text-align:center">الكود</th><th style="text-align:right">اسم الصنف</th><th style="width:44px;text-align:center">الكمية</th><th style="width:68px;text-align:center">سعر الوحدة</th><th style="width:78px;text-align:center">الإجمالي (ج.م)</th></tr></thead>
       <tbody>
-        ${g.map((i,n)=>`<tr><td style="text-align:center;color:#888">${n+1}</td><td style="text-align:center;font-weight:800;color:#1a4a8a;font-size:10.5pt;letter-spacing:0.5px">${i.code||'—'}</td><td>${i.name}</td><td style="text-align:center">${i.qty}</td><td style="text-align:center">${fmt(i.price)}</td><td style="text-align:center;font-weight:700">${fmt(i.total)}</td></tr>`).join('')}
-        <tr style="background:#dde6f5;font-weight:900"><td colspan="5" style="text-align:left;padding:5px 8px">إجمالي ${cat}</td><td style="text-align:center;padding:5px 8px">${fmt(ct)}</td></tr>
+        ${g.map((i,n)=>`<tr><td style="text-align:center;color:#555">${n+1}</td><td style="text-align:center;font-weight:800;font-size:10.5pt;letter-spacing:0.5px">${i.code||'—'}</td><td>${i.name}</td><td style="text-align:center">${i.qty}</td><td style="text-align:center">${fmt(i.price)}</td><td style="text-align:center;font-weight:700">${fmt(i.total)}</td></tr>`).join('')}
+        <tr style="font-weight:900"><td colspan="5" style="text-align:right;padding:4px 8px">إجمالي ${cat}</td><td style="text-align:center;padding:4px 8px;font-weight:900">${fmt(ct)}</td></tr>
       </tbody></table>`;
   });
 
   return `<div class="inv-wrap">
   <div class="inv-hdr">
-    <div style="font-size:11pt;font-weight:900;color:#0f2d5e">جمهورية مصر العربية — وزارة الصحة والسكان</div>
-    <div style="font-size:14pt;font-weight:900;color:#c8973a;margin:3px 0">مستشفى سوهاج العام</div>
-    <div style="font-size:8.5pt;color:#555;font-weight:600">فاتورة مطالبة علاجية</div>
+    <div style="font-size:10pt;font-weight:900">جمهورية مصر العربية — وزارة الصحة والسكان</div>
+    <div style="font-size:15pt;font-weight:900;margin:3px 0">مستشفى سوهاج العام</div>
+    <div style="font-size:9.5pt;font-weight:700">فاتورة مطالبة علاجية</div>
   </div>
   <div class="inv-meta">
     <table>
-      <tr><td class="lh">اسم المريض</td><td style="font-weight:800">${name||'—'}</td><td class="lh">رقم التذكرة</td><td>${ticket||'—'}</td></tr>
-      <tr><td class="lh">القسم الطبي</td><td>${dept||'—'}</td><td class="lh">نوع الخدمة</td><td>${stype||'—'}</td></tr>
+      <tr><td class="lh">اسم المريض</td><td style="font-weight:900;font-size:10pt">${name||'—'}</td><td class="lh">رقم التذكرة</td><td style="font-weight:900">${ticket||'—'}</td></tr>
+      <tr><td class="lh">القسم الطبي</td><td style="font-weight:800">${dept||'—'}</td><td class="lh">نوع الخدمة</td><td style="font-weight:800">${stype||'—'}</td></tr>
       <tr><td class="lh">رقم الخطاب / القرار</td><td>${letter||'—'}</td><td class="lh">نوع العملية</td><td>${optype||'—'}</td></tr>
-      <tr><td class="lh">تاريخ الدخول</td><td style="font-weight:700">${entry||'—'}</td><td class="lh">تاريخ الخروج</td><td style="font-weight:700">${exitD||'—'}</td></tr>
-      <tr><td class="lh">مدة الإقامة</td><td colspan="3" style="font-weight:800;color:#0f2d5e">${days} يوم</td></tr>
+      <tr><td class="lh">تاريخ الدخول</td><td style="font-weight:800">${entry||'—'}</td><td class="lh">تاريخ الخروج</td><td style="font-weight:800">${exitD||'—'}</td></tr>
+      <tr><td class="lh">مدة الإقامة</td><td colspan="3" style="font-weight:900;font-size:10pt">${days} يوم</td></tr>
     </table>
   </div>
   ${fixed.length?`<div class="inv-sec">أجور الخدمات والإقامة الثابتة</div>
-  <table class="inv-items" style="margin-bottom:6px">
-    <thead><tr><th style="width:28px;text-align:center">#</th><th style="width:60px;text-align:center">الكود</th><th style="text-align:right">البيان</th><th style="width:48px;text-align:center">الكمية</th><th style="width:72px;text-align:center">سعر الوحدة</th><th style="width:80px;text-align:center">الإجمالي (ج.م)</th></tr></thead>
+  <table class="inv-items" style="margin-bottom:5px">
+    <thead><tr><th style="width:24px;text-align:center">#</th><th style="width:56px;text-align:center">الكود</th><th style="text-align:right">البيان</th><th style="width:44px;text-align:center">الكمية</th><th style="width:68px;text-align:center">سعر الوحدة</th><th style="width:78px;text-align:center">الإجمالي (ج.م)</th></tr></thead>
     <tbody>${fixedRows}
-      <tr style="background:#dde6f5;font-weight:900"><td colspan="5" style="text-align:left;padding:5px 8px">إجمالي الخدمات الثابتة</td><td style="text-align:center;padding:5px 8px">${fmt(feesSum)}</td></tr>
+      <tr style="font-weight:900"><td colspan="5" style="text-align:right;padding:4px 8px">إجمالي الخدمات الثابتة</td><td style="text-align:center;padding:4px 8px;font-weight:900">${fmt(feesSum)}</td></tr>
     </tbody></table>`:''}
   ${catSec}
-  <div class="inv-totals" style="margin-top:10px">
+  <div class="inv-totals" style="margin-top:8px">
     <table>
-      <tr><td class="tl" style="width:75%">إجمالي الخدمات والإقامة الثابتة</td><td style="text-align:center;font-weight:700">${fmt(feesSum)} ج.م</td></tr>
-      <tr><td class="tl">إجمالي الأدوية والمستلزمات والفحوصات</td><td style="text-align:center;font-weight:700">${fmt(itemsSum)} ج.م</td></tr>
-      <tr><td class="inv-grand" style="padding:9px 10px">▌ الإجمالي الكلي المطلوب</td><td class="inv-grand" style="text-align:center;padding:9px 10px">${grand.toLocaleString('ar-EG',{minimumFractionDigits:2})} ج.م</td></tr>
-    </table>
+      <tr><td class="tl" style="width:75%">إجمالي الخدمات والإقامة الثابتة</td><td style="text-align:center;font-weight:800">${fmt(feesSum)} ج.م</td></tr>
+      <tr><td class="tl">إجمالي الأدوية والمستلزمات والفحوصات</td><td style="text-align:center;font-weight:800">${fmt(itemsSum)} ج.م</td></tr>
+      <tr><td class="inv-grand" style="padding:8px 10px">▌ الإجمالي الكلي المطلوب</td><td class="inv-grand" style="text-align:center;padding:8px 10px">${grand.toLocaleString('ar-EG',{minimumFractionDigits:2})} ج.م</td></tr>    </table>
   </div>
-  ${notes?`<div style="margin-top:8px;padding:7px 10px;border:1px solid #ccc;border-radius:5px;font-size:8pt"><span style="font-weight:900;color:#0f2d5e">ملاحظات: </span>${notes}</div>`:''}
+  ${notes?`<div style="margin-top:7px;padding:6px 10px;border:1.5px solid #000;font-size:9pt"><span style="font-weight:900">ملاحظات: </span>${notes}</div>`:''}
   <div class="inv-sigs">
-    <div class="inv-sig">توقيع صيدلي التسعير<br><span style="font-size:7pt;color:#888;font-weight:400">الاسم: ...............................</span></div>
-    <div class="inv-sig">مدخل البيانات<br><span style="font-size:7pt;color:#888;font-weight:400">الاسم: ...............................</span></div>
-    <div class="inv-sig">الشئون المالية — يعتمد<br><span style="font-size:7pt;color:#888;font-weight:400">الاسم: ...............................</span></div>
+    <div class="inv-sig">توقيع صيدلي التسعير<br><span style="font-size:8pt;font-weight:400">الاسم: ...............................</span></div>
+    <div class="inv-sig">مدخل البيانات<br><span style="font-size:8pt;font-weight:400">الاسم: ...............................</span></div>
+    <div class="inv-sig">الشئون المالية — يعتمد<br><span style="font-size:8pt;font-weight:400">الاسم: ...............................</span></div>
   </div>
-  <div style="text-align:center;font-size:7pt;color:#aaa;margin-top:14px;border-top:1px solid #eee;padding-top:6px">مستشفى سوهاج العام — تاريخ الطباعة: ${new Date().toLocaleDateString('ar-EG')}</div>
+  <div style="text-align:center;font-size:8pt;color:#555;margin-top:10px;border-top:1px solid #999;padding-top:5px">مستشفى سوهاج العام — تاريخ الطباعة: ${new Date().toLocaleDateString('ar-EG')}</div>
 </div>`;
 }
 
