@@ -920,8 +920,6 @@ function printCurrentInvoice(pt){
     .inv-fixed-group,
     .inv-cat-group,
     .inv-summary-block{break-inside:avoid;page-break-inside:avoid}
-    .inv-fixed-group + .inv-cat-group,
-    .inv-cat-group + .inv-cat-group{break-before:page;page-break-before:always}
     .print-footer{position:fixed;left:0;right:0;bottom:0;padding:3mm 10mm 0 10mm;background:#fff}
     .page-now::after{content: counter(page)}
     .page-total::after{content: counter(pages)}
