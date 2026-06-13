@@ -814,6 +814,7 @@ function buildInvoice(pt){
   const stype =live?Vv('p_stype'):pt.stype;
   const letter=live?Vv('p_letter'):pt.letter;
   const optype=live?Vv('p_optype'):pt.optype;
+  const taminType=live?Vv('p_tamin_type'):pt.taminType;
   const notes =live?Vv('p_notes') :pt.notes;
   const entry =live?fmtDate(Vv('p_entry')):pt.entry;
   const exitD =live?fmtDate(Vv('p_exit')) :pt.exit;
@@ -853,7 +854,8 @@ function buildInvoice(pt){
     <table>
       <tr><td class="lh">اسم المريض</td><td style="font-weight:900;font-size:10pt">${name||'—'}</td><td class="lh">رقم التذكرة</td><td style="font-weight:900">${ticket||'—'}</td></tr>
       <tr><td class="lh">القسم الطبي</td><td style="font-weight:800">${dept||'—'}</td><td class="lh">نوع الخدمة</td><td style="font-weight:800">${stype||'—'}</td></tr>
-      <tr><td class="lh">رقم الخطاب / القرار</td><td>${letter||'—'}</td><td class="lh">نوع العملية</td><td>${optype||'—'}</td></tr>
+      <tr><td class="lh">فئة التأمين</td><td style="font-weight:800">${taminType||'—'}</td><td class="lh">نوع العملية</td><td>${optype||'—'}</td></tr>
+      <tr><td class="lh">رقم الخطاب / القرار</td><td colspan="3">${letter||'—'}</td></tr>
       <tr><td class="lh">تاريخ الدخول</td><td style="font-weight:800">${entry||'—'}</td><td class="lh">تاريخ الخروج</td><td style="font-weight:800">${exitD||'—'}</td></tr>
       <tr><td class="lh">مدة الإقامة</td><td colspan="3" style="font-weight:900;font-size:10pt">${days} يوم</td></tr>
     </table>
