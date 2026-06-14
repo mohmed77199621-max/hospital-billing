@@ -131,11 +131,6 @@ body{font-family:'Noto Kufi Arabic',sans-serif;background:#eef2f7;color:var(--t)
   padding-top:7px;
   font-size:9.5pt;font-weight:900;color:#000;
 }
-  text-align:center;
-  border-top:1.5px solid #000;
-  padding-top:6px;
-  font-size:9pt;font-weight:900;color:#000;
-}
 @media(max-width:900px){#main-grid{grid-template-columns:1fr!important}.g4{grid-template-columns:1fr 1fr!important}}
 @media(max-width:600px){.g2{grid-template-columns:1fr 1fr!important}.g4{grid-template-columns:1fr 1fr!important}}
 </style>
@@ -422,6 +417,33 @@ let itemDB = JSON.parse(JSON.stringify(DB0));
 ['أدوية','مستلزمات'].forEach(cat=>{
   (itemDB[cat]||[]).forEach(x=>{ if(!x.list || x.list==='all') x.list='nafaqa'; });
 });
+// كل قسم عنده tag ثابت — الاسم ممكن يتغير لكن الـ tag مش بيتغير أبداً
+const DEPT_TAGS = {
+  'الجراحة العامة':      'general_surgery',
+  'الأطفال':             'pediatrics',
+  'الباطنة':             'internal',
+  'النساء والتوليد':     'obs',
+  'المسالك البولية':     'urology',
+  'العظام':              'bone',
+  'الاعصاب':             'neurology',
+  'طب الطوارئ':          'emergency',
+  'جراحة اوعية دموية':  'vascular',
+  'جراحة انف واذن':      'ent',
+  'جراحة تجميل':         'plastic',
+  'مركزة اطفال':         'icu',
+  'مركزة باطنة':         'icu',
+  'مركزة ICU':           'icu',
+  'عناية مركزة HUB':     'icu',
+  'عناية مركزة حروق':    'icu',
+  'عناية متوسطة حروق':   'mid_icu',
+  'عناية مخ واعصاب':     'mid_icu',
+  'عناية القلب':          'mid_icu',
+  'عناية متوسطة اطفال':  'mid_icu',
+  'مبتسرين':             'nicu',
+  'داخلي كلي':           'nephrology',
+};
+function getDeptTag(deptName){ return DEPT_TAGS[deptName] || ''; }
+
 let depts = [
   "الجراحة العامة","الأطفال","الباطنة","النساء والتوليد",
   "المسالك البولية","العظام","الاعصاب","طب الطوارئ",
@@ -604,8 +626,9 @@ const OP_FEES = {...FEES_TAMIN, ...FEES_OBS};
 /* ===== عند تغيير القسم ===== */
 function onDeptChange(){
   const dept  = Vv('p_dept');
-  const isObs = dept === 'النساء والتوليد';
-  const isBone= dept === 'العظام';
+  const tag   = getDeptTag(dept);
+  const isObs = tag === 'obs';
+  const isBone= tag === 'bone';
   $('obs-wrap').style.display   = isObs  ? '' : 'none';
   $('group-wrap').style.display = isBone ? '' : 'none';
   if(!isObs)  $('p_obs').value   = '';
@@ -635,8 +658,9 @@ function applyAutoRates(){
   const days = (stype === 'نفقة دولة' && rawDays > 1) ? rawDays - 1 : rawDays;
 
   // أقسام العناية الخاصة — تنطبق على تأمين/نفقة/اقتصادي
-  if(ICU_DEPTS[dept]){
-    const r = ICU_DEPTS[dept];
+  const icuRates = Object.entries(ICU_DEPTS).find(([k])=>getDeptTag(k)===getDeptTag(dept) && getDeptTag(dept));
+  if(icuRates){
+    const r = icuRates[1];
     $('f_stay').value = days * r.stayRate;
     $('f_med').value  = days * r.med;
     $('f_nur').value  = days * r.nur;
@@ -992,6 +1016,8 @@ function getFormData(){
     name:Vv('p_name').trim(), ticket:Vv('p_ticket').trim(),
     dept:Vv('p_dept'),        stype:Vv('p_stype'),
     letter:Vv('p_letter').trim(), optype:Vv('p_optype'),
+    taminType:Vv('p_tamin_type'), group:Vv('p_group').trim(),
+    obs:Vv('p_obs'),
     notes:Vv('p_notes').trim(),
     entry:fmtDate(Vv('p_entry')), exit:fmtDate(Vv('p_exit')),
     entryRaw:Vv('p_entry'),   exitRaw:Vv('p_exit'),
@@ -1026,17 +1052,18 @@ async function savePatient(){
   if(!entry) { alert('⚠️ يرجى إدخال تاريخ الدخول');          return; }
   if(!exit)  { alert('⚠️ يرجى إدخال تاريخ الخروج');          return; }
   if(days<=0){ alert('⚠️ يرجى إدخال عدد أيام الإقامة (أكبر من صفر)'); return; }
+  if(entry && exit && exit < entry){ alert('⚠️ تاريخ الخروج لا يمكن أن يكون قبل تاريخ الدخول'); return; }
   if((stype==='تأمين صحي'||stype==='نفقة دولة') && !letter){
     alert('⚠️ يرجى إدخال رقم الخطاب / القرار للتأمين الصحي أو نفقة الدولة'); return;
   }
   if(stype==='تأمين صحي' && !taminType){
     alert('⚠️ يرجى اختيار فئة التأمين (أطفال / طلبة / منتفعين)'); return;
   }
-  if(dept==='العظام' && !group){
+  if(getDeptTag(dept)==='bone' && !group){
     alert('⚠️ يرجى إدخال المجموعة لقسم العظام'); return;
   }
 
-  const pt={...getFormData(), taminType, group, savedAt:firebase.firestore.FieldValue.serverTimestamp()};
+  const pt={...getFormData(), savedAt:firebase.firestore.FieldValue.serverTimestamp()};
   setStatus('save');
   try{
     if(editId){await db.collection('patients').doc(editId).set(pt);}
@@ -1060,11 +1087,14 @@ function editPatient(fid){
     $('tamin-wrap').style.display='';
     $('p_tamin_type').value=pt.taminType||'';
   }
-  if(pt.dept==='العظام' && pt.group){
+  if(getDeptTag(pt.dept)==='bone' && pt.group){
     $('group-wrap').style.display='';
     $('p_group').value=pt.group||'';
   }
-  if(pt.obs){ $('obs-wrap').style.display=''; $('p_obs').value=pt.obs||''; }
+  if(getDeptTag(pt.dept)==='obs'){
+    $('obs-wrap').style.display='';
+    if(pt.obs) $('p_obs').value=pt.obs;
+  }
   $('p_entry').value=pt.entryRaw||''; $('p_exit').value=pt.exitRaw||''; $('stay_days').value=pt.days||0; calcTotal();
   const fm={fStay:'f_stay',fMed:'f_med',fNur:'f_nur',fDoc:'f_doc',fAnes:'f_anes',fOr:'f_or',fEcg:'f_ecg',fPhysio:'f_physio',fOxy:'f_oxy',fBlood:'f_blood'};
   Object.entries(fm).forEach(([k,id])=>$(id).value=pt[k]||0);
@@ -1076,17 +1106,19 @@ async function deletePatient(fid){
   const pt=patients.find(p=>p.firestoreId===fid);
   if(!pt||!confirm('تأكيد حذف المريض:\n'+(pt.name||'')+'؟\nلا يمكن التراجع عن الحذف'))return;
   try{
+    setStatus('save');
     await db.collection('patients').doc(fid).delete();
     await loadPatients(true);
+    setStatus('ok');
   }
-  catch(e){alert('❌ خطأ في الحذف:\n'+e.message);}
+  catch(e){alert('❌ خطأ في الحذف:\n'+e.message);setStatus('err');}
 }
 
 function clearForm(){
   editId=null;
   ['p_name','p_ticket','p_letter','p_entry','p_exit'].forEach(id=>$(id).value='');
   $('p_notes').value=''; $('p_optype').value='';
-  $('p_dept').value=''; $('p_stype').value='';
+  $('p_dept').selectedIndex=0; $('p_stype').value='';
   $('p_obs').value=''; $('obs-wrap').style.display='none';
   $('p_tamin_type').value=''; $('tamin-wrap').style.display='none';
   $('p_group').value=''; $('group-wrap').style.display='none';
