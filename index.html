@@ -199,7 +199,7 @@ input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
 
 <!-- LOGIN SCREEN -->
 <div id="login-screen">
-  <div class="login-box">
+  <div class="login-box" id="login-box-main">
     <div class="login-logo">
       <svg width="32" height="32" fill="none" stroke="#fff" stroke-width="2.5" viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
     </div>
@@ -209,9 +209,36 @@ input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
     <input type="text" id="l_user" class="login-inp" placeholder="اسم المستخدم" autocomplete="off">
     <input type="password" id="l_pass" class="login-inp" placeholder="كلمة المرور" onkeydown="if(event.key==='Enter')doLogin()">
     <button class="login-btn" onclick="doLogin()">🔐 دخول</button>
-    <div style="margin-top:14px;font-size:.66rem;color:var(--tm)">جميع العمليات مسجلة باسم المستخدم</div>
+    <div style="margin-top:14px;font-size:.78rem">
+      <span style="color:var(--tm)">مستخدم جديد؟</span>
+      <a href="javascript:void(0)" onclick="showRegisterScreen()" style="color:var(--pl);font-weight:900;text-decoration:none">سجّل حسابك من هنا</a>
+    </div>
+    <div style="margin-top:10px;font-size:.66rem;color:var(--tm)">جميع العمليات مسجلة باسم المستخدم</div>
+  </div>
+
+  <!-- SELF REGISTER BOX -->
+  <div class="login-box" id="register-box" style="display:none">
+    <div class="login-logo">
+      <svg width="32" height="32" fill="none" stroke="#fff" stroke-width="2.5" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
+    </div>
+    <div class="login-title">تسجيل حساب جديد</div>
+    <div class="login-sub">للموظفين: صيدلي نفقة / صيدلي تأمين / مدخل بيانات</div>
+    <div id="reg-err" class="login-err"></div>
+    <input type="text" id="r_name" class="login-inp" placeholder="الاسم الثلاثي كاملاً" autocomplete="off">
+    <input type="password" id="r_pass" class="login-inp" placeholder="كلمة المرور (4 أحرف على الأقل)">
+    <input type="password" id="r_pass2" class="login-inp" placeholder="تأكيد كلمة المرور">
+    <select id="r_role" class="login-inp" style="cursor:pointer">
+      <option value="data">مدخل بيانات</option>
+      <option value="nafaqa">صيدلي نفقة الدولة</option>
+      <option value="tamin">صيدلي التأمين الصحي</option>
+    </select>
+    <button class="login-btn" onclick="doSelfRegister()">✅ إنشاء الحساب</button>
+    <div style="margin-top:14px;font-size:.78rem">
+      <a href="javascript:void(0)" onclick="showLoginScreen()" style="color:var(--pl);font-weight:900;text-decoration:none">← رجوع لتسجيل الدخول</a>
+    </div>
   </div>
 </div>
+
 
 <!-- MAIN -->
 <div id="main-content" style="max-width:1320px;margin:auto;padding:20px 14px">
@@ -654,6 +681,7 @@ function init(){
   setStatus('wait');
   // Pre-load users & inventory in background
   loadInventory();
+  ensureAdminSeed();
   db.collection('settings').doc('main').get()
     .then(snap=>{
       if(snap.exists){
@@ -1507,6 +1535,63 @@ async function loadUsers(){
   }catch(e){ console.error('loadUsers:', e); allUsers=[]; }
 }
 
+/* إنشاء حساب المدير الافتراضي تلقائياً إذا لم يكن هناك أي مستخدمين بعد */
+async function ensureAdminSeed(){
+  try{
+    const snap = await db.collection('users').limit(1).get();
+    if(snap.empty){
+      await db.collection('users').add({
+        name: 'محمد',
+        passHash: simpleHash('1996'),
+        role: 'admin',
+        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+        createdBy: 'النظام (تلقائي)'
+      });
+      console.log('تم إنشاء حساب المدير الافتراضي: محمد');
+    }
+  }catch(e){ console.error('ensureAdminSeed:', e); }
+}
+
+/* ===== شاشات الدخول / التسجيل الذاتي ===== */
+function showRegisterScreen(){
+  $('login-box-main').style.display='none';
+  $('register-box').style.display='block';
+  $('reg-err').style.display='none';
+}
+function showLoginScreen(){
+  $('register-box').style.display='none';
+  $('login-box-main').style.display='block';
+  $('login-err').style.display='none';
+}
+
+async function doSelfRegister(){
+  const name = ($('r_name').value||'').trim();
+  const pass = ($('r_pass').value||'').trim();
+  const pass2 = ($('r_pass2').value||'').trim();
+  const role = $('r_role').value; // data, nafaqa, tamin only — لا يسمح بإنشاء "admin" من هنا
+  const errEl = $('reg-err');
+  errEl.style.display='none';
+
+  const parts = name.split(/\s+/).filter(Boolean);
+  if(parts.length < 3){ errEl.textContent='⚠️ يجب إدخال الاسم الثلاثي كاملاً (3 كلمات على الأقل)'; errEl.style.display='block'; return; }
+  if(!pass || pass.length < 4){ errEl.textContent='⚠️ كلمة المرور يجب أن تكون 4 أحرف على الأقل'; errEl.style.display='block'; return; }
+  if(pass !== pass2){ errEl.textContent='⚠️ كلمتا المرور غير متطابقتين'; errEl.style.display='block'; return; }
+  if(role==='admin'){ errEl.textContent='⚠️ لا يمكن إنشاء حساب مدير عن طريق التسجيل الذاتي'; errEl.style.display='block'; return; }
+
+  await loadUsers();
+  if(allUsers.find(u=>u.name===name)){ errEl.textContent='⚠️ هذا الاسم مستخدم بالفعل، اختر اسماً مختلفاً'; errEl.style.display='block'; return; }
+  const ph = simpleHash(pass);
+  if(allUsers.find(u=>u.passHash===ph)){ errEl.textContent='⚠️ كلمة المرور هذه مستخدمة بالفعل، اختر كلمة مرور مختلفة'; errEl.style.display='block'; return; }
+
+  try{
+    await db.collection('users').add({name, passHash: ph, role, createdAt: firebase.firestore.FieldValue.serverTimestamp(), createdBy: 'تسجيل ذاتي'});
+    alert('✅ تم إنشاء حسابك بنجاح، يمكنك تسجيل الدخول الآن');
+    $('r_name').value=''; $('r_pass').value=''; $('r_pass2').value='';
+    showLoginScreen();
+    $('l_user').value = name;
+  }catch(e){ errEl.textContent='❌ خطأ: '+e.message; errEl.style.display='block'; }
+}
+
 async function doLogin(){
   const username = ($('l_user').value||'').trim();
   const password = ($('l_pass').value||'').trim();
@@ -1538,6 +1623,7 @@ function doLogout(){
   if(!confirm('تأكيد تسجيل الخروج؟')) return;
   currentUser = null;
   $('login-screen').style.display='flex';
+  showLoginScreen();
   $('l_user').value=''; $('l_pass').value='';
   $('login-err').style.display='none';
   // Reset UI
