@@ -753,15 +753,23 @@ function init(){
     .then(snap=>{
       if(snap.exists){
         const d=snap.data();
-        // استخدم itemDB من Firebase فقط إذا كانت غير فارغة
-        if(d.itemDB && ((d.itemDB['أدوية']||[]).length>0 || (d.itemDB['مستلزمات']||[]).length>0 || (d.itemDB['أشعة']||[]).length>0)){
-          itemDB=d.itemDB;
+        // استخدم itemDB من Firebase فقط إذا كانت الأدوية والمستلزمات غير فارغة
+        const fbItemDB = d.itemDB || {};
+        const hasMeds = (fbItemDB['أدوية']||[]).length > 0;
+        const hasSupplies = (fbItemDB['مستلزمات']||[]).length > 0;
+        if(d.itemDB && hasMeds && hasSupplies){
+          itemDB = d.itemDB;
         } else {
-          // البيانات فارغة في Firebase — استخدم DB0 الجديد واحفظه
-          itemDB = JSON.parse(JSON.stringify(DB0));
+          // الأدوية أو المستلزمات فارغة في Firebase — استخدم DB0 الجديد وادمج معه باقي البيانات الموجودة
+          const freshDB = JSON.parse(JSON.stringify(DB0));
+          // احتفظ بأي فئات أخرى موجودة في Firebase (أشعة، تحاليل، أجهزة...) إذا كانت معدّلة
+          ['أشعة','تحاليل','أجهزة','شرائح ومسامير','خدمات أخري'].forEach(cat=>{
+            if(fbItemDB[cat] && fbItemDB[cat].length > 0) freshDB[cat] = fbItemDB[cat];
+          });
+          itemDB = freshDB;
           db.collection('settings').doc('main')
             .set({itemDB, updatedAt: firebase.firestore.FieldValue.serverTimestamp()}, {merge:true})
-            .then(()=>console.log('main itemDB seeded from DB0'))
+            .then(()=>console.log('main itemDB seeded from DB0:', Object.keys(itemDB).map(k=>k+':'+itemDB[k].length)))
             .catch(e=>console.error('main seed error:', e));
         }
         if(d.depts&&d.depts.length){
@@ -1143,11 +1151,17 @@ function calcDays(){
 function filterDD(){
   const cat=Vv('i_cat'),q=Vv('i_q').toLowerCase();
   const stype=Vv('p_stype')||'';
-  const isNafaqa=stype==='نفقة دولة';
+  const isNafaqa = stype==='نفقة دولة';
+  const isTamin  = stype==='تأمين صحي';
   const list=(itemDB[cat]||[]).filter(x=>{
-    const lt=x.list||'all';
-    if(isNafaqa) return lt==='all'||lt==='nafaqa';
-    else return lt==='all'||lt==='tamin';
+    const lt = x.list || 'all';
+    // أصناف بدون list (أشعة، تحاليل، أجهزة...) أو list='all' تظهر للجميع
+    if(lt === 'all') return true;
+    // أصناف نفقة: تظهر لنفقة الدولة وللاقتصادي والمجاني (أي غير تأمين)
+    if(lt === 'nafaqa') return !isTamin;
+    // أصناف تأمين: تظهر للتأمين وللاقتصادي والمجاني (أي غير نفقة)
+    if(lt === 'tamin')  return !isNafaqa;
+    return true;
   }).filter(x=>x.name.toLowerCase().includes(q));
   const dd=$('i_dd');
   if(list.length){
