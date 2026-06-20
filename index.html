@@ -189,8 +189,8 @@ input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
     <div id="current-user-badge" style="display:none;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);border-radius:8px;padding:5px 12px;color:#fff;font-size:.75rem;font-weight:700"></div>
     <button id="btn-admin" class="btn btn-o" onclick="openSettings()" style="display:none;color:#a8c4ff;border-color:rgba(255,255,255,.25);background:rgba(255,255,255,.08)">⚙ إدارة النظام</button>
     <button id="btn-pharm-settings" class="btn btn-o" onclick="openSettings()" style="display:none;color:#a8c4ff;border-color:rgba(255,255,255,.25);background:rgba(255,255,255,.08)">⚙ تعديل قائمة الأدوية</button>
+    <button id="btn-data-settings" class="btn btn-o" onclick="openSettings()" style="display:none;color:#a8c4ff;border-color:rgba(255,255,255,.25);background:rgba(255,255,255,.08)">⚙ تعديل أسعار الأدوية والمستلزمات</button>
     <button id="btn-users" class="btn btn-o" onclick="openUserMgmt()" style="display:none;color:#a8c4ff;border-color:rgba(255,255,255,.25);background:rgba(255,255,255,.08)">👥 المستخدمين</button>
-    <button id="btn-excel-pharm" class="btn btn-a" onclick="exportPharmExcel()" style="display:none">📊 شيت الصيدلية</button>
     <button id="btn-excel-all" class="btn btn-a" onclick="exportAllExcel()" style="display:none">📊 تصدير الكل إكسل</button>
     <button id="btn-new-patient" class="btn btn-g" onclick="clearForm()" style="display:none">+ مريض جديد</button>
     <button class="btn btn-r btn-sm" onclick="doLogout()" style="background:rgba(184,50,50,.7);border:1px solid rgba(255,100,100,.3)">خروج</button>
@@ -352,7 +352,7 @@ input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
             <thead><tr>
               <th style="text-align:right">#</th>
               <th style="text-align:right">اسم الصنف</th>
-              <th>الكود</th><th>الفئة</th><th>الكمية</th><th>سعر الوحدة</th>
+              <th>الفئة</th><th>الكمية</th><th>سعر الوحدة</th>
               <th style="text-align:left">الإجمالي</th>
               <th class="no-print"></th>
             </tr></thead>
@@ -497,13 +497,6 @@ input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
     </div>
     <!-- Patient Info -->
     <div id="pharm-pt-info" style="background:#f0f4ff;border-radius:10px;padding:12px;margin-bottom:14px;font-size:.8rem;font-weight:700;color:var(--p)"></div>
-    <!-- Barcode -->
-    <div style="background:#fffbf0;border:1.5px dashed var(--a);border-radius:10px;padding:12px;margin-bottom:14px">
-      <label class="lbl" style="color:#856404">📷 امسح باركود العلاج (سينتقل التركيز تلقائياً لخانة الكمية)</label>
-      <input type="text" id="barcode-input" class="inp" placeholder="امسح الباركود هنا..." autocomplete="off"
-        onkeydown="handleBarcodeKey(event)" style="font-size:.88rem;letter-spacing:.05em">
-      <div id="barcode-pending" style="display:none;margin-top:8px;padding:8px 10px;background:#fff;border-radius:8px;border:1px solid var(--b);font-size:.8rem;font-weight:700;color:var(--p)"></div>
-    </div>
     <!-- Add Item Row (manual) -->
     <div style="display:grid;grid-template-columns:120px 1fr 70px 42px;gap:8px;margin-bottom:12px">
       <select id="ph_cat" onchange="resetPharmSel()" class="inp">
@@ -561,6 +554,7 @@ input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
       <h2 style="font-weight:900;font-size:.95rem;color:var(--p)">⚙ إدارة بيانات النظام</h2>
       <button onclick="closeSettings()" style="background:none;border:none;cursor:pointer;font-size:1.4rem;color:var(--tm)">✕</button>
     </div>
+    <div id="save-status-bar" style="display:none;align-items:center;gap:8px;padding:7px 12px;border-radius:7px;margin-bottom:10px;font-size:.78rem;font-weight:800"></div>
     <div class="tab-btns" id="settings-tabs">
       <button class="tab-btn active" id="tab-items-btn" onclick="sTab('s-items')">قائمة مدخل البيانات</button>
       <button class="tab-btn" id="tab-nafaqa-btn" onclick="sTab('s-nafaqa')" style="background:#fffbee;color:#856404">قائمة نفقة الدولة</button>
@@ -578,7 +572,6 @@ input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
           <div style="font-size:.74rem;font-weight:900;color:var(--p);margin-bottom:10px">➕ إضافة صنف</div>
           <select id="s_cat" class="inp" style="margin-bottom:7px" onchange="onAddCatChange()"><option>أدوية</option><option>مستلزمات</option><option>شرائح ومسامير</option><option>أشعة</option><option>تحاليل</option><option>أجهزة</option><option>خدمات أخري</option></select>
           <input type="text" id="s_name" placeholder="اسم الصنف" class="inp" style="margin-bottom:7px">
-          <input type="text" id="s_code" placeholder="كود الصنف (اختياري)" class="inp" style="margin-bottom:7px">
           <input type="number" id="s_price" placeholder="السعر (ج.م)" class="inp" style="margin-bottom:7px" min="0" step="0.01">
           <div id="s_list_wrap" style="margin-bottom:7px">
             <label style="font-size:.68rem;color:var(--tm);font-weight:700;display:block;margin-bottom:4px">هذا الصنف خاص بـ:</label>
@@ -605,14 +598,13 @@ input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
     <!-- تبويب قائمة نفقة الدولة المستقلة -->
     <div id="s-nafaqa" class="tab-content">
       <div style="background:#fff3cd;border-right:3px solid #856404;padding:7px 12px;border-radius:6px;margin-bottom:12px;font-size:.72rem;color:#856404;font-weight:700">
-        💊 قائمة أدوية ومستلزمات نفقة الدولة — مستقلة تماماً — أي تعديل لا يؤثر على أي قائمة أخرى — يمكنك تعديل السعر، وإضافة أو خصم الكمية الموجودة بالمخزن لكل صنف
+        💊 قائمة أدوية ومستلزمات نفقة الدولة — مستقلة تماماً — أي تعديل لا يؤثر على أي قائمة أخرى — يمكنك تعديل السعر، أو الإضافة، أو الحذف
       </div>
       <div class="g2" style="margin-bottom:14px">
         <div style="background:#fffbee;padding:14px;border-radius:10px;border:1px solid #f0c040">
           <div style="font-size:.74rem;font-weight:900;color:#856404;margin-bottom:10px">➕ إضافة صنف لقائمة النفقة</div>
           <select id="pn_cat" class="inp" style="margin-bottom:7px"><option>أدوية</option><option>مستلزمات</option><option>شرائح ومسامير</option></select>
           <input type="text" id="pn_name" placeholder="اسم الصنف" class="inp" style="margin-bottom:7px">
-          <input type="text" id="pn_code" placeholder="كود الصنف (باركود)" class="inp" style="margin-bottom:7px">
           <input type="number" id="pn_price" placeholder="السعر (ج.م)" class="inp" style="margin-bottom:7px" min="0" step="0.01">
           <button onclick="addPharmListItem('nafaqa')" class="btn btn-p" style="width:100%;justify-content:center;background:#856404;border-color:#856404">إضافة لقائمة النفقة</button>
         </div>
@@ -628,14 +620,13 @@ input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
     <!-- تبويب قائمة التأمين الصحي المستقلة -->
     <div id="s-tamin" class="tab-content">
       <div style="background:#d1ecf1;border-right:3px solid #0c5460;padding:7px 12px;border-radius:6px;margin-bottom:12px;font-size:.72rem;color:#0c5460;font-weight:700">
-        💊 قائمة أدوية ومستلزمات التأمين الصحي — مستقلة تماماً — أي تعديل لا يؤثر على أي قائمة أخرى — يمكنك تعديل السعر، وإضافة أو خصم الكمية الموجودة بالمخزن لكل صنف
+        💊 قائمة أدوية ومستلزمات التأمين الصحي — مستقلة تماماً — أي تعديل لا يؤثر على أي قائمة أخرى — يمكنك تعديل السعر، أو الإضافة، أو الحذف
       </div>
       <div class="g2" style="margin-bottom:14px">
         <div style="background:#eef9ff;padding:14px;border-radius:10px;border:1px solid #90d5ec">
           <div style="font-size:.74rem;font-weight:900;color:#0c5460;margin-bottom:10px">➕ إضافة صنف لقائمة التأمين</div>
           <select id="pt_cat" class="inp" style="margin-bottom:7px"><option>أدوية</option><option>مستلزمات</option><option>شرائح ومسامير</option></select>
           <input type="text" id="pt_name" placeholder="اسم الصنف" class="inp" style="margin-bottom:7px">
-          <input type="text" id="pt_code" placeholder="كود الصنف (باركود)" class="inp" style="margin-bottom:7px">
           <input type="number" id="pt_price" placeholder="السعر (ج.م)" class="inp" style="margin-bottom:7px" min="0" step="0.01">
           <button onclick="addPharmListItem('tamin')" class="btn btn-p" style="width:100%;justify-content:center;background:#0c5460;border-color:#0c5460">إضافة لقائمة التأمين</button>
         </div>
@@ -868,40 +859,97 @@ function updateLoadMoreBtn(state){
   }
 }
 
-/* ========== SETTINGS SAVE (debounced) ========== */
-let _stimer=null;
+/* ========== SETTINGS SAVE (debounced) ==========
+   ملاحظة مهمة: كل وجهة حفظ (main / nafaqa / tamin) لها مؤقّت debounce خاص بها
+   ومنفصل تمامًا عن البقية. سابقًا كان فيه مؤقّت واحد مشترك بين كل أنواع الحفظ،
+   فأي تعديل جديد (حتى لو على قائمة مختلفة) كان يُلغي عملية حفظ سابقة لم تكتمل بعد،
+   مما يسبب فقدان بعض التعديلات بصمت دون أي تنبيه. تم إصلاح ذلك هنا. */
+let _stimerMain=null, _stimerNafaqa=null, _stimerTamin=null;
+let _saveIndicatorTimer=null;
+
+/* مؤشر حفظ مرئي وواضح: يظهر فورًا "جاري الحفظ..." بمجرد تغيير السعر (قبل إرسال الطلب)،
+   ثم يتحول صراحة إلى "تم الحفظ بنجاح ✅" بعد تأكيد فعلي من الخادم، أو "فشل الحفظ ❌" مع تنبيه واضح عند الفشل.
+   هذا يضمن أن المستخدم لا يفترض أبدًا أن التعديل حُفظ ما لم يصرّح النظام بذلك صراحة. */
+function showSavingIndicator(){
+  const bar = $('save-status-bar');
+  if(!bar) return;
+  clearTimeout(_saveIndicatorTimer);
+  bar.style.display='flex';
+  bar.style.background='#fff8e1';
+  bar.style.color='#8a6d00';
+  bar.innerHTML='⏳ جاري حفظ التعديل على الخادم...';
+}
+
+function showSaveStatus(ok, msg){
+  const bar = $('save-status-bar');
+  if(!bar){
+    // احتياطي في حال عدم وجود الشريط لأي سبب — لا نترك المستخدم بدون أي إشعار بالفشل
+    if(!ok) alert('⚠️ تعذر حفظ التعديل على الخادم، يرجى التحقق من الاتصال بالإنترنت وإعادة المحاولة.\n' + (msg||''));
+    return;
+  }
+  clearTimeout(_saveIndicatorTimer);
+  if(ok){
+    bar.style.display='flex';
+    bar.style.background='#eafaf1';
+    bar.style.color='#1d7a46';
+    bar.innerHTML='✅ تم حفظ التعديل بنجاح على الخادم';
+    // يختفي تلقائيًا بعد قليل لإفساح المجال لتعديلات لاحقة، دون أن يفوّت المستخدم رؤية التأكيد
+    _saveIndicatorTimer=setTimeout(()=>{ bar.style.display='none'; }, 2500);
+  } else {
+    bar.style.display='flex';
+    bar.style.background='#fdecea';
+    bar.style.color='#c0392b';
+    bar.innerHTML='❌ فشل حفظ التعديل! تحقق من اتصال الإنترنت وحاول مرة أخرى — التعديل الأخير لم يُحفظ على الخادم';
+    // تنبيه إضافي صريح حتى لا يفوت المستخدم فشل الحفظ إذا كان قد أغلق نافذة الإعدادات
+    alert('⚠️ تعذر حفظ التعديل على الخادم، يرجى التحقق من الاتصال بالإنترنت وإعادة المحاولة.\n' + (msg||''));
+  }
+}
+
 function saveSettings(){
-  clearTimeout(_stimer);
-  _stimer=setTimeout(()=>{
-    const role = currentUser ? currentUser.role : 'admin';
-    if(role === 'nafaqa'){
-      // يحفظ فقط قائمة النفقة المستقلة
+  const role = currentUser ? currentUser.role : 'admin';
+  showSavingIndicator();
+  if(role === 'nafaqa'){
+    clearTimeout(_stimerNafaqa);
+    _stimerNafaqa=setTimeout(()=>{
       db.collection('settings').doc('nafaqa')
         .set({itemDB: pharmItemDB.nafaqa, updatedAt: firebase.firestore.FieldValue.serverTimestamp()})
-        .catch(e=>console.error('Nafaqa settings save:', e));
-    } else if(role === 'tamin'){
-      // يحفظ فقط قائمة التأمين المستقلة
+        .then(()=>showSaveStatus(true))
+        .catch(e=>{ console.error('Nafaqa settings save:', e); showSaveStatus(false, e.message); });
+    }, 800);
+  } else if(role === 'tamin'){
+    clearTimeout(_stimerTamin);
+    _stimerTamin=setTimeout(()=>{
       db.collection('settings').doc('tamin')
         .set({itemDB: pharmItemDB.tamin, updatedAt: firebase.firestore.FieldValue.serverTimestamp()})
-        .catch(e=>console.error('Tamin settings save:', e));
-    } else {
-      // مدير أو مدخل بيانات — يحفظ القائمة الأصلية
+        .then(()=>showSaveStatus(true))
+        .catch(e=>{ console.error('Tamin settings save:', e); showSaveStatus(false, e.message); });
+    }, 800);
+  } else {
+    clearTimeout(_stimerMain);
+    _stimerMain=setTimeout(()=>{
       db.collection('settings').doc('main')
         .set({itemDB, depts, updatedAt: firebase.firestore.FieldValue.serverTimestamp()})
-        .catch(e=>console.error('Main settings save:', e));
-    }
-  }, 800);
+        .then(()=>showSaveStatus(true))
+        .catch(e=>{ console.error('Main settings save:', e); showSaveStatus(false, e.message); });
+    }, 800);
+  }
 }
 
 // حفظ قائمة صيدلية معينة بشكل صريح (يستخدمه المدير عند تعديل أي قائمة)
 function savePharmSettings(listType){
-  clearTimeout(_stimer);
-  _stimer=setTimeout(()=>{
+  showSavingIndicator();
+  if(listType==='nafaqa'){ clearTimeout(_stimerNafaqa); }
+  else { clearTimeout(_stimerTamin); }
+  const run = ()=>{
     db.collection('settings').doc(listType)
       .set({itemDB: pharmItemDB[listType], updatedAt: firebase.firestore.FieldValue.serverTimestamp()})
-      .catch(e=>console.error(listType+' settings save:', e));
-  }, 800);
+      .then(()=>showSaveStatus(true))
+      .catch(e=>{ console.error(listType+' settings save:', e); showSaveStatus(false, e.message); });
+  };
+  if(listType==='nafaqa'){ _stimerNafaqa=setTimeout(run, 800); }
+  else { _stimerTamin=setTimeout(run, 800); }
 }
+
 
 /* ========== DEPTS ========== */
 function renderDepts(){
@@ -1094,15 +1142,13 @@ function filterDD(){
     const lt=x.list||'all';
     if(isNafaqa) return lt==='all'||lt==='nafaqa';
     else return lt==='all'||lt==='tamin';
-  }).filter(x=>x.name.toLowerCase().includes(q)||(x.code||'').toLowerCase().includes(q));
+  }).filter(x=>x.name.toLowerCase().includes(q));
   const dd=$('i_dd');
   if(list.length){
     dd.innerHTML=list.map(x=>{
-      const codeTag=x.code?`<span style="background:#eef2ff;color:var(--p);font-size:.62rem;padding:1px 5px;border-radius:3px;margin-left:4px">${x.code}</span>`:'';
       return `<div class="dd-item" onmousedown="pickItem(this)"
         data-name="${x.name.replace(/"/g,'&quot;')}"
-        data-price="${x.price}"
-        data-code="${(x.code||'').replace(/"/g,'&quot;')}">${codeTag}${x.name} &mdash; <b>${x.price} ج.م</b></div>`;
+        data-price="${x.price}">${x.name} &mdash; <b>${x.price} ج.م</b></div>`;
     }).join('');
     dd.style.display='block';
   } else dd.style.display='none';
@@ -1110,7 +1156,7 @@ function filterDD(){
 function hideDD(){setTimeout(()=>$('i_dd').style.display='none',160);}
 function pickItem(el){
   $('i_q').value=el.dataset.name;
-  selItem={name:el.dataset.name, price:parseFloat(el.dataset.price), code:el.dataset.code||''};
+  selItem={name:el.dataset.name, price:parseFloat(el.dataset.price)};
   $('i_dd').style.display='none';
 }
 function resetSel(){$('i_q').value='';selItem=null;}
@@ -1125,7 +1171,7 @@ function addItem(){
     existing.qty=parseFloat((existing.qty+qty).toFixed(4));
     existing.total=parseFloat((existing.price*existing.qty).toFixed(4));
   } else {
-    billItems.push({id:Date.now(),name:selItem.name,code:selItem.code||'',cat,price:selItem.price,qty,total:selItem.price*qty});
+    billItems.push({id:Date.now(),name:selItem.name,cat,price:selItem.price,qty,total:selItem.price*qty});
   }
   renderBill(); resetSel(); $('i_qty').value=1;
 }
@@ -1133,13 +1179,12 @@ function delItem(id){billItems=billItems.filter(x=>x.id!==id);renderBill();}
 function renderBill(){
   const tb=$('bill-body');
   if(!billItems.length){
-    tb.innerHTML='<tr><td colspan="7" style="text-align:center;padding:22px;color:var(--tm);font-size:.8rem">لا توجد بنود — أضف الأدوية والمستلزمات والفحوصات</td></tr>';
+    tb.innerHTML='<tr><td colspan="6" style="text-align:center;padding:22px;color:var(--tm);font-size:.8rem">لا توجد بنود — أضف الأدوية والمستلزمات والفحوصات</td></tr>';
     calcTotal(); return;
   }
   tb.innerHTML=billItems.map((i,n)=>`<tr>
     <td style="color:var(--tm);font-size:.72rem">${n+1}</td>
     <td style="font-weight:700">${i.name}</td>
-    <td style="text-align:center;font-size:.7rem;color:var(--p);font-weight:700">${i.code?`<span style="background:#eef2ff;padding:1px 6px;border-radius:4px">${i.code}</span>`:'-'}</td>
     <td style="text-align:center"><span class="badge bp">${i.cat}</span></td>
     <td style="text-align:center;font-weight:600">${i.qty}</td>
     <td style="text-align:center;color:var(--tm)">${fmt(i.price)}</td>
@@ -1190,13 +1235,15 @@ function buildInvoice(pt){
   const days  =live?(parseFloat($('stay_days').value)||0):pt.days;
   const fixed =live?getFixed():pt.fixed;
   const items =live?billItems:pt.items;
+  // اسم مدخل البيانات الذي سجّل/يسجّل المريض — يُكتب تلقائياً في الفاتورة المطبوعة
+  const dataEntryName = live ? (currentUser?currentUser.name:'') : (pt.savedBy||'');
   const feesSum=fixed.reduce((a,x)=>a+x.val,0);
   const itemsSum=items.reduce((a,x)=>a+x.total,0);
   const grand=feesSum+itemsSum;
   const cats=['أدوية','مستلزمات','شرائح ومسامير','أشعة','تحاليل','أجهزة','خدمات أخري'];
 
   const fixedRows=fixed.map((f,n)=>`<tr>
-    <td style="text-align:center;color:#555">${n+1}</td><td style="text-align:center;color:#555">—</td><td>${f.label}</td>
+    <td style="text-align:center;color:#555">${n+1}</td><td>${f.label}</td>
     <td style="text-align:center">—</td><td style="text-align:center">—</td>
     <td style="text-align:center;font-weight:700">${fmt(f.val)}</td></tr>`).join('');
 
@@ -1207,10 +1254,10 @@ function buildInvoice(pt){
     const ct=g.reduce((a,x)=>a+x.total,0);
     catSec+=`<section class="inv-cat-group"><div class="inv-sec">${cat} — ${g.length} صنف</div>
     <table class="inv-items" style="margin-bottom:5px">
-      <thead><tr><th style="width:24px;text-align:center">#</th><th style="width:56px;text-align:center">الكود</th><th style="text-align:right">اسم الصنف</th><th style="width:44px;text-align:center">الكمية</th><th style="width:68px;text-align:center">سعر الوحدة</th><th style="width:78px;text-align:center">الإجمالي (ج.م)</th></tr></thead>
+      <thead><tr><th style="width:24px;text-align:center">#</th><th style="text-align:right">اسم الصنف</th><th style="width:44px;text-align:center">الكمية</th><th style="width:68px;text-align:center">سعر الوحدة</th><th style="width:78px;text-align:center">الإجمالي (ج.م)</th></tr></thead>
       <tbody>
-        ${g.map((i,n)=>`<tr><td style="text-align:center;color:#555">${n+1}</td><td style="text-align:center;font-weight:800;font-size:10.5pt;letter-spacing:0.5px">${i.code||'—'}</td><td>${i.name}</td><td style="text-align:center">${i.qty}</td><td style="text-align:center">${fmt(i.price)}</td><td style="text-align:center;font-weight:700">${fmt(i.total)}</td></tr>`).join('')}
-        <tr style="font-weight:900"><td colspan="5" style="text-align:right;padding:4px 8px">إجمالي ${cat}</td><td style="text-align:center;padding:4px 8px;font-weight:900">${fmt(ct)}</td></tr>
+        ${g.map((i,n)=>`<tr><td style="text-align:center;color:#555">${n+1}</td><td>${i.name}</td><td style="text-align:center">${i.qty}</td><td style="text-align:center">${fmt(i.price)}</td><td style="text-align:center;font-weight:700">${fmt(i.total)}</td></tr>`).join('')}
+        <tr style="font-weight:900"><td colspan="4" style="text-align:right;padding:4px 8px">إجمالي ${cat}</td><td style="text-align:center;padding:4px 8px;font-weight:900">${fmt(ct)}</td></tr>
       </tbody></table>
       ${PHARM_CATS[cat]?`<div class="inv-sigs" style="grid-template-columns:1fr;max-width:260px;margin:6px 0 14px auto">
         <div class="inv-sig">صيدلي سعر الوحدة<br><small style="font-size:7.5pt;font-weight:700">(${cat})</small><br><span style="font-size:8pt;font-weight:400">الاسم: .....................</span></div>
@@ -1236,9 +1283,9 @@ function buildInvoice(pt){
   </div>
   ${fixed.length?`<section class="inv-fixed-group"><div class="inv-sec">أجور الخدمات والإقامة الثابتة</div>
   <table class="inv-items" style="margin-bottom:5px">
-    <thead><tr><th style="width:24px;text-align:center">#</th><th style="width:56px;text-align:center">الكود</th><th style="text-align:right">البيان</th><th style="width:44px;text-align:center">الكمية</th><th style="width:68px;text-align:center">سعر الوحدة</th><th style="width:78px;text-align:center">الإجمالي (ج.م)</th></tr></thead>
+    <thead><tr><th style="width:24px;text-align:center">#</th><th style="text-align:right">البيان</th><th style="width:44px;text-align:center">الكمية</th><th style="width:68px;text-align:center">سعر الوحدة</th><th style="width:78px;text-align:center">الإجمالي (ج.م)</th></tr></thead>
     <tbody>${fixedRows}
-      <tr style="font-weight:900"><td colspan="5" style="text-align:right;padding:4px 8px">إجمالي الخدمات الثابتة</td><td style="text-align:center;padding:4px 8px;font-weight:900">${fmt(feesSum)}</td></tr>
+      <tr style="font-weight:900"><td colspan="4" style="text-align:right;padding:4px 8px">إجمالي الخدمات الثابتة</td><td style="text-align:center;padding:4px 8px;font-weight:900">${fmt(feesSum)}</td></tr>
     </tbody></table></section>`:''}
   ${catSec}
   <div class="inv-summary-block">
@@ -1250,7 +1297,7 @@ function buildInvoice(pt){
   </div>
   ${notes?`<div style="margin-top:7px;padding:6px 10px;border:1.5px solid #000;font-size:9pt"><span style="font-weight:900">ملاحظات: </span>${notes}</div>`:''}
   <div class="inv-sigs" style="grid-template-columns:1fr 1fr">
-    <div class="inv-sig">مدخل البيانات<br><br><span style="font-size:8pt;font-weight:400">الاسم: .....................</span></div>
+    <div class="inv-sig">مدخل البيانات<br><br><span style="font-size:8pt;font-weight:400">الاسم: ${dataEntryName||'.....................'}</span></div>
     <div class="inv-sig">مكتب القرارات — يعتمد<br><br><span style="font-size:8pt;font-weight:400">الاسم: .....................</span></div>
   </div>
   <div style="text-align:center;font-size:8pt;color:#555;margin-top:10px;border-top:1px solid #999;padding-top:5px">مستشفى سوهاج العام — تاريخ الطباعة: ${new Date().toLocaleDateString('ar-EG')}</div>
@@ -1630,12 +1677,30 @@ function openSettings(){
     $('set-modal').style.display='flex';
     sTab('s-tamin');
     return;
+  } else if(role === 'data'){
+    // مدخل البيانات يرى قائمة مدخل البيانات فقط (لتعديل أسعار الأدوية والمستلزمات الخاصة به)
+    // بدون قائمة النفقة، ولا قائمة التأمين، ولا الأقسام الطبية
+    if(nafaqaTab) nafaqaTab.style.display='none';
+    if(taminTab)  taminTab.style.display='none';
+    if(itemsTab)  itemsTab.style.display='';
+    if(deptsTab)  deptsTab.style.display='none';
+    // تقييد فئة الإضافة على الأدوية والمستلزمات فقط
+    const catSel = $('s_cat');
+    if(catSel) catSel.innerHTML = '<option>أدوية</option><option>مستلزمات</option>';
+    renderSetItems();
+    onAddCatChange();
+    $('set-modal').style.display='flex';
+    sTab('s-items');
+    return;
   } else {
     // مدير يرى كل التبويبات
     if(nafaqaTab) nafaqaTab.style.display='';
     if(taminTab)  taminTab.style.display='';
     if(itemsTab)  itemsTab.style.display='';
     if(deptsTab)  deptsTab.style.display='';
+    // التأكد من ظهور كل الفئات (تحسبًا لتقييد سابق في جلسة مستخدم آخر على نفس الجهاز)
+    const catSelAdmin = $('s_cat');
+    if(catSelAdmin) catSelAdmin.innerHTML = '<option>أدوية</option><option>مستلزمات</option><option>شرائح ومسامير</option><option>أشعة</option><option>تحاليل</option><option>أجهزة</option><option>خدمات أخري</option>';
   }
   renderSetItems(); renderSetDepts();
   onAddCatChange();
@@ -1666,41 +1731,22 @@ function renderPharmListItems(listType){
 
   cats.forEach(cat=>{
     const arr = db2[cat]||[];
-    const items = q ? arr.filter(x=>x.name.toLowerCase().includes(q)||(x.code||'').toLowerCase().includes(q)) : arr;
+    const items = q ? arr.filter(x=>x.name.toLowerCase().includes(q)) : arr;
     if(!items.length) return;
     total += items.length;
     html += `<div style="margin-bottom:12px">
       <div style="font-size:.69rem;font-weight:900;color:${color};padding:4px 9px;background:${bg};border-radius:5px;margin-bottom:5px">${cat} — ${items.length} صنف</div>
       ${items.map(x=>{
         const realIdx = arr.indexOf(x);
-        const stock = x.stock||0;
-        const lowStock = stock <= 5;
-        const stockColor = stock === 0 ? '#c0392b' : lowStock ? '#e67e22' : '#27ae60';
-        const codeStr = x.code ? `<span style="background:#eef2ff;color:var(--p);font-size:.58rem;padding:1px 6px;border-radius:4px;font-weight:700;margin-right:4px">🏷 ${x.code}</span>` : '';
-        return `<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 10px;background:#fff;border-radius:6px;margin-bottom:4px;border:1.5px solid ${stock===0?'#fbb':lowStock?'#fde':'var(--b)'};gap:6px;flex-wrap:wrap">
+        return `<div id="pharm-row-${listType}-${cat}-${realIdx}" style="display:flex;justify-content:space-between;align-items:center;padding:7px 10px;background:#fff;border-radius:6px;margin-bottom:4px;border:1px solid var(--b);gap:6px;flex-wrap:wrap">
           <div style="flex:1;min-width:120px">
             <span style="font-size:.75rem;font-weight:700">${x.name}</span>
-            ${codeStr}
-            <span style="font-size:.65rem;font-weight:900;color:${stockColor};background:${stock===0?'#fdecea':lowStock?'#fff3e0':'#eafaf1'};padding:1px 7px;border-radius:10px;margin-right:4px">
-              ${stock===0?'⛔ نفد المخزون':lowStock?'⚠️ مخزون منخفض: '+stock:'📦 '+stock}
-            </span>
           </div>
           <div style="display:flex;align-items:center;gap:5px;flex-shrink:0;flex-wrap:wrap">
-            <input type="text" value="${x.code||''}" placeholder="كود" title="كود الباركود"
-              style="width:60px;padding:3px 5px;border:1px solid var(--b);border-radius:5px;font-size:.68rem;text-align:center;font-family:'Noto Kufi Arabic',sans-serif"
-              onchange="updatePharmListCode('${listType}','${cat}',${realIdx},this.value)">
             <input type="number" value="${x.price}" min="0" step="0.01" title="السعر"
               style="width:72px;padding:3px 6px;border:1px solid var(--b);border-radius:5px;font-size:.75rem;font-weight:800;color:${color};text-align:center;font-family:'Noto Kufi Arabic',sans-serif"
               onchange="updatePharmListPrice('${listType}','${cat}',${realIdx},this.value)">
             <span style="font-size:.65rem;color:var(--tm)">ج</span>
-            <span style="font-size:.65rem;color:var(--tm);margin-right:2px">تعديل الكمية:</span>
-            <input type="number" placeholder="0" min="1" step="1" id="stock-add-${listType}-${cat}-${realIdx}"
-              style="width:56px;padding:3px 5px;border:1.5px solid ${color};border-radius:5px;font-size:.72rem;text-align:center;font-family:'Noto Kufi Arabic',sans-serif"
-              title="أدخل الكمية ثم اختر إضافة أو خصم">
-            <button onclick="addStockQty('${listType}','${cat}',${realIdx})" title="إضافة الكمية للمخزون"
-              style="background:${color};color:#fff;border:none;border-radius:5px;padding:3px 8px;font-size:.7rem;font-weight:700;cursor:pointer;white-space:nowrap">+ إضافة</button>
-            <button onclick="subStockQty('${listType}','${cat}',${realIdx})" title="خصم الكمية من المخزون"
-              style="background:#fff;color:#c0392b;border:1.5px solid #c0392b;border-radius:5px;padding:3px 8px;font-size:.7rem;font-weight:700;cursor:pointer;white-space:nowrap">− خصم</button>
             <button onclick="delPharmListItem('${listType}','${cat}',${realIdx})" style="background:none;border:none;cursor:pointer;color:#e57373;font-size:.95rem;line-height:1" title="حذف">🗑</button>
           </div>
         </div>`;
@@ -1719,61 +1765,16 @@ function addPharmListItem(listType){
   const prefix = isNafaqa ? 'pn' : 'pt';
   const cat   = document.getElementById(prefix+'_cat')?.value;
   const name  = (document.getElementById(prefix+'_name')?.value||'').trim();
-  const code  = (document.getElementById(prefix+'_code')?.value||'').trim();
   const price = parseFloat(document.getElementById(prefix+'_price')?.value);
   if(!name||isNaN(price)||price<0){ alert('يرجى ملء الاسم والسعر'); return; }
   if(!pharmItemDB[listType][cat]) pharmItemDB[listType][cat]=[];
   if(pharmItemDB[listType][cat].find(x=>x.name===name)){ alert('هذا الصنف موجود بالفعل في القائمة'); return; }
-  const entry = {name, price, stock: 0};
-  if(code) entry.code = code;
+  const entry = {name, price};
   pharmItemDB[listType][cat].push(entry);
   document.getElementById(prefix+'_name').value='';
   document.getElementById(prefix+'_price').value='';
-  document.getElementById(prefix+'_code').value='';
   renderPharmListItems(listType);
   savePharmSettings(listType);
-}
-
-function addStockQty(listType, cat, idx){
-  const inputId = `stock-add-${listType}-${cat}-${idx}`;
-  const el = document.getElementById(inputId);
-  const qty = parseInt(el ? el.value : 0);
-  if(!qty || qty <= 0){ alert('⚠️ أدخل الكمية أولاً'); return; }
-  if(!pharmItemDB[listType][cat] || !pharmItemDB[listType][cat][idx]){ return; }
-  const item = pharmItemDB[listType][cat][idx];
-  item.stock = (item.stock||0) + qty;
-  if(el) el.value = '';
-  renderPharmListItems(listType);
-  savePharmSettings(listType);
-  // تسجيل في سجل العمليات
-  db.collection('auditLog').add({
-    action:'stock_in', listType, cat, name:item.name, qty,
-    user: currentUser?currentUser.name:'', at: firebase.firestore.FieldValue.serverTimestamp()
-  }).catch(()=>{});
-}
-
-function subStockQty(listType, cat, idx){
-  const inputId = `stock-add-${listType}-${cat}-${idx}`;
-  const el = document.getElementById(inputId);
-  const qty = parseInt(el ? el.value : 0);
-  if(!qty || qty <= 0){ alert('⚠️ أدخل الكمية أولاً'); return; }
-  if(!pharmItemDB[listType][cat] || !pharmItemDB[listType][cat][idx]){ return; }
-  const item = pharmItemDB[listType][cat][idx];
-  const current = item.stock||0;
-  if(qty > current){
-    if(!confirm('⚠️ الكمية المطلوب خصمها ('+qty+') أكبر من الكمية الموجودة بالمخزن ('+current+').\nهل تريد ضبط المخزون إلى صفر؟')) return;
-    item.stock = 0;
-  } else {
-    item.stock = current - qty;
-  }
-  if(el) el.value = '';
-  renderPharmListItems(listType);
-  savePharmSettings(listType);
-  // تسجيل في سجل العمليات
-  db.collection('auditLog').add({
-    action:'stock_out_manual', listType, cat, name:item.name, qty,
-    user: currentUser?currentUser.name:'', at: firebase.firestore.FieldValue.serverTimestamp()
-  }).catch(()=>{});
 }
 
 function delPharmListItem(listType, cat, idx){
@@ -1783,18 +1784,26 @@ function delPharmListItem(listType, cat, idx){
   savePharmSettings(listType);
 }
 
+/* مؤشر بصري فوري بجانب الصنف نفسه عند تعديل سعره — توكيد إضافي مرئي بمكان التعديل مباشرة،
+   بالإضافة إلى شريط الحالة العلوي، حتى يرى المستخدم بوضوح أن السعر قد تغيّر وأنه قيد الحفظ. */
+function flashSaved(rowId){
+  const row = document.getElementById(rowId);
+  if(!row) return;
+  row.style.transition='background-color .25s, border-color .25s';
+  row.style.backgroundColor='#eafaf1';
+  row.style.borderColor='#27ae60';
+  setTimeout(()=>{
+    row.style.backgroundColor='#fff';
+    row.style.borderColor='var(--b)';
+  }, 1200);
+}
+
 function updatePharmListPrice(listType, cat, idx, val){
   const p = parseFloat(val);
   if(isNaN(p)||p<0){ renderPharmListItems(listType); return; }
   pharmItemDB[listType][cat][idx].price = p;
   savePharmSettings(listType);
-}
-
-function updatePharmListCode(listType, cat, idx, val){
-  const code = val.trim();
-  if(code) pharmItemDB[listType][cat][idx].code = code;
-  else delete pharmItemDB[listType][cat][idx].code;
-  savePharmSettings(listType);
+  flashSaved('pharm-row-'+listType+'-'+cat+'-'+idx);
 }
 
 /* تفعيل زر "إعدادات" للصيدلي — يفتح فقط على قائمته */
@@ -1806,11 +1815,15 @@ const LIST_COLORS = { all:{bg:'#eef2ff',c:'var(--p)'}, nafaqa:{bg:'#fff3cd',c:'#
 function renderSetItems(){
   const q=(Vv('s_filter')||'').toLowerCase();
   const listFilter = Vv('s_list_filter')||'';
-  const cats=['أدوية','مستلزمات','شرائح ومسامير','أشعة','تحاليل','أجهزة','خدمات أخري'];
+  const role = currentUser ? currentUser.role : 'admin';
+  // مدخل البيانات يرى فقط فئتي الأدوية والمستلزمات (تماماً مثل صلاحية الصيدلي على قائمته)
+  const cats = role==='data'
+    ? ['أدوية','مستلزمات']
+    : ['أدوية','مستلزمات','شرائح ومسامير','أشعة','تحاليل','أجهزة','خدمات أخري'];
   let total=0,html='';
   cats.forEach(cat=>{
     const arr=itemDB[cat]||[];
-    let items=q?arr.filter(x=>x.name.toLowerCase().includes(q)||(x.code||'').toLowerCase().includes(q)):arr;
+    let items=q?arr.filter(x=>x.name.toLowerCase().includes(q)):arr;
     if(listFilter && LIST_OWNED_CATS.includes(cat)) items=items.filter(x=>(x.list||'all')===listFilter);
     else if(listFilter && !LIST_OWNED_CATS.includes(cat)) items=[];
     if(!items.length)return; total+=items.length;
@@ -1819,7 +1832,6 @@ function renderSetItems(){
       <div style="font-size:.69rem;font-weight:900;color:var(--tm);padding:4px 9px;background:var(--s2);border-radius:5px;margin-bottom:5px">${cat} — ${items.length} صنف</div>
       ${items.map(x=>{
         const realIdx=arr.indexOf(x);
-        const codeStr=x.code?`<span style="background:#eef2ff;color:var(--p);font-size:.58rem;padding:1px 6px;border-radius:4px;font-weight:700;margin-left:4px">🏷 ${x.code}</span>`:'';
         const curList = x.list || 'all';
         const lc = LIST_COLORS[curList];
         const listSelect = isOwnedCat ? `<select title="هذا الصنف خاص بـ" onchange="updateDBList('${cat}',${realIdx},this.value)"
@@ -1831,13 +1843,9 @@ function renderSetItems(){
         return `<div id="item-row-${cat}-${realIdx}" style="display:flex;justify-content:space-between;align-items:center;padding:6px 10px;background:#fff;border-radius:6px;margin-bottom:3px;border:1px solid var(--b);gap:6px;flex-wrap:wrap">
           <div style="flex:1;min-width:0">
             <span style="font-size:.75rem;font-weight:700">${x.name}</span>
-            <span style="display:inline-flex;gap:3px;margin-right:4px">${codeStr}</span>
           </div>
           <div style="display:flex;align-items:center;gap:5px;flex-shrink:0;flex-wrap:wrap">
             ${listSelect}
-            <input type="text" value="${x.code||''}" placeholder="كود" title="كود الصنف"
-              style="width:64px;padding:3px 5px;border:1px solid var(--b);border-radius:5px;font-size:.68rem;text-align:center;font-family:'Noto Kufi Arabic',sans-serif"
-              onchange="updateDBCode('${cat}',${realIdx},this.value)">
             <input type="number" value="${x.price}" min="0" step="0.01" title="السعر"
               style="width:76px;padding:3px 6px;border:1px solid var(--b);border-radius:5px;font-size:.75rem;font-weight:800;color:var(--p);text-align:center;font-family:'Noto Kufi Arabic',sans-serif"
               onchange="updateDBPrice('${cat}',${realIdx},this.value)">
@@ -1860,13 +1868,7 @@ function updateDBPrice(cat,idx,val){
   if(isNaN(p)||p<0){renderSetItems();return;}
   itemDB[cat][idx].price=p;
   saveSettings();
-}
-function updateDBCode(cat,idx,val){
-  const code=val.trim();
-  if(code) itemDB[cat][idx].code=code;
-  else delete itemDB[cat][idx].code;
-  saveSettings();
-  // تحديث العرض بدون إعادة رسم كاملة
+  flashSaved('item-row-'+cat+'-'+idx);
 }
 function updateDBList(cat,idx,val){
   if(!itemDB[cat] || !itemDB[cat][idx]) return;
@@ -1882,15 +1884,13 @@ function onAddCatChange(){
 }
 function addNewItem(){
   const cat=Vv('s_cat'),name=Vv('s_name').trim(),price=parseFloat(Vv('s_price'));
-  const code=Vv('s_code').trim();
   if(!name||isNaN(price)||price<0){alert('يرجى ملء الاسم والسعر بشكل صحيح');return;}
   if(!itemDB[cat])itemDB[cat]=[];
   if(itemDB[cat].find(x=>x.name===name)){alert('هذا الصنف موجود بالفعل في القائمة');return;}
   const entry={name,price};
-  if(code) entry.code=code;
   if(LIST_OWNED_CATS.includes(cat)) entry.list = Vv('s_list') || 'all';
   itemDB[cat].push(entry);
-  $('s_name').value=''; $('s_price').value=''; $('s_code').value='';
+  $('s_name').value=''; $('s_price').value='';
   renderSetItems(); saveSettings();
 }
 function renderSetDepts(){
@@ -2038,7 +2038,7 @@ function applyRoleUI(){
     // Hide everything
     $('main-content').style.display='none';
     $('pharm-section').style.display='none';
-    ['btn-admin','btn-users','btn-excel-all','btn-excel-pharm','btn-new-patient','btn-pharm-settings','current-user-badge'].forEach(id=>{
+    ['btn-admin','btn-users','btn-excel-all','btn-new-patient','btn-pharm-settings','btn-data-settings','current-user-badge'].forEach(id=>{
       const el=$(id); if(el) el.style.display='none';
     });
     return;
@@ -2059,22 +2059,24 @@ function applyRoleUI(){
     }
     $('btn-excel-all').style.display='';
     $('btn-new-patient').style.display='';
-    $('btn-excel-pharm').style.display='none';
-    // Data entry sees all patients but only completes form
+    // Data entry sees all patients، ويمكنه تعديل أسعار قائمته الخاصة عبر زر منفصل
     if(role==='data'){
       $('btn-admin').style.display='none';
       $('btn-users').style.display='none';
+      $('btn-data-settings').style.display='';
+    } else {
+      $('btn-data-settings').style.display='none';
     }
     loadPendingPharmCount();
   } else if(role === 'nafaqa' || role === 'tamin'){
     // Pharmacist view
     $('main-content').style.display='none';
     $('pharm-section').style.display='';
-    $('btn-excel-pharm').style.display='';
     $('btn-admin').style.display='none';
     $('btn-users').style.display='none';
     $('btn-excel-all').style.display='none';
     $('btn-new-patient').style.display='none';
+    $('btn-data-settings').style.display='none';
     $('btn-pharm-settings').style.display='';
     $('btn-admin').style.display='none';
     loadPharmPatients();
@@ -2151,9 +2153,8 @@ async function resetUserPass(uid, name){
 
 /* ========== PHARMACY VIEW ========== */
 let pharmCurrentPatient = null; // the patient being edited by pharmacist
-let pharmBillItems = []; // items added by pharmacist in modal {cat,name,code,qty,price,total,returned,addedBy}
+let pharmBillItems = []; // items added by pharmacist in modal {cat,name,qty,price,total,returned,addedBy}
 let pharmPatients = []; // patients loaded specifically for the pharmacy view (own stype, not finalized)
-let pendingBarcodeItem = null; // {cat, name, code, price} waiting for qty entry after a scan
 
 /* خريطة نوع الخدمة <-> دور الصيدلي */
 const STYPE_FOR_ROLE = { nafaqa: 'نفقة دولة', tamin: 'تأمين صحي' };
@@ -2286,16 +2287,13 @@ function openPharmModal(fid){
   `;
 
   resetPharmSel();
-  pendingBarcodeItem = null;
-  $('barcode-input').value = '';
-  $('barcode-pending').style.display='none';
 
   renderPharmBill();
   $('pharm-pt-modal').style.display='flex';
-  setTimeout(()=>$('barcode-input').focus(), 150);
 }
 
-function closePharmModal(){ $('pharm-pt-modal').style.display='none'; pharmCurrentPatient=null; pharmBillItems=[]; pendingBarcodeItem=null; }
+function closePharmModal(){ $('pharm-pt-modal').style.display='none'; pharmCurrentPatient=null; pharmBillItems=[]; }
+
 
 function getPharmItemList(){
   const cat = Vv('ph_cat');
@@ -2312,107 +2310,23 @@ function hidePharmDD(){ setTimeout(()=>{ const d=$('ph_dd'); if(d) d.style.displ
 function filterPharmDD(){
   const q = ($('ph_q').value||'').toLowerCase();
   const items = getPharmItemList();
-  const filtered = items.filter(x=>x.name.toLowerCase().includes(q)||(x.code||'').toLowerCase().includes(q)).slice(0,40);
+  const filtered = items.filter(x=>x.name.toLowerCase().includes(q)).slice(0,40);
   const dd = $('ph_dd');
   if(!filtered.length){ dd.style.display='none'; return; }
   dd.innerHTML = filtered.map(x=>`
     <div class="dd-item" onmousedown="selectPharmItem('${x.name.replace(/'/g,"\\'")}')">
-      ${x.name}${x.code?` <span style="font-size:.6rem;color:var(--tm);margin-right:4px">(${x.code})</span>`:''}
+      ${x.name}
       <span style="float:left;color:var(--p);font-weight:900">${x.price} ج.م</span>
     </div>`).join('');
   dd.style.display='block';
 }
 function selectPharmItem(name){ $('ph_q').value=name; $('ph_dd').style.display='none'; $('ph_qty').focus(); }
 
-/* ===== الباركود: يُلتقط من قارئ باركود متصل بكابل (يعمل مثل لوحة مفاتيح) =====
-   عند مسح الكود تُكتب الحروف في الخانة، وعند نهاية المسح يرسل القارئ Enter.
-   عند Enter: لو مفيش صنف معلّق -> نبحث عن الصنف بالكود ونعرض اسمه وننتقل لخانة الكمية تلقائياً.
-              لو فيه صنف معلّق (يعني المستخدم دلوقتي في انتظار إدخال الكمية) -> Enter يضيف الصنف للفاتورة. */
-function handleBarcodeKey(e){
-  if(e.key !== 'Enter') return;
-  e.preventDefault();
-  const val = (e.target.value||'').trim();
-  if(!val) return;
-
-  const role = currentUser ? currentUser.role : '';
-  let sourceDB2;
-  if(role === 'nafaqa') sourceDB2 = pharmItemDB.nafaqa;
-  else if(role === 'tamin') sourceDB2 = pharmItemDB.tamin;
-  else sourceDB2 = itemDB;
-  let found = null, foundCat = '';
-  const cats = ['أدوية','مستلزمات','شرائح ومسامير'];
-  for(const cat of cats){
-    const arr = (sourceDB2[cat]||[]);
-    const match = arr.find(x=> x.code && x.code.toLowerCase()===val.toLowerCase());
-    if(match){ found = match; foundCat = cat; break; }
-  }
-
-  if(!found){
-    $('barcode-pending').style.display='block';
-    $('barcode-pending').style.color='#c0392b';
-    $('barcode-pending').textContent = '❌ لا يوجد صنف بهذا الباركود: ' + val;
-    e.target.value=''; pendingBarcodeItem=null;
-    return;
-  }
-
-  // يظهر اسم الصنف وينتقل التركيز مباشرة لخانة الكمية — بدون تدخل المستخدم بالماوس أو الكيبورد
-  pendingBarcodeItem = {cat:foundCat, name:found.name, code:found.code||'', price:found.price};
-  $('barcode-pending').style.display='block';
-  $('barcode-pending').style.color='var(--p)';
-  $('barcode-pending').innerHTML = `✅ ${found.name} <span style="color:var(--tm);font-weight:400">— ${foundCat} — ${found.price} ج.م</span>`;
-  e.target.value='';
-  $('ph_qty').value='';
-  $('ph_qty').focus();
-}
-
-/* عند الضغط Enter داخل خانة الكمية بعد مسح الباركود: يضيف الصنف للفاتورة مباشرة (مثل الضغط على +) */
+/* عند الضغط Enter داخل خانة الكمية: يضيف الصنف للفاتورة مباشرة (مثل الضغط على +) */
 function handleQtyKey(e){
   if(e.key !== 'Enter') return;
   e.preventDefault();
-  if(pendingBarcodeItem){
-    addBarcodeItemWithQty();
-  } else {
-    addPharmItem();
-  }
-}
-
-function addBarcodeItemWithQty(){
-  if(!pendingBarcodeItem) return;
-  const qty = parseFloat($('ph_qty').value);
-  if(!qty || qty<=0){ alert('⚠️ أدخل الكمية المصروفة'); return; }
-  const {cat, name, code, price} = pendingBarcodeItem;
-
-  // فحص المخزون
-  const role = currentUser ? currentUser.role : '';
-  const listType = role==='nafaqa'?'nafaqa':role==='tamin'?'tamin':null;
-  if(listType){
-    const srcArr = (pharmItemDB[listType][cat]||[]);
-    const srcItem = srcArr.find(x=>x.name===name);
-    if(srcItem !== undefined){
-      const alreadyInBill = (pharmBillItems.find(x=>x.name===name&&x.cat===cat)?.qty||0);
-      const available = (srcItem.stock||0) - alreadyInBill;
-      if(qty > available){
-        alert(`⛔ لا يمكن الصرف
-الكمية المطلوبة: ${qty}
-المتاح في المخزون: ${Math.max(0,available)}
-يرجى تعديل كمية الورود أولاً`);
-        return;
-      }
-    }
-  }
-
-  const existing2 = pharmBillItems.find(x=>x.name===name && x.cat===cat);
-  const existing = existing2;
-  if(existing){ existing.qty+=qty; existing.total=parseFloat((existing.qty*existing.price).toFixed(2)); }
-  else {
-    pharmBillItems.push({cat, name, code, qty, price, total:parseFloat((qty*price).toFixed(2)), returned:0, addedBy:currentUser?currentUser.name:''});
-  }
-  renderPharmBill();
-  pendingBarcodeItem = null;
-  $('ph_qty').value='';
-  $('barcode-pending').style.display='none';
-  $('barcode-input').value='';
-  $('barcode-input').focus();
+  addPharmItem();
 }
 
 function addPharmItem(){
@@ -2429,23 +2343,10 @@ function addPharmItem(){
   let item = items.find(x=>x.name===name);
   if(!item){ alert('الصنف غير موجود في القائمة'); return; }
 
-  // فحص المخزون قبل الصرف
-  if(role==='nafaqa'||role==='tamin'){
-    const alreadyInBill = (pharmBillItems.find(x=>x.name===name&&x.cat===cat)?.qty||0);
-    const available = (item.stock||0) - alreadyInBill;
-    if(qty > available){
-      alert(`⛔ لا يمكن الصرف
-الكمية المطلوبة: ${qty}
-المتاح في المخزون: ${Math.max(0,available)}
-يرجى تعديل كمية الورود في قائمة الأصناف أولاً`);
-      return;
-    }
-  }
-
   const existing = pharmBillItems.find(x=>x.name===name && x.cat===cat);
   if(existing){ existing.qty+=qty; existing.total=parseFloat((existing.qty*existing.price).toFixed(2)); }
   else {
-    pharmBillItems.push({cat, name, code:item.code||'', qty, price:item.price, total:parseFloat((qty*item.price).toFixed(2)), returned:0, addedBy:currentUser?currentUser.name:''});
+    pharmBillItems.push({cat, name, qty, price:item.price, total:parseFloat((qty*item.price).toFixed(2)), returned:0, addedBy:currentUser?currentUser.name:''});
   }
   renderPharmBill();
   $('ph_q').value=''; $('ph_qty').value=1;
@@ -2473,20 +2374,9 @@ function renderPharmBill(){
   body.innerHTML = pharmBillItems.map((it,i)=>{
     const net = Math.max(0, it.qty - (it.returned||0));
     const netTotal = parseFloat((net*it.price).toFixed(2));
-    // حساب المخزون المتاح من pharmItemDB
-    const role2 = currentUser?currentUser.role:'';
-    const lt2 = role2==='nafaqa'?'nafaqa':role2==='tamin'?'tamin':null;
-    let stockLeft = null;
-    if(lt2){
-      const si = (pharmItemDB[lt2][it.cat]||[]).find(x=>x.name===it.name);
-      if(si) stockLeft = si.stock||0;
-    }
-    const stockBadge = stockLeft!==null
-      ? `<span style="font-size:.6rem;font-weight:700;color:${stockLeft<=5?'#c0392b':'#27ae60'};margin-right:4px">(مخزون: ${stockLeft})</span>`
-      : '';
     return `<tr>
       <td>${i+1}</td>
-      <td>${it.name}${it.addedBy?`<span style="font-size:.6rem;color:var(--tm);margin-right:4px">(${it.addedBy})</span>`:''}${stockBadge}</td>
+      <td>${it.name}${it.addedBy?`<span style="font-size:.6rem;color:var(--tm);margin-right:4px">(${it.addedBy})</span>`:''}</td>
       <td>${it.cat}</td>
       <td style="text-align:center">${it.qty}</td>
       <td style="text-align:center">${it.price}</td>
@@ -2532,115 +2422,11 @@ async function savePharmItems(){
   try{
     await db.collection('patients').doc(pharmCurrentPatient.firestoreId).set(updated);
 
-    // تحديث المخزون: طرح الكميات المصروفة الصافية + إضافة المرتجع
-    const listType2 = currentUser.role==='nafaqa'?'nafaqa':currentUser.role==='tamin'?'tamin':null;
-    if(listType2){
-      let stockChanged = false;
-      pharmBillItems.forEach(it=>{
-        const srcArr = pharmItemDB[listType2][it.cat]||[];
-        const srcItem = srcArr.find(x=>x.name===it.name);
-        if(srcItem){
-          const netDispatched = Math.max(0, it.qty - (it.returned||0));
-          const returnedQty   = it.returned||0;
-          // اطرح الصافي المصروف وأضف المرتجع
-          srcItem.stock = Math.max(0, (srcItem.stock||0) - netDispatched + returnedQty);
-          stockChanged = true;
-        }
-      });
-      if(stockChanged) savePharmSettings(listType2);
-    }
-
     db.collection('auditLog').add({action:'pharm_save', patient:pharmCurrentPatient.name, items:finalItems.length, user:currentUser.name, role:currentUser.role, at:firebase.firestore.FieldValue.serverTimestamp()}).catch(()=>{});
     alert('✅ تم حفظ الصرف للمريض: ' + pharmCurrentPatient.name);
     closePharmModal();
     await loadPharmPatients();
   }catch(e){ alert('❌ خطأ في الحفظ: '+e.message); }
-}
-
-/* ========== PHARMACY EXCEL EXPORT ========== */
-async function exportPharmExcel(){
-  const role = currentUser ? currentUser.role : '';
-  const myStype = STYPE_FOR_ROLE[role];
-  if(!myStype){ alert('⚠️ هذه الميزة متاحة لمستخدمي الصيدلية فقط'); return; }
-
-  const btn = $('btn-excel-pharm');
-  const oldLabel = btn ? btn.innerHTML : '';
-  if(btn){ btn.disabled = true; btn.innerHTML = '⏳ جاري التحضير...'; }
-
-  let allStypePatients = [];
-  try{
-    // نجلب كل مرضى نوع الخدمة الخاص بهذا الصيدلي من قاعدة البيانات مباشرة
-    // (وليس فقط القائمة المعروضة حالياً وهي المرضى المنتظرين فقط)
-    // بهذا تظهر بيانات كل مريض سجّله أو صرف له هذا الصيدلي حتى لو أكمل مدخل البيانات بياناته
-    // وخرج من قائمة الانتظار بالصيدلية
-    const snap = await db.collection('patients').where('stype','==', myStype).get();
-    allStypePatients = snap.docs.map(d=>({...d.data(), firestoreId:d.id}));
-  }catch(e){
-    alert('❌ خطأ في تحميل بيانات الصيدلية: '+e.message);
-    if(btn){ btn.disabled = false; btn.innerHTML = oldLabel; }
-    return;
-  }
-  if(btn){ btn.disabled = false; btn.innerHTML = oldLabel; }
-
-  // نعرض فقط المرضى الذين سُجِّل لهم صنف صيدلي واحد على الأقل (أدوية/مستلزمات/شرائح ومسامير)
-  // أو الذين سجلهم الصيدلي مبدئياً حتى لو لم يُصرف لهم شيء بعد
-  const relevant = allStypePatients.filter(pt=>
-    (pt.items||[]).some(it=>it.cat==='أدوية'||it.cat==='مستلزمات'||it.cat==='شرائح ومسامير')
-    || pt.savedByRole === role
-  );
-
-  if(!relevant.length){ alert('لا يوجد مرضى لعرضهم في الشيت'); return; }
-
-  // الأحدث أولاً
-  relevant.sort((a,b)=>{
-    const ta = a.savedAt && a.savedAt.toMillis ? a.savedAt.toMillis() : 0;
-    const tb = b.savedAt && b.savedAt.toMillis ? b.savedAt.toMillis() : 0;
-    return tb - ta;
-  });
-
-  const wb = XLSX.utils.book_new();
-
-  // Build per-patient detail rows
-  // Headers: م | اسم المريض | [med1 | qty1 | med2 | qty2...] | [sup1 | qty1...]
-  // Collect all unique med/supply names من مرضى الصيدلي الحالي (نفقة أو تأمين) — كل المرضى المسجلين، سواء اكتملت بياناتهم أم لا
-  const allMeds = new Set();
-  const allSups = new Set();
-  const allScrew = new Set();
-
-  relevant.forEach(pt=>{
-    (pt.items||[]).forEach(it=>{
-      if(it.cat==='أدوية') allMeds.add(it.name);
-      else if(it.cat==='مستلزمات') allSups.add(it.name);
-      else if(it.cat==='شرائح ومسامير') allScrew.add(it.name);
-    });
-  });
-
-  const medList = [...allMeds];
-  const supList = [...allSups];
-  const screwList = [...allScrew];
-
-  // Build header row
-  const hdr = ['م', 'اسم المريض', 'القسم', 'رقم التذكرة', 'الحالة'];
-  medList.forEach(m=>{ hdr.push(m); hdr.push('كمية'); });
-  supList.forEach(s=>{ hdr.push(s); hdr.push('كمية'); });
-  screwList.forEach(s=>{ hdr.push(s); hdr.push('كمية'); });
-
-  const rows = [hdr];
-  relevant.forEach((pt, idx)=>{
-    const status = pt.finalized ? 'مكتمل (مدخل بيانات)' : 'بانتظار مدخل البيانات';
-    const row = [idx+1, pt.name||'', pt.dept||'', pt.ticket||'', status];
-    const itemMap = {};
-    (pt.items||[]).forEach(it=>{ itemMap[it.cat+'|'+it.name] = it.qty||0; });
-    medList.forEach(m=>{ row.push(m); row.push(itemMap['أدوية|'+m]||0); });
-    supList.forEach(s=>{ row.push(s); row.push(itemMap['مستلزمات|'+s]||0); });
-    screwList.forEach(s=>{ row.push(s); row.push(itemMap['شرائح ومسامير|'+s]||0); });
-    rows.push(row);
-  });
-
-  const ws = XLSX.utils.aoa_to_sheet(rows);
-  ws['!cols'] = rows[0].map((_,i)=>({wch: i<5?20:i%2===1?22:8}));
-  XLSX.utils.book_append_sheet(wb, ws, 'الصيدلية');
-  XLSX.writeFile(wb, 'شيت_الصيدلية_'+new Date().toISOString().slice(0,10)+'.xlsx');
 }
 
 
