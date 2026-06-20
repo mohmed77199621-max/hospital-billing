@@ -571,20 +571,31 @@ input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
     <!-- تبويب القائمة الأصلية (مدخل البيانات) -->
     <div id="s-items" class="tab-content active">
       <div style="background:#fff3cd;border-right:3px solid #856404;padding:7px 12px;border-radius:6px;margin-bottom:12px;font-size:.72rem;color:#856404;font-weight:700">
-        📋 هذه القائمة خاصة بمدخل البيانات (أشعة، تحاليل، أجهزة، خدمات أخرى، وكل الأصناف العامة)
+        📋 هذه القائمة خاصة بمدخل البيانات (أشعة، تحاليل، أجهزة، خدمات أخرى، وكل الأصناف العامة) — لأصناف الأدوية والمستلزمات يمكنك تحديد ما إذا كان الصنف خاصًا بالتأمين، أو بنفقة الدولة، أو متاحًا للجميع
       </div>
       <div class="g2" style="margin-bottom:14px">
         <div style="background:#f0f4ff;padding:14px;border-radius:10px">
           <div style="font-size:.74rem;font-weight:900;color:var(--p);margin-bottom:10px">➕ إضافة صنف</div>
-          <select id="s_cat" class="inp" style="margin-bottom:7px"><option>أدوية</option><option>مستلزمات</option><option>شرائح ومسامير</option><option>أشعة</option><option>تحاليل</option><option>أجهزة</option><option>خدمات أخري</option></select>
+          <select id="s_cat" class="inp" style="margin-bottom:7px" onchange="onAddCatChange()"><option>أدوية</option><option>مستلزمات</option><option>شرائح ومسامير</option><option>أشعة</option><option>تحاليل</option><option>أجهزة</option><option>خدمات أخري</option></select>
           <input type="text" id="s_name" placeholder="اسم الصنف" class="inp" style="margin-bottom:7px">
           <input type="text" id="s_code" placeholder="كود الصنف (اختياري)" class="inp" style="margin-bottom:7px">
           <input type="number" id="s_price" placeholder="السعر (ج.م)" class="inp" style="margin-bottom:7px" min="0" step="0.01">
+          <div id="s_list_wrap" style="margin-bottom:7px">
+            <label style="font-size:.68rem;color:var(--tm);font-weight:700;display:block;margin-bottom:4px">هذا الصنف خاص بـ:</label>
+            <select id="s_list" class="inp"><option value="all">👥 الجميع (تأمين ونفقة)</option><option value="nafaqa">💊 نفقة الدولة فقط</option><option value="tamin">🏥 التأمين فقط</option></select>
+          </div>
           <button onclick="addNewItem()" class="btn btn-p" style="width:100%;justify-content:center">إضافة</button>
         </div>
         <div style="background:#f7f8f9;padding:14px;border-radius:10px">
           <div style="font-size:.74rem;font-weight:900;color:var(--t);margin-bottom:10px">🔍 بحث</div>
-          <input type="text" id="s_filter" placeholder="ابحث في الأصناف..." class="inp" oninput="renderSetItems()">
+          <input type="text" id="s_filter" placeholder="ابحث في الأصناف..." class="inp" oninput="renderSetItems()" style="margin-bottom:7px">
+          <label style="font-size:.68rem;color:var(--tm);font-weight:700;display:block;margin-bottom:4px">تصفية حسب الملكية:</label>
+          <select id="s_list_filter" class="inp" onchange="renderSetItems()">
+            <option value="">الكل</option>
+            <option value="all">👥 الجميع</option>
+            <option value="nafaqa">💊 نفقة الدولة</option>
+            <option value="tamin">🏥 التأمين</option>
+          </select>
           <div style="margin-top:6px;font-size:.68rem;color:var(--tm)" id="s_total"></div>
         </div>
       </div>
@@ -594,7 +605,7 @@ input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
     <!-- تبويب قائمة نفقة الدولة المستقلة -->
     <div id="s-nafaqa" class="tab-content">
       <div style="background:#fff3cd;border-right:3px solid #856404;padding:7px 12px;border-radius:6px;margin-bottom:12px;font-size:.72rem;color:#856404;font-weight:700">
-        💊 قائمة أدوية ومستلزمات نفقة الدولة — مستقلة تماماً — أي تعديل لا يؤثر على أي قائمة أخرى
+        💊 قائمة أدوية ومستلزمات نفقة الدولة — مستقلة تماماً — أي تعديل لا يؤثر على أي قائمة أخرى — يمكنك تعديل السعر، وإضافة أو خصم الكمية الموجودة بالمخزن لكل صنف
       </div>
       <div class="g2" style="margin-bottom:14px">
         <div style="background:#fffbee;padding:14px;border-radius:10px;border:1px solid #f0c040">
@@ -617,7 +628,7 @@ input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
     <!-- تبويب قائمة التأمين الصحي المستقلة -->
     <div id="s-tamin" class="tab-content">
       <div style="background:#d1ecf1;border-right:3px solid #0c5460;padding:7px 12px;border-radius:6px;margin-bottom:12px;font-size:.72rem;color:#0c5460;font-weight:700">
-        💊 قائمة أدوية ومستلزمات التأمين الصحي — مستقلة تماماً — أي تعديل لا يؤثر على أي قائمة أخرى
+        💊 قائمة أدوية ومستلزمات التأمين الصحي — مستقلة تماماً — أي تعديل لا يؤثر على أي قائمة أخرى — يمكنك تعديل السعر، وإضافة أو خصم الكمية الموجودة بالمخزن لكل صنف
       </div>
       <div class="g2" style="margin-bottom:14px">
         <div style="background:#eef9ff;padding:14px;border-radius:10px;border:1px solid #90d5ec">
@@ -675,10 +686,9 @@ let pharmItemDB = {
   tamin:  {'أدوية':[], 'مستلزمات':[], 'شرائح ومسامير':[]},
 };
 
-// تحويل جميع أدوية ومستلزمات DB0 الأصلية إلى نفقة الدولة
-['أدوية','مستلزمات'].forEach(cat=>{
-  (itemDB[cat]||[]).forEach(x=>{ if(!x.list || x.list==='all') x.list='nafaqa'; });
-});
+// ملاحظة: لا نفرض قيمة list افتراضية هنا — أي صنف بلا list محدد يبقى "all" (متاح للجميع)
+// كانت هناك خطوة هنا تحوّل أي صنف بلا list (أو list='all') إلى 'nafaqa' تلقائياً،
+// وهذا كان يُخفي خطأً أصنافاً خاصة بالتأمين أو عامة عن قائمة مرضى التأمين عند الفوترة. تم إزالتها.
 // كل قسم عنده tag ثابت — الاسم ممكن يتغير لكن الـ tag مش بيتغير أبداً
 const DEPT_TAGS = {
   'الجراحة العامة':      'general_surgery',
@@ -1620,6 +1630,7 @@ function openSettings(){
     if(taminTab)  taminTab.style.display='';
   }
   renderSetItems(); renderSetDepts();
+  onAddCatChange();
   $('set-modal').style.display='flex';
 }
 function closeSettings(){$('set-modal').style.display='none';}
@@ -1674,12 +1685,14 @@ function renderPharmListItems(listType){
               style="width:72px;padding:3px 6px;border:1px solid var(--b);border-radius:5px;font-size:.75rem;font-weight:800;color:${color};text-align:center;font-family:'Noto Kufi Arabic',sans-serif"
               onchange="updatePharmListPrice('${listType}','${cat}',${realIdx},this.value)">
             <span style="font-size:.65rem;color:var(--tm)">ج</span>
-            <span style="font-size:.65rem;color:var(--tm);margin-right:2px">ورود:</span>
+            <span style="font-size:.65rem;color:var(--tm);margin-right:2px">تعديل الكمية:</span>
             <input type="number" placeholder="0" min="1" step="1" id="stock-add-${listType}-${cat}-${realIdx}"
               style="width:56px;padding:3px 5px;border:1.5px solid ${color};border-radius:5px;font-size:.72rem;text-align:center;font-family:'Noto Kufi Arabic',sans-serif"
-              title="أضف كمية واردة للمخزون">
-            <button onclick="addStockQty('${listType}','${cat}',${realIdx})"
-              style="background:${color};color:#fff;border:none;border-radius:5px;padding:3px 7px;font-size:.7rem;font-weight:700;cursor:pointer;white-space:nowrap">+ ورود</button>
+              title="أدخل الكمية ثم اختر إضافة أو خصم">
+            <button onclick="addStockQty('${listType}','${cat}',${realIdx})" title="إضافة الكمية للمخزون"
+              style="background:${color};color:#fff;border:none;border-radius:5px;padding:3px 8px;font-size:.7rem;font-weight:700;cursor:pointer;white-space:nowrap">+ إضافة</button>
+            <button onclick="subStockQty('${listType}','${cat}',${realIdx})" title="خصم الكمية من المخزون"
+              style="background:#fff;color:#c0392b;border:1.5px solid #c0392b;border-radius:5px;padding:3px 8px;font-size:.7rem;font-weight:700;cursor:pointer;white-space:nowrap">− خصم</button>
             <button onclick="delPharmListItem('${listType}','${cat}',${realIdx})" style="background:none;border:none;cursor:pointer;color:#e57373;font-size:.95rem;line-height:1" title="حذف">🗑</button>
           </div>
         </div>`;
@@ -1717,7 +1730,7 @@ function addStockQty(listType, cat, idx){
   const inputId = `stock-add-${listType}-${cat}-${idx}`;
   const el = document.getElementById(inputId);
   const qty = parseInt(el ? el.value : 0);
-  if(!qty || qty <= 0){ alert('⚠️ أدخل الكمية الواردة أولاً'); return; }
+  if(!qty || qty <= 0){ alert('⚠️ أدخل الكمية أولاً'); return; }
   if(!pharmItemDB[listType][cat] || !pharmItemDB[listType][cat][idx]){ return; }
   const item = pharmItemDB[listType][cat][idx];
   item.stock = (item.stock||0) + qty;
@@ -1727,6 +1740,30 @@ function addStockQty(listType, cat, idx){
   // تسجيل في سجل العمليات
   db.collection('auditLog').add({
     action:'stock_in', listType, cat, name:item.name, qty,
+    user: currentUser?currentUser.name:'', at: firebase.firestore.FieldValue.serverTimestamp()
+  }).catch(()=>{});
+}
+
+function subStockQty(listType, cat, idx){
+  const inputId = `stock-add-${listType}-${cat}-${idx}`;
+  const el = document.getElementById(inputId);
+  const qty = parseInt(el ? el.value : 0);
+  if(!qty || qty <= 0){ alert('⚠️ أدخل الكمية أولاً'); return; }
+  if(!pharmItemDB[listType][cat] || !pharmItemDB[listType][cat][idx]){ return; }
+  const item = pharmItemDB[listType][cat][idx];
+  const current = item.stock||0;
+  if(qty > current){
+    if(!confirm('⚠️ الكمية المطلوب خصمها ('+qty+') أكبر من الكمية الموجودة بالمخزن ('+current+').\nهل تريد ضبط المخزون إلى صفر؟')) return;
+    item.stock = 0;
+  } else {
+    item.stock = current - qty;
+  }
+  if(el) el.value = '';
+  renderPharmListItems(listType);
+  savePharmSettings(listType);
+  // تسجيل في سجل العمليات
+  db.collection('auditLog').add({
+    action:'stock_out_manual', listType, cat, name:item.name, qty,
     user: currentUser?currentUser.name:'', at: firebase.firestore.FieldValue.serverTimestamp()
   }).catch(()=>{});
 }
@@ -1753,25 +1790,43 @@ function updatePharmListCode(listType, cat, idx, val){
 }
 
 /* تفعيل زر "إعدادات" للصيدلي — يفتح فقط على قائمته */
+// الفئات التي يُسمح فيها بتحديد ملكية الصنف (تأمين / نفقة / الجميع)
+const LIST_OWNED_CATS = ['أدوية','مستلزمات'];
+const LIST_LABELS = { all:'👥 الجميع', nafaqa:'💊 نفقة الدولة', tamin:'🏥 التأمين' };
+const LIST_COLORS = { all:{bg:'#eef2ff',c:'var(--p)'}, nafaqa:{bg:'#fff3cd',c:'#856404'}, tamin:{bg:'#d1ecf1',c:'#0c5460'} };
+
 function renderSetItems(){
   const q=(Vv('s_filter')||'').toLowerCase();
+  const listFilter = Vv('s_list_filter')||'';
   const cats=['أدوية','مستلزمات','شرائح ومسامير','أشعة','تحاليل','أجهزة','خدمات أخري'];
   let total=0,html='';
   cats.forEach(cat=>{
     const arr=itemDB[cat]||[];
-    const items=q?arr.filter(x=>x.name.toLowerCase().includes(q)||(x.code||'').toLowerCase().includes(q)):arr;
+    let items=q?arr.filter(x=>x.name.toLowerCase().includes(q)||(x.code||'').toLowerCase().includes(q)):arr;
+    if(listFilter && LIST_OWNED_CATS.includes(cat)) items=items.filter(x=>(x.list||'all')===listFilter);
+    else if(listFilter && !LIST_OWNED_CATS.includes(cat)) items=[];
     if(!items.length)return; total+=items.length;
+    const isOwnedCat = LIST_OWNED_CATS.includes(cat);
     html+=`<div style="margin-bottom:12px">
       <div style="font-size:.69rem;font-weight:900;color:var(--tm);padding:4px 9px;background:var(--s2);border-radius:5px;margin-bottom:5px">${cat} — ${items.length} صنف</div>
       ${items.map(x=>{
         const realIdx=arr.indexOf(x);
         const codeStr=x.code?`<span style="background:#eef2ff;color:var(--p);font-size:.58rem;padding:1px 6px;border-radius:4px;font-weight:700;margin-left:4px">🏷 ${x.code}</span>`:'';
+        const curList = x.list || 'all';
+        const lc = LIST_COLORS[curList];
+        const listSelect = isOwnedCat ? `<select title="هذا الصنف خاص بـ" onchange="updateDBList('${cat}',${realIdx},this.value)"
+              style="width:108px;padding:3px 5px;border:1.5px solid ${lc.c};border-radius:5px;font-size:.66rem;font-weight:800;color:${lc.c};background:${lc.bg};text-align:center;font-family:'Noto Kufi Arabic',sans-serif">
+              <option value="all" ${curList==='all'?'selected':''}>👥 الجميع</option>
+              <option value="nafaqa" ${curList==='nafaqa'?'selected':''}>💊 نفقة الدولة</option>
+              <option value="tamin" ${curList==='tamin'?'selected':''}>🏥 التأمين</option>
+            </select>` : '';
         return `<div id="item-row-${cat}-${realIdx}" style="display:flex;justify-content:space-between;align-items:center;padding:6px 10px;background:#fff;border-radius:6px;margin-bottom:3px;border:1px solid var(--b);gap:6px;flex-wrap:wrap">
           <div style="flex:1;min-width:0">
             <span style="font-size:.75rem;font-weight:700">${x.name}</span>
             <span style="display:inline-flex;gap:3px;margin-right:4px">${codeStr}</span>
           </div>
-          <div style="display:flex;align-items:center;gap:5px;flex-shrink:0">
+          <div style="display:flex;align-items:center;gap:5px;flex-shrink:0;flex-wrap:wrap">
+            ${listSelect}
             <input type="text" value="${x.code||''}" placeholder="كود" title="كود الصنف"
               style="width:64px;padding:3px 5px;border:1px solid var(--b);border-radius:5px;font-size:.68rem;text-align:center;font-family:'Noto Kufi Arabic',sans-serif"
               onchange="updateDBCode('${cat}',${realIdx},this.value)">
@@ -1805,6 +1860,18 @@ function updateDBCode(cat,idx,val){
   saveSettings();
   // تحديث العرض بدون إعادة رسم كاملة
 }
+function updateDBList(cat,idx,val){
+  if(!itemDB[cat] || !itemDB[cat][idx]) return;
+  itemDB[cat][idx].list = val; // 'all' | 'nafaqa' | 'tamin'
+  renderSetItems();
+  saveSettings();
+}
+function onAddCatChange(){
+  const cat = Vv('s_cat');
+  const wrap = $('s_list_wrap');
+  if(!wrap) return;
+  wrap.style.display = LIST_OWNED_CATS.includes(cat) ? '' : 'none';
+}
 function addNewItem(){
   const cat=Vv('s_cat'),name=Vv('s_name').trim(),price=parseFloat(Vv('s_price'));
   const code=Vv('s_code').trim();
@@ -1813,6 +1880,7 @@ function addNewItem(){
   if(itemDB[cat].find(x=>x.name===name)){alert('هذا الصنف موجود بالفعل في القائمة');return;}
   const entry={name,price};
   if(code) entry.code=code;
+  if(LIST_OWNED_CATS.includes(cat)) entry.list = Vv('s_list') || 'all';
   itemDB[cat].push(entry);
   $('s_name').value=''; $('s_price').value=''; $('s_code').value='';
   renderSetItems(); saveSettings();
@@ -2482,39 +2550,77 @@ async function savePharmItems(){
 }
 
 /* ========== PHARMACY EXCEL EXPORT ========== */
-function exportPharmExcel(){
-  if(!pharmPatients.length){ alert('لا يوجد مرضى لعرضهم في الشيت'); return; }
-  
+async function exportPharmExcel(){
+  const role = currentUser ? currentUser.role : '';
+  const myStype = STYPE_FOR_ROLE[role];
+  if(!myStype){ alert('⚠️ هذه الميزة متاحة لمستخدمي الصيدلية فقط'); return; }
+
+  const btn = $('btn-excel-pharm');
+  const oldLabel = btn ? btn.innerHTML : '';
+  if(btn){ btn.disabled = true; btn.innerHTML = '⏳ جاري التحضير...'; }
+
+  let allStypePatients = [];
+  try{
+    // نجلب كل مرضى نوع الخدمة الخاص بهذا الصيدلي من قاعدة البيانات مباشرة
+    // (وليس فقط القائمة المعروضة حالياً وهي المرضى المنتظرين فقط)
+    // بهذا تظهر بيانات كل مريض سجّله أو صرف له هذا الصيدلي حتى لو أكمل مدخل البيانات بياناته
+    // وخرج من قائمة الانتظار بالصيدلية
+    const snap = await db.collection('patients').where('stype','==', myStype).get();
+    allStypePatients = snap.docs.map(d=>({...d.data(), firestoreId:d.id}));
+  }catch(e){
+    alert('❌ خطأ في تحميل بيانات الصيدلية: '+e.message);
+    if(btn){ btn.disabled = false; btn.innerHTML = oldLabel; }
+    return;
+  }
+  if(btn){ btn.disabled = false; btn.innerHTML = oldLabel; }
+
+  // نعرض فقط المرضى الذين سُجِّل لهم صنف صيدلي واحد على الأقل (أدوية/مستلزمات/شرائح ومسامير)
+  // أو الذين سجلهم الصيدلي مبدئياً حتى لو لم يُصرف لهم شيء بعد
+  const relevant = allStypePatients.filter(pt=>
+    (pt.items||[]).some(it=>it.cat==='أدوية'||it.cat==='مستلزمات'||it.cat==='شرائح ومسامير')
+    || pt.savedByRole === role
+  );
+
+  if(!relevant.length){ alert('لا يوجد مرضى لعرضهم في الشيت'); return; }
+
+  // الأحدث أولاً
+  relevant.sort((a,b)=>{
+    const ta = a.savedAt && a.savedAt.toMillis ? a.savedAt.toMillis() : 0;
+    const tb = b.savedAt && b.savedAt.toMillis ? b.savedAt.toMillis() : 0;
+    return tb - ta;
+  });
+
   const wb = XLSX.utils.book_new();
-  
+
   // Build per-patient detail rows
   // Headers: م | اسم المريض | [med1 | qty1 | med2 | qty2...] | [sup1 | qty1...]
-  // Collect all unique med/supply names من مرضى الصيدلي الحالي فقط (نفقة أو تأمين)
+  // Collect all unique med/supply names من مرضى الصيدلي الحالي (نفقة أو تأمين) — كل المرضى المسجلين، سواء اكتملت بياناتهم أم لا
   const allMeds = new Set();
   const allSups = new Set();
   const allScrew = new Set();
-  
-  pharmPatients.forEach(pt=>{
+
+  relevant.forEach(pt=>{
     (pt.items||[]).forEach(it=>{
       if(it.cat==='أدوية') allMeds.add(it.name);
       else if(it.cat==='مستلزمات') allSups.add(it.name);
       else if(it.cat==='شرائح ومسامير') allScrew.add(it.name);
     });
   });
-  
+
   const medList = [...allMeds];
   const supList = [...allSups];
   const screwList = [...allScrew];
-  
+
   // Build header row
-  const hdr = ['م', 'اسم المريض'];
+  const hdr = ['م', 'اسم المريض', 'القسم', 'رقم التذكرة', 'الحالة'];
   medList.forEach(m=>{ hdr.push(m); hdr.push('كمية'); });
   supList.forEach(s=>{ hdr.push(s); hdr.push('كمية'); });
   screwList.forEach(s=>{ hdr.push(s); hdr.push('كمية'); });
-  
+
   const rows = [hdr];
-  pharmPatients.forEach((pt, idx)=>{
-    const row = [idx+1, pt.name||''];
+  relevant.forEach((pt, idx)=>{
+    const status = pt.finalized ? 'مكتمل (مدخل بيانات)' : 'بانتظار مدخل البيانات';
+    const row = [idx+1, pt.name||'', pt.dept||'', pt.ticket||'', status];
     const itemMap = {};
     (pt.items||[]).forEach(it=>{ itemMap[it.cat+'|'+it.name] = it.qty||0; });
     medList.forEach(m=>{ row.push(m); row.push(itemMap['أدوية|'+m]||0); });
@@ -2522,9 +2628,9 @@ function exportPharmExcel(){
     screwList.forEach(s=>{ row.push(s); row.push(itemMap['شرائح ومسامير|'+s]||0); });
     rows.push(row);
   });
-  
+
   const ws = XLSX.utils.aoa_to_sheet(rows);
-  ws['!cols'] = rows[0].map((_,i)=>({wch: i<2?22:i%2===0?22:8}));
+  ws['!cols'] = rows[0].map((_,i)=>({wch: i<5?20:i%2===1?22:8}));
   XLSX.utils.book_append_sheet(wb, ws, 'الصيدلية');
   XLSX.writeFile(wb, 'شيت_الصيدلية_'+new Date().toISOString().slice(0,10)+'.xlsx');
 }
