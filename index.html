@@ -562,10 +562,10 @@ input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
       <button onclick="closeSettings()" style="background:none;border:none;cursor:pointer;font-size:1.4rem;color:var(--tm)">✕</button>
     </div>
     <div class="tab-btns" id="settings-tabs">
-      <button class="tab-btn active" onclick="sTab('s-items')">قائمة مدخل البيانات</button>
+      <button class="tab-btn active" id="tab-items-btn" onclick="sTab('s-items')">قائمة مدخل البيانات</button>
       <button class="tab-btn" id="tab-nafaqa-btn" onclick="sTab('s-nafaqa')" style="background:#fffbee;color:#856404">قائمة نفقة الدولة</button>
       <button class="tab-btn" id="tab-tamin-btn" onclick="sTab('s-tamin')" style="background:#eef9ff;color:#0c5460">قائمة التأمين</button>
-      <button class="tab-btn" onclick="sTab('s-depts')">الأقسام الطبية</button>
+      <button class="tab-btn" id="tab-depts-btn" onclick="sTab('s-depts')">الأقسام الطبية</button>
     </div>
 
     <!-- تبويب القائمة الأصلية (مدخل البيانات) -->
@@ -1610,17 +1610,23 @@ function openSettings(){
   // تحكم في ظهور التبويبات حسب الدور
   const nafaqaTab = $('tab-nafaqa-btn');
   const taminTab  = $('tab-tamin-btn');
+  const itemsTab  = $('tab-items-btn');
+  const deptsTab  = $('tab-depts-btn');
   if(role === 'nafaqa'){
-    // صيدلي النفقة يرى قائمة النفقة فقط — افتح مباشرة على تبويب النفقة
+    // صيدلي النفقة يرى قائمة النفقة فقط — بدون قائمة مدخل البيانات ولا الأقسام الطبية
     if(nafaqaTab) nafaqaTab.style.display='';
     if(taminTab)  taminTab.style.display='none';
+    if(itemsTab)  itemsTab.style.display='none';
+    if(deptsTab)  deptsTab.style.display='none';
     $('set-modal').style.display='flex';
     sTab('s-nafaqa');
     return;
   } else if(role === 'tamin'){
-    // صيدلي التأمين يرى قائمة التأمين فقط
+    // صيدلي التأمين يرى قائمة التأمين فقط — بدون قائمة مدخل البيانات ولا الأقسام الطبية
     if(nafaqaTab) nafaqaTab.style.display='none';
     if(taminTab)  taminTab.style.display='';
+    if(itemsTab)  itemsTab.style.display='none';
+    if(deptsTab)  deptsTab.style.display='none';
     $('set-modal').style.display='flex';
     sTab('s-tamin');
     return;
@@ -1628,6 +1634,8 @@ function openSettings(){
     // مدير يرى كل التبويبات
     if(nafaqaTab) nafaqaTab.style.display='';
     if(taminTab)  taminTab.style.display='';
+    if(itemsTab)  itemsTab.style.display='';
+    if(deptsTab)  deptsTab.style.display='';
   }
   renderSetItems(); renderSetDepts();
   onAddCatChange();
