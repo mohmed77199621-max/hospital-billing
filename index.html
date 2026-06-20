@@ -191,7 +191,6 @@ input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
     <button id="btn-users" class="btn btn-o" onclick="openUserMgmt()" style="display:none;color:#a8c4ff;border-color:rgba(255,255,255,.25);background:rgba(255,255,255,.08)">👥 المستخدمين</button>
     <button id="btn-excel-pharm" class="btn btn-a" onclick="exportPharmExcel()" style="display:none">📊 شيت الصيدلية</button>
     <button id="btn-excel-all" class="btn btn-a" onclick="exportAllExcel()" style="display:none">📊 تصدير الكل إكسل</button>
-    <button id="btn-excel-inv" class="btn btn-a" onclick="exportInventoryExcel()" style="display:none">📦 شيت المخزون</button>
     <button id="btn-new-patient" class="btn btn-g" onclick="clearForm()" style="display:none">+ مريض جديد</button>
     <button class="btn btn-r btn-sm" onclick="doLogout()" style="background:rgba(184,50,50,.7);border:1px solid rgba(255,100,100,.3)">خروج</button>
   </div>
@@ -386,6 +385,7 @@ input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:10px">
       <div class="sec-title" style="margin-bottom:0">سجل المرضى المحفوظون</div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <button class="btn btn-a btn-sm" onclick="openPendingPharmModal()">🆕 مرضى من الصيدلية (<span id="pending-pharm-count">0</span>)</button>
         <span id="pt-count" class="badge bp">جاري التحميل...</span>
         <input type="text" id="pt-search" class="inp" style="width:200px;font-size:.78rem" placeholder="بحث باسم أو رقم تذكرة..." oninput="renderPatients()">
         <button class="btn btn-o btn-sm" onclick="loadPatients(true)" title="تحديث القائمة">🔄 تحديث</button>
@@ -442,45 +442,52 @@ input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
   </div>
 </div>
 
-<!-- INVENTORY MODAL -->
-<div id="inv-modal" class="modal" onclick="if(event.target===this)closeInvModal()">
-  <div class="modal-box" style="max-width:750px">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;border-bottom:2px solid var(--b);padding-bottom:12px">
-      <h2 style="font-weight:900;font-size:.95rem;color:var(--p)">📦 إدارة المخزون — الكميات الموردة</h2>
-      <div style="display:flex;gap:8px">
-        <button onclick="exportInventoryExcel()" class="btn btn-a btn-sm">📊 تصدير إكسل</button>
-        <button onclick="closeInvModal()" style="background:none;border:none;cursor:pointer;font-size:1.4rem;color:var(--tm)">✕</button>
-      </div>
-    </div>
-    <div style="display:flex;gap:8px;margin-bottom:12px">
-      <input type="text" id="inv-search" class="inp" placeholder="بحث في المخزون..." oninput="renderInvModal()" style="flex:1">
-      <select id="inv-cat-filter" class="inp" style="width:140px" onchange="renderInvModal()">
-        <option value="">كل الفئات</option>
-        <option>أدوية</option><option>مستلزمات</option><option>شرائح ومسامير</option>
-        <option>أشعة</option><option>تحاليل</option><option>أجهزة</option>
-      </select>
-    </div>
-    <div id="inv-modal-list" style="max-height:420px;overflow-y:auto"></div>
-  </div>
-</div>
 
 
 <!-- PHARMACY VIEW (for صيدلي) -->
 <div id="pharm-section" style="display:none;max-width:1320px;margin:auto;padding:20px 14px">
   <div class="card">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:10px">
-      <div class="sec-title" style="margin-bottom:0">المرضى المنتظرون — صرف الأدوية والمستلزمات</div>
+      <div class="sec-title" style="margin-bottom:0" id="pharm-section-title">المرضى المنتظرون — صرف الأدوية والمستلزمات</div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
         <span id="pharm-pt-count" class="badge bp">0 مريض</span>
         <input type="text" id="pharm-search" class="inp" style="width:200px;font-size:.78rem" placeholder="بحث باسم أو رقم تذكرة..." oninput="renderPharmPatients()">
-        <button class="btn btn-o btn-sm" onclick="loadPatients(true).then(renderPharmPatients)">🔄 تحديث</button>
+        <button class="btn btn-o btn-sm" onclick="loadPharmPatients()">🔄 تحديث</button>
+        <button class="btn btn-g btn-sm" onclick="openNewPharmPatientModal()">+ مريض جديد</button>
       </div>
     </div>
     <div id="pharm-patients-list"></div>
   </div>
 </div>
 
-<!-- PHARM PATIENT DETAIL MODAL -->
+<!-- PENDING PATIENTS FROM PHARMACY (for مدخل بيانات / مدير) -->
+<div id="pp-modal" class="modal" onclick="if(event.target===this)closePendingPharmModal()">
+  <div class="modal-box" style="max-width:650px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;border-bottom:2px solid var(--b);padding-bottom:12px">
+      <h2 style="font-weight:900;font-size:.95rem;color:var(--p)">🆕 مرضى مسجلون من الصيدلية — استكمال البيانات</h2>
+      <button onclick="closePendingPharmModal()" style="background:none;border:none;cursor:pointer;font-size:1.4rem;color:var(--tm)">✕</button>
+    </div>
+    <div id="pp-list"></div>
+  </div>
+</div>
+
+<!-- NEW PATIENT BY PHARMACIST MODAL -->
+<div id="np-modal" class="modal" onclick="if(event.target===this)closeNewPharmPatientModal()">
+  <div class="modal-box" style="max-width:480px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;border-bottom:2px solid var(--b);padding-bottom:12px">
+      <h2 style="font-weight:900;font-size:.95rem;color:var(--p)">+ تسجيل مريض جديد</h2>
+      <button onclick="closeNewPharmPatientModal()" style="background:none;border:none;cursor:pointer;font-size:1.4rem;color:var(--tm)">✕</button>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <div><label class="lbl">اسم المريض</label><input type="text" id="np_name" class="inp" placeholder="الاسم الكامل للمريض"></div>
+      <div><label class="lbl">القسم الطبي</label><select id="np_dept" class="inp"></select></div>
+      <div><label class="lbl">رقم التذكرة</label><input type="text" id="np_ticket" class="inp"></div>
+      <div id="np-err" style="color:#c0392b;font-size:.74rem;font-weight:700;display:none"></div>
+      <button onclick="saveNewPharmPatient()" class="btn btn-p" style="width:100%;justify-content:center;margin-top:6px">💾 حفظ وفتح صرف الأدوية</button>
+    </div>
+  </div>
+</div>
+
 <div id="pharm-pt-modal" class="modal" onclick="if(event.target===this)closePharmModal()">
   <div class="modal-box" style="max-width:700px">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;border-bottom:2px solid var(--b);padding-bottom:12px">
@@ -491,11 +498,12 @@ input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
     <div id="pharm-pt-info" style="background:#f0f4ff;border-radius:10px;padding:12px;margin-bottom:14px;font-size:.8rem;font-weight:700;color:var(--p)"></div>
     <!-- Barcode -->
     <div style="background:#fffbf0;border:1.5px dashed var(--a);border-radius:10px;padding:12px;margin-bottom:14px">
-      <label class="lbl" style="color:#856404">📷 إضافة/حذف بالباركود (امسح الباركود)</label>
+      <label class="lbl" style="color:#856404">📷 امسح باركود العلاج (سينتقل التركيز تلقائياً لخانة الكمية)</label>
       <input type="text" id="barcode-input" class="inp" placeholder="امسح الباركود هنا..." autocomplete="off"
-        oninput="handleBarcode(this.value)" style="font-size:.88rem;letter-spacing:.05em">
+        onkeydown="handleBarcodeKey(event)" style="font-size:.88rem;letter-spacing:.05em">
+      <div id="barcode-pending" style="display:none;margin-top:8px;padding:8px 10px;background:#fff;border-radius:8px;border:1px solid var(--b);font-size:.8rem;font-weight:700;color:var(--p)"></div>
     </div>
-    <!-- Add Item Row -->
+    <!-- Add Item Row (manual) -->
     <div style="display:grid;grid-template-columns:120px 1fr 70px 42px;gap:8px;margin-bottom:12px">
       <select id="ph_cat" onchange="resetPharmSel()" class="inp">
         <option id="ph_cat_med">أدوية</option>
@@ -506,7 +514,7 @@ input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
         <input type="text" id="ph_q" oninput="filterPharmDD()" onfocus="filterPharmDD()" onblur="hidePharmDD()" placeholder="اكتب للبحث..." class="inp">
         <div id="ph_dd" class="dd-list"></div>
       </div>
-      <input type="number" id="ph_qty" value="1" min="0.01" step="0.01" class="inp" style="text-align:center">
+      <input type="number" id="ph_qty" value="1" min="0.01" step="0.01" class="inp" style="text-align:center" onkeydown="handleQtyKey(event)">
       <button onclick="addPharmItem()" class="btn btn-p" style="padding:0;justify-content:center;width:42px;height:38px;font-size:1.2rem;flex-shrink:0">+</button>
     </div>
     <!-- Items added by pharmacist -->
@@ -514,7 +522,8 @@ input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
       <table class="tbl">
         <thead><tr>
           <th>#</th><th style="text-align:right">اسم الصنف</th><th>الفئة</th>
-          <th>الكمية</th><th>سعر الوحدة</th><th style="text-align:left">الإجمالي</th>
+          <th>الكمية المصروفة</th><th>سعر الوحدة</th><th style="text-align:left">الإجمالي</th>
+          <th>مرتجع</th>
           <th class="no-print"></th>
         </tr></thead>
         <tbody id="pharm-bill-body"></tbody>
@@ -554,7 +563,6 @@ input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
     <div class="tab-btns">
       <button class="tab-btn active" onclick="sTab('s-items')">الأصناف والأسعار</button>
       <button class="tab-btn" onclick="sTab('s-depts')">الأقسام الطبية</button>
-      <button class="tab-btn" onclick="closeSettings();openInvModal()">📦 المخزون</button>
     </div>
     <div id="s-items" class="tab-content active">
       <div class="g2" style="margin-bottom:14px">
@@ -679,8 +687,6 @@ function init(){
   $('login-screen').style.display='flex';
   
   setStatus('wait');
-  // Pre-load users & inventory in background
-  loadInventory();
   ensureAdminSeed();
   db.collection('settings').doc('main').get()
     .then(snap=>{
@@ -1063,6 +1069,7 @@ function buildInvoice(pt){
     <td style="text-align:center;font-weight:700">${fmt(f.val)}</td></tr>`).join('');
 
   let catSec='';
+  const PHARM_CATS = {'أدوية':'أدوية','مستلزمات':'مستلزمات','شرائح ومسامير':'شرائح ومسامير'};
   cats.forEach(cat=>{
     const g=items.filter(i=>i.cat===cat);if(!g.length)return;
     const ct=g.reduce((a,x)=>a+x.total,0);
@@ -1072,7 +1079,11 @@ function buildInvoice(pt){
       <tbody>
         ${g.map((i,n)=>`<tr><td style="text-align:center;color:#555">${n+1}</td><td style="text-align:center;font-weight:800;font-size:10.5pt;letter-spacing:0.5px">${i.code||'—'}</td><td>${i.name}</td><td style="text-align:center">${i.qty}</td><td style="text-align:center">${fmt(i.price)}</td><td style="text-align:center;font-weight:700">${fmt(i.total)}</td></tr>`).join('')}
         <tr style="font-weight:900"><td colspan="5" style="text-align:right;padding:4px 8px">إجمالي ${cat}</td><td style="text-align:center;padding:4px 8px;font-weight:900">${fmt(ct)}</td></tr>
-      </tbody></table></section>`;
+      </tbody></table>
+      ${PHARM_CATS[cat]?`<div class="inv-sigs" style="grid-template-columns:1fr;max-width:260px;margin:6px 0 14px auto">
+        <div class="inv-sig">صيدلي سعر الوحدة<br><small style="font-size:7.5pt;font-weight:700">(${cat})</small><br><span style="font-size:8pt;font-weight:400">الاسم: .....................</span></div>
+      </div>`:''}
+      </section>`;
   });
 
   return `<div class="inv-wrap">
@@ -1106,12 +1117,9 @@ function buildInvoice(pt){
       <tr><td class="inv-grand" style="padding:8px 10px">▌ الإجمالي الكلي المطلوب</td><td class="inv-grand" style="text-align:center;padding:8px 10px">${grand.toLocaleString('ar-EG',{minimumFractionDigits:2})} ج.م</td></tr>    </table>
   </div>
   ${notes?`<div style="margin-top:7px;padding:6px 10px;border:1.5px solid #000;font-size:9pt"><span style="font-weight:900">ملاحظات: </span>${notes}</div>`:''}
-  <div class="inv-sigs" style="grid-template-columns:1fr 1fr 1fr 1fr 1fr">
-    <div class="inv-sig">صيدلي سعر الوحدة<br><small style="font-size:7.5pt;font-weight:700">(أدوية)</small><br><span style="font-size:8pt;font-weight:400">الاسم: .....................</span></div>
-    <div class="inv-sig">صيدلي سعر الوحدة<br><small style="font-size:7.5pt;font-weight:700">(مستلزمات)</small><br><span style="font-size:8pt;font-weight:400">الاسم: .....................</span></div>
-    <div class="inv-sig">صيدلي سعر الوحدة<br><small style="font-size:7.5pt;font-weight:700">(شرائح ومسامير)</small><br><span style="font-size:8pt;font-weight:400">الاسم: .....................</span></div>
+  <div class="inv-sigs" style="grid-template-columns:1fr 1fr">
     <div class="inv-sig">مدخل البيانات<br><br><span style="font-size:8pt;font-weight:400">الاسم: .....................</span></div>
-    <div class="inv-sig">الشئون المالية — يعتمد<br><br><span style="font-size:8pt;font-weight:400">الاسم: .....................</span></div>
+    <div class="inv-sig">مكتب القرارات — يعتمد<br><br><span style="font-size:8pt;font-weight:400">الاسم: .....................</span></div>
   </div>
   <div style="text-align:center;font-size:8pt;color:#555;margin-top:10px;border-top:1px solid #999;padding-top:5px">مستشفى سوهاج العام — تاريخ الطباعة: ${new Date().toLocaleDateString('ar-EG')}</div>
   </div>
@@ -1238,6 +1246,7 @@ function getFormData(){
     fAnes:parseFloat(Vv('f_anes'))||0,  fOr:parseFloat(Vv('f_or'))||0,
     fEcg:parseFloat(Vv('f_ecg'))||0,    fPhysio:parseFloat(Vv('f_physio'))||0,
     fOxy:parseFloat(Vv('f_oxy'))||0,    fBlood:parseFloat(Vv('f_blood'))||0,
+    finalized: true, // مدخل بيانات/مدير أكمل بيانات المريض بالكامل من هذه الشاشة
   };
 }
 
@@ -1272,6 +1281,20 @@ async function savePatient(){
     alert('⚠️ يرجى إدخال المجموعة لقسم العظام'); return;
   }
 
+  // منع تكرار رقم التذكرة في نفس القسم (يُسمح بنفس الرقم في قسم مختلف)
+  // عند التعديل (editId) نتجاهل سجل المريض نفسه من فحص التكرار
+  try{
+    const dupSnap = await db.collection('patients')
+      .where('ticket','==', ticket)
+      .where('dept','==', dept)
+      .get();
+    const dup = dupSnap.docs.find(d=>d.id !== editId);
+    if(dup){
+      alert('⚠️ تم تسجيل هذا المريض من قبل (رقم التذكرة '+ticket+' مسجل بالفعل في قسم '+dept+')');
+      return;
+    }
+  }catch(e){ alert('❌ خطأ في التحقق من رقم التذكرة: '+e.message); return; }
+
   const pt={...getFormData(), savedAt:firebase.firestore.FieldValue.serverTimestamp(), savedBy: currentUser?currentUser.name:'', savedByRole: currentUser?currentUser.role:''};
   setStatus('save');
   try{
@@ -1280,6 +1303,7 @@ async function savePatient(){
     editId=null; clearForm();
     alert('✅ تم حفظ بيانات المريض:\n'+name+'\nالإجمالي: '+fmt(pt.total)+' ج.م');
     await loadPatients(true);
+    loadPendingPharmCount();
   }catch(e){alert('❌ خطأ في الحفظ:\n'+e.message);setStatus('err');}
 }
 
@@ -1364,6 +1388,42 @@ function renderPatients(){
     </div>`).join('');
   updateLoadMoreBtn(allLoaded?'done':'more');
 }
+
+/* ========== مرضى مسجلون من الصيدلية بانتظار استكمال البيانات ========== */
+let pendingPharmPatients = [];
+
+async function loadPendingPharmCount(){
+  try{
+    const snap = await db.collection('patients').where('finalized','==', false).get();
+    pendingPharmPatients = snap.docs.map(d=>({...d.data(), firestoreId:d.id}));
+    const el = $('pending-pharm-count');
+    if(el) el.textContent = pendingPharmPatients.length;
+  }catch(e){ console.error('loadPendingPharmCount:', e); }
+}
+
+function openPendingPharmModal(){
+  loadPendingPharmCount().then(renderPendingPharmList);
+  $('pp-modal').style.display='flex';
+}
+function closePendingPharmModal(){ $('pp-modal').style.display='none'; }
+
+function renderPendingPharmList(){
+  const el = $('pp-list');
+  if(!pendingPharmPatients.length){
+    el.innerHTML = `<div style="text-align:center;padding:24px;color:var(--tm)">لا يوجد مرضى بانتظار استكمال البيانات</div>`;
+    return;
+  }
+  el.innerHTML = pendingPharmPatients.map(pt=>`
+    <div class="um-row">
+      <div>
+        <span style="font-weight:900;font-size:.85rem">${pt.name||'—'}</span>
+        <span style="font-size:.69rem;color:var(--tm);margin-right:8px">📋 ${pt.dept||'—'} — 🏷 ${pt.stype||'—'} ${pt.ticket?'— 🎫 '+pt.ticket:''}</span>
+        ${pt.savedBy?`<div style="font-size:.65rem;color:var(--tm);margin-top:2px">سجّله: ${pt.savedBy}</div>`:''}
+      </div>
+      <button onclick="closePendingPharmModal();editPatient('${pt.firestoreId}')" class="btn btn-p btn-sm">✏ استكمال البيانات</button>
+    </div>`).join('');
+}
+
 
 /* ========== EXCEL EXPORT ========== */
 function exportAllExcel(){
@@ -1635,7 +1695,7 @@ function applyRoleUI(){
     // Hide everything
     $('main-content').style.display='none';
     $('pharm-section').style.display='none';
-    ['btn-admin','btn-users','btn-excel-all','btn-excel-pharm','btn-excel-inv','btn-new-patient','current-user-badge'].forEach(id=>{
+    ['btn-admin','btn-users','btn-excel-all','btn-excel-pharm','btn-new-patient','current-user-badge'].forEach(id=>{
       const el=$(id); if(el) el.style.display='none';
     });
     return;
@@ -1653,7 +1713,6 @@ function applyRoleUI(){
     if(role==='admin'){
       $('btn-admin').style.display='';
       $('btn-users').style.display='';
-      $('btn-excel-inv').style.display='';
     }
     $('btn-excel-all').style.display='';
     $('btn-new-patient').style.display='';
@@ -1663,17 +1722,17 @@ function applyRoleUI(){
       $('btn-admin').style.display='none';
       $('btn-users').style.display='none';
     }
+    loadPendingPharmCount();
   } else if(role === 'nafaqa' || role === 'tamin'){
     // Pharmacist view
     $('main-content').style.display='none';
     $('pharm-section').style.display='';
     $('btn-excel-pharm').style.display='';
-    $('btn-excel-inv').style.display=role==='admin'?'':'none';
     $('btn-admin').style.display='none';
     $('btn-users').style.display='none';
     $('btn-excel-all').style.display='none';
     $('btn-new-patient').style.display='none';
-    renderPharmPatients();
+    loadPharmPatients();
   }
 }
 
@@ -1745,101 +1804,50 @@ async function resetUserPass(uid, name){
   }catch(e){ alert('❌ خطأ: '+e.message); }
 }
 
-/* ========== INVENTORY MANAGEMENT ========== */
-let inventoryDB = {}; // {cat: [{name, stock, ...}]}
-
-async function loadInventory(){
-  try{
-    const snap = await db.collection('inventory').doc('main').get();
-    if(snap.exists) inventoryDB = snap.data().items || {};
-    else inventoryDB = {};
-  }catch(e){ inventoryDB = {}; }
-}
-
-async function saveInventory(){
-  try{
-    await db.collection('inventory').doc('main').set({items: inventoryDB, updatedAt: firebase.firestore.FieldValue.serverTimestamp()});
-  }catch(e){ console.error('saveInventory:', e); }
-}
-
-function getStock(cat, name){
-  if(!inventoryDB[cat]) return null;
-  const entry = inventoryDB[cat].find(x=>x.name===name);
-  return entry ? entry.stock : null;
-}
-
-function adjustStock(cat, name, delta){
-  if(!inventoryDB[cat]) inventoryDB[cat]=[];
-  let entry = inventoryDB[cat].find(x=>x.name===name);
-  if(!entry){ entry={name, stock:0}; inventoryDB[cat].push(entry); }
-  entry.stock = Math.max(0, (entry.stock||0) + delta);
-  saveInventory();
-}
-
-function openInvModal(){ loadInventory().then(renderInvModal); $('inv-modal').style.display='flex'; }
-function closeInvModal(){ $('inv-modal').style.display='none'; }
-
-function renderInvModal(){
-  const q = ($('inv-search').value||'').toLowerCase();
-  const catFilter = $('inv-cat-filter').value;
-  const cats = catFilter ? [catFilter] : ['أدوية','مستلزمات','شرائح ومسامير','أشعة','تحاليل','أجهزة'];
-  let html = '';
-  cats.forEach(cat=>{
-    const arr = itemDB[cat]||[];
-    const filtered = arr.filter(x=> !q || x.name.toLowerCase().includes(q));
-    if(!filtered.length) return;
-    html += `<div style="margin-bottom:14px">
-      <div style="font-size:.69rem;font-weight:900;color:var(--tm);padding:4px 9px;background:var(--s2);border-radius:5px;margin-bottom:5px">${cat}</div>
-      ${filtered.map(x=>{
-        const stock = getStock(cat, x.name);
-        const stockVal = stock===null?0:stock;
-        const low = stockVal < 5;
-        return `<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 10px;background:#fff;border-radius:6px;margin-bottom:3px;border:1px solid var(--b);gap:8px;flex-wrap:wrap">
-          <div style="flex:1;min-width:120px">
-            <span style="font-size:.78rem;font-weight:700">${x.name}</span>
-            <span class="inv-badge ${low?'low-stock':''}" style="margin-right:6px">مخزون: ${stockVal}</span>
-          </div>
-          <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
-            <span style="font-size:.7rem;color:var(--tm)">إضافة كمية:</span>
-            <input type="number" id="inv-add-${cat}-${x.name.replace(/\s/g,'_')}" class="inp" value="" min="1" step="1"
-              style="width:72px;padding:3px 6px;font-size:.78rem;text-align:center">
-            <button onclick="doAddStock('${cat}','${x.name}')" class="btn btn-g btn-sm">+ ورود</button>
-          </div>
-        </div>`;
-      }).join('')}
-    </div>`;
-  });
-  $('inv-modal-list').innerHTML = html || '<p style="text-align:center;color:var(--tm);padding:14px">لا نتائج</p>';
-}
-
-function doAddStock(cat, name){
-  const key = `inv-add-${cat}-${name.replace(/\s/g,'_')}`;
-  const el = document.getElementById(key);
-  const qty = parseInt(el?el.value:'0');
-  if(!qty || qty <= 0){ alert('أدخل كمية صحيحة'); return; }
-  adjustStock(cat, name, qty);
-  renderInvModal();
-  // Log
-  db.collection('auditLog').add({action:'stock_add', cat, name, qty, user: currentUser?currentUser.name:'', at: firebase.firestore.FieldValue.serverTimestamp()}).catch(()=>{});
-}
-
 /* ========== PHARMACY VIEW ========== */
 let pharmCurrentPatient = null; // the patient being edited by pharmacist
-let pharmBillItems = []; // items added by pharmacist in modal
+let pharmBillItems = []; // items added by pharmacist in modal {cat,name,code,qty,price,total,returned,addedBy}
+let pharmPatients = []; // patients loaded specifically for the pharmacy view (own stype, not finalized)
+let pendingBarcodeItem = null; // {cat, name, code, price} waiting for qty entry after a scan
+
+/* خريطة نوع الخدمة <-> دور الصيدلي */
+const STYPE_FOR_ROLE = { nafaqa: 'نفقة دولة', tamin: 'تأمين صحي' };
+
+async function loadPharmPatients(){
+  const role = currentUser ? currentUser.role : '';
+  const myStype = STYPE_FOR_ROLE[role];
+  if(!myStype){ pharmPatients=[]; renderPharmPatients(); return; }
+  $('pharm-patients-list').innerHTML = `<div style="text-align:center;padding:24px;color:var(--tm)">⏳ جاري التحميل...</div>`;
+  try{
+    const snap = await db.collection('patients')
+      .where('stype','==', myStype)
+      .where('finalized','==', false)
+      .get();
+    pharmPatients = snap.docs.map(d=>({...d.data(), firestoreId:d.id}));
+    // الأحدث أولاً (بدون الاعتماد على فهرس مركّب، نرتب يدوياً)
+    pharmPatients.sort((a,b)=>{
+      const ta = a.savedAt && a.savedAt.toMillis ? a.savedAt.toMillis() : 0;
+      const tb = b.savedAt && b.savedAt.toMillis ? b.savedAt.toMillis() : 0;
+      return tb - ta;
+    });
+  }catch(e){
+    console.error('loadPharmPatients:', e);
+    pharmPatients = [];
+  }
+  renderPharmPatients();
+}
 
 function renderPharmPatients(){
   const role = currentUser ? currentUser.role : '';
+  $('pharm-section-title').textContent = role==='nafaqa'
+    ? 'مرضى نفقة الدولة — صرف الأدوية والمستلزمات'
+    : 'مرضى التأمين الصحي — صرف الأدوية والمستلزمات';
   const q = ($('pharm-search').value||'').toLowerCase();
-  // Show only patients that haven't been discharged (no exitRaw set by data entry)
-  // Pharmacist sees all active (not discharged) patients
-  const list = patients.filter(p=> {
-    const match = !q || (p.name||'').toLowerCase().includes(q) || (p.ticket||'').includes(q);
-    return match;
-  });
+  const list = pharmPatients.filter(p=> !q || (p.name||'').toLowerCase().includes(q) || (p.ticket||'').includes(q));
   $('pharm-pt-count').textContent = list.length + ' مريض';
   const el = $('pharm-patients-list');
   if(!list.length){
-    el.innerHTML = `<div style="text-align:center;padding:24px;color:var(--tm)">لا يوجد مرضى</div>`;
+    el.innerHTML = `<div style="text-align:center;padding:24px;color:var(--tm)">لا يوجد مرضى منتظرون</div>`;
     return;
   }
   el.innerHTML = list.map(pt=>`
@@ -1848,7 +1856,6 @@ function renderPharmPatients(){
         <div style="font-weight:900;font-size:.9rem">${pt.name||'—'}</div>
         <div style="font-size:.69rem;color:var(--tm);margin-top:3px;display:flex;flex-wrap:wrap;gap:8px">
           <span>📋 ${pt.dept||'—'}</span>
-          <span>🏷 ${pt.stype||'—'}</span>
           ${pt.ticket?`<span>🎫 ${pt.ticket}</span>`:''}
         </div>
       </div>
@@ -1863,34 +1870,87 @@ function countPharmItems(pt){
   return (pt.items||[]).filter(i=>i.cat==='أدوية'||i.cat==='مستلزمات'||i.cat==='شرائح ومسامير').length;
 }
 
+/* ===== تسجيل مريض جديد بواسطة الصيدلي ===== */
+function openNewPharmPatientModal(){
+  $('np_dept').innerHTML = depts.map(x=>`<option>${x}</option>`).join('');
+  $('np_name').value=''; $('np_ticket').value='';
+  $('np-err').style.display='none';
+  $('np-modal').style.display='flex';
+}
+function closeNewPharmPatientModal(){ $('np-modal').style.display='none'; }
+
+async function saveNewPharmPatient(){
+  const name = ($('np_name').value||'').trim();
+  const dept = $('np_dept').value;
+  const ticket = ($('np_ticket').value||'').trim();
+  const errEl = $('np-err');
+  errEl.style.display='none';
+
+  if(!name){ errEl.textContent='⚠️ يرجى إدخال اسم المريض'; errEl.style.display='block'; return; }
+  if(!dept){ errEl.textContent='⚠️ يرجى اختيار القسم الطبي'; errEl.style.display='block'; return; }
+  if(!ticket){ errEl.textContent='⚠️ يرجى إدخال رقم التذكرة'; errEl.style.display='block'; return; }
+
+  const role = currentUser.role;
+  const myStype = STYPE_FOR_ROLE[role];
+
+  // منع تكرار رقم التذكرة في نفس القسم (يسمح بنفس الرقم في قسم مختلف)
+  try{
+    const dupSnap = await db.collection('patients')
+      .where('ticket','==', ticket)
+      .where('dept','==', dept)
+      .limit(1).get();
+    if(!dupSnap.empty){
+      errEl.textContent='⚠️ تم تسجيل هذا المريض من قبل (رقم التذكرة ' + ticket + ' مسجل بالفعل في قسم ' + dept + ')';
+      errEl.style.display='block';
+      return;
+    }
+  }catch(e){
+    errEl.textContent='❌ خطأ في التحقق من رقم التذكرة: '+e.message; errEl.style.display='block'; return;
+  }
+
+  const newPt = {
+    name, dept, ticket, stype: myStype,
+    items: [], fixed: [], feesSum:0, itemsSum:0, total:0,
+    fStay:0, fMed:0, fNur:0, fDoc:0, fAnes:0, fOr:0, fEcg:0, fPhysio:0, fOxy:0, fBlood:0,
+    finalized: false, // لم يُكمل مدخل البيانات بياناته بعد
+    savedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    savedBy: currentUser.name, savedByRole: currentUser.role,
+  };
+
+  try{
+    const ref = await db.collection('patients').add(newPt);
+    closeNewPharmPatientModal();
+    await loadPharmPatients();
+    openPharmModal(ref.id);
+  }catch(e){ errEl.textContent='❌ خطأ في الحفظ: '+e.message; errEl.style.display='block'; }
+}
+
 function openPharmModal(fid){
-  const pt = patients.find(p=>p.firestoreId===fid);
+  const pt = pharmPatients.find(p=>p.firestoreId===fid);
   if(!pt) return;
   pharmCurrentPatient = pt;
   pharmBillItems = JSON.parse(JSON.stringify((pt.items||[]).filter(i=>
     i.cat==='أدوية'||i.cat==='مستلزمات'||i.cat==='شرائح ومسامير'
-  )));
-  
+  ))).map(i=>({...i, returned: i.returned||0}));
+
   $('pharm-pt-title').textContent = 'صرف أدوية ومستلزمات — ' + (pt.name||'');
   $('pharm-pt-info').innerHTML = `
     <span>👤 ${pt.name||'—'}</span>
     <span style="margin:0 12px">📋 ${pt.dept||'—'}</span>
-    <span>🏷 ${pt.stype||'—'}</span>
     ${pt.ticket?`<span style="margin-right:12px">🎫 ${pt.ticket}</span>`:''}
   `;
-  
-  // Filter categories by role
-  const role = currentUser.role;
-  const showList = role==='nafaqa' ? 'nafaqa' : 'tamin';
-  // Update category options
+
   resetPharmSel();
+  pendingBarcodeItem = null;
   $('barcode-input').value = '';
-  
+  $('barcode-pending').style.display='none';
+
   renderPharmBill();
   $('pharm-pt-modal').style.display='flex';
+  setTimeout(()=>$('barcode-input').focus(), 150);
 }
 
-function closePharmModal(){ $('pharm-pt-modal').style.display='none'; pharmCurrentPatient=null; pharmBillItems=[]; }
+function closePharmModal(){ $('pharm-pt-modal').style.display='none'; pharmCurrentPatient=null; pharmBillItems=[]; pendingBarcodeItem=null; }
 
 function getPharmItemList(){
   const cat = Vv('ph_cat');
@@ -1898,7 +1958,7 @@ function getPharmItemList(){
   const listType = role==='nafaqa' ? 'nafaqa' : role==='tamin' ? 'tamin' : null;
   const arr = (itemDB[cat]||[]).filter(x=>{
     if(!listType) return true;
-    if(cat!=='أدوية' && cat!=='مستلزمات') return true; // شرائح etc show for both
+    if(cat!=='أدوية' && cat!=='مستلزمات') return true; // شرائح etc تظهر للجميع
     return !x.list || x.list==='all' || x.list===listType;
   });
   return arr;
@@ -1921,45 +1981,74 @@ function filterPharmDD(){
 }
 function selectPharmItem(name){ $('ph_q').value=name; $('ph_dd').style.display='none'; $('ph_qty').focus(); }
 
-function handleBarcode(val){
-  if(!val || val.length < 3) return;
-  // Search by code in all allowed items
+/* ===== الباركود: يُلتقط من قارئ باركود متصل بكابل (يعمل مثل لوحة مفاتيح) =====
+   عند مسح الكود تُكتب الحروف في الخانة، وعند نهاية المسح يرسل القارئ Enter.
+   عند Enter: لو مفيش صنف معلّق -> نبحث عن الصنف بالكود ونعرض اسمه وننتقل لخانة الكمية تلقائياً.
+              لو فيه صنف معلّق (يعني المستخدم دلوقتي في انتظار إدخال الكمية) -> Enter يضيف الصنف للفاتورة. */
+function handleBarcodeKey(e){
+  if(e.key !== 'Enter') return;
+  e.preventDefault();
+  const val = (e.target.value||'').trim();
+  if(!val) return;
+
   const role = currentUser ? currentUser.role : '';
   const listType = role==='nafaqa' ? 'nafaqa' : role==='tamin' ? 'tamin' : null;
-  let found = null;
-  let foundCat = '';
+  let found = null, foundCat = '';
   const cats = ['أدوية','مستلزمات','شرائح ومسامير'];
   for(const cat of cats){
     const arr = (itemDB[cat]||[]);
-    const match = arr.find(x=> x.code && x.code.toLowerCase()===val.trim().toLowerCase());
+    const match = arr.find(x=> x.code && x.code.toLowerCase()===val.toLowerCase());
     if(match){
-      if(cat==='أدوية'||cat==='مستلزمات'){
-        if(listType && match.list && match.list!=='all' && match.list!==listType) continue;
-      }
+      if((cat==='أدوية'||cat==='مستلزمات') && listType && match.list && match.list!=='all' && match.list!==listType) continue;
       found = match; foundCat = cat; break;
     }
   }
-  
-  if(!found){ 
-    // Check if it's a delete barcode (prefix del:)
-    if(val.startsWith('del:')){
-      const code = val.replace('del:','').trim();
-      const idx = pharmBillItems.findIndex(x=>x.code===code);
-      if(idx>=0){ pharmBillItems.splice(idx,1); renderPharmBill(); }
-    }
-    $('barcode-input').value=''; return; 
+
+  if(!found){
+    $('barcode-pending').style.display='block';
+    $('barcode-pending').style.color='#c0392b';
+    $('barcode-pending').textContent = '❌ لا يوجد صنف بهذا الباركود: ' + val;
+    e.target.value=''; pendingBarcodeItem=null;
+    return;
   }
-  
-  // Check if already in list - increment qty
-  const existing = pharmBillItems.find(x=>x.name===found.name && x.cat===foundCat);
-  if(existing){ existing.qty+=1; existing.total=existing.qty*existing.price; }
+
+  // يظهر اسم الصنف وينتقل التركيز مباشرة لخانة الكمية — بدون تدخل المستخدم بالماوس أو الكيبورد
+  pendingBarcodeItem = {cat:foundCat, name:found.name, code:found.code||'', price:found.price};
+  $('barcode-pending').style.display='block';
+  $('barcode-pending').style.color='var(--p)';
+  $('barcode-pending').innerHTML = `✅ ${found.name} <span style="color:var(--tm);font-weight:400">— ${foundCat} — ${found.price} ج.م</span>`;
+  e.target.value='';
+  $('ph_qty').value='';
+  $('ph_qty').focus();
+}
+
+/* عند الضغط Enter داخل خانة الكمية بعد مسح الباركود: يضيف الصنف للفاتورة مباشرة (مثل الضغط على +) */
+function handleQtyKey(e){
+  if(e.key !== 'Enter') return;
+  e.preventDefault();
+  if(pendingBarcodeItem){
+    addBarcodeItemWithQty();
+  } else {
+    addPharmItem();
+  }
+}
+
+function addBarcodeItemWithQty(){
+  if(!pendingBarcodeItem) return;
+  const qty = parseFloat($('ph_qty').value);
+  if(!qty || qty<=0){ alert('⚠️ أدخل الكمية المصروفة'); return; }
+  const {cat, name, code, price} = pendingBarcodeItem;
+  const existing = pharmBillItems.find(x=>x.name===name && x.cat===cat);
+  if(existing){ existing.qty+=qty; existing.total=parseFloat((existing.qty*existing.price).toFixed(2)); }
   else {
-    pharmBillItems.push({cat:foundCat, name:found.name, code:found.code||'', qty:1, price:found.price, total:found.price, addedBy:currentUser?currentUser.name:''});
+    pharmBillItems.push({cat, name, code, qty, price, total:parseFloat((qty*price).toFixed(2)), returned:0, addedBy:currentUser?currentUser.name:''});
   }
   renderPharmBill();
+  pendingBarcodeItem = null;
+  $('ph_qty').value='';
+  $('barcode-pending').style.display='none';
   $('barcode-input').value='';
-  // Decrease stock
-  adjustStock(foundCat, found.name, -1);
+  $('barcode-input').focus();
 }
 
 function addPharmItem(){
@@ -1972,93 +2061,108 @@ function addPharmItem(){
   const items = itemDB[cat]||[];
   let item = items.find(x=>x.name===name);
   if(!item){ alert('الصنف غير موجود في القائمة'); return; }
-  // Check list permission
   if((cat==='أدوية'||cat==='مستلزمات') && listType && item.list && item.list!=='all' && item.list!==listType){
     alert('⚠️ هذا الصنف غير متاح لنوع خدمتك'); return;
   }
   const existing = pharmBillItems.find(x=>x.name===name && x.cat===cat);
   if(existing){ existing.qty+=qty; existing.total=parseFloat((existing.qty*existing.price).toFixed(2)); }
   else {
-    pharmBillItems.push({cat, name, code:item.code||'', qty, price:item.price, total:parseFloat((qty*item.price).toFixed(2)), addedBy:currentUser?currentUser.name:''});
+    pharmBillItems.push({cat, name, code:item.code||'', qty, price:item.price, total:parseFloat((qty*item.price).toFixed(2)), returned:0, addedBy:currentUser?currentUser.name:''});
   }
-  // Decrease stock
-  adjustStock(cat, name, -qty);
   renderPharmBill();
   $('ph_q').value=''; $('ph_qty').value=1;
 }
 
 function removePharmItem(idx){
-  const it = pharmBillItems[idx];
-  if(it) adjustStock(it.cat, it.name, it.qty); // restore stock
   pharmBillItems.splice(idx,1);
+  renderPharmBill();
+}
+
+/* تحديث كمية المرتجع لصنف معيّن — تُطرح من الكمية الصافية المصروفة وتُعاد للمخزون */
+function setPharmReturn(idx, val){
+  const it = pharmBillItems[idx];
+  if(!it) return;
+  let ret = parseFloat(val)||0;
+  if(ret < 0) ret = 0;
+  if(ret > it.qty) ret = it.qty;
+  it.returned = ret;
   renderPharmBill();
 }
 
 function renderPharmBill(){
   const body = $('pharm-bill-body');
-  if(!pharmBillItems.length){ body.innerHTML=`<tr><td colspan="7" style="text-align:center;color:var(--tm);padding:14px">لا يوجد أصناف</td></tr>`; $('pharm-subtotal').textContent=''; return; }
-  body.innerHTML = pharmBillItems.map((it,i)=>`
-    <tr>
+  if(!pharmBillItems.length){ body.innerHTML=`<tr><td colspan="8" style="text-align:center;color:var(--tm);padding:14px">لا يوجد أصناف</td></tr>`; $('pharm-subtotal').textContent=''; return; }
+  body.innerHTML = pharmBillItems.map((it,i)=>{
+    const net = Math.max(0, it.qty - (it.returned||0));
+    const netTotal = parseFloat((net*it.price).toFixed(2));
+    return `<tr>
       <td>${i+1}</td>
       <td>${it.name}${it.addedBy?`<span style="font-size:.6rem;color:var(--tm);margin-right:4px">(${it.addedBy})</span>`:''}</td>
       <td>${it.cat}</td>
       <td style="text-align:center">${it.qty}</td>
       <td style="text-align:center">${it.price}</td>
-      <td style="text-align:left;font-weight:700">${(it.total).toFixed(2)}</td>
+      <td style="text-align:left;font-weight:700">${netTotal.toFixed(2)}</td>
+      <td style="text-align:center">
+        <input type="number" value="${it.returned||0}" min="0" max="${it.qty}" step="1"
+          oninput="setPharmReturn(${i}, this.value)" class="inp" style="width:60px;padding:3px 4px;text-align:center;font-size:.78rem">
+      </td>
       <td><button onclick="removePharmItem(${i})" style="background:none;border:none;cursor:pointer;color:#e57373;font-size:.95rem">🗑</button></td>
-    </tr>`).join('');
-  const sub = pharmBillItems.reduce((s,i)=>s+i.total,0);
-  $('pharm-subtotal').textContent = 'إجمالي الأدوية والمستلزمات: ' + sub.toFixed(2) + ' ج.م';
+    </tr>`;
+  }).join('');
+  const sub = pharmBillItems.reduce((s,i)=>{
+    const net = Math.max(0, i.qty - (i.returned||0));
+    return s + net*i.price;
+  },0);
+  $('pharm-subtotal').textContent = 'إجمالي الأدوية والمستلزمات (بعد المرتجع): ' + sub.toFixed(2) + ' ج.م';
 }
 
 async function savePharmItems(){
   if(!pharmCurrentPatient) return;
   if(!pharmBillItems.length && !confirm('لم تتم إضافة أي أصناف، هل تريد الحفظ؟')) return;
-  
-  // Merge with existing non-pharm items
+
+  // الكمية الصافية = المصروف - المرتجع (المرتجع يرجع للمخزون فلا يُحسب في الفاتورة)
+  const finalItems = pharmBillItems.map(it=>{
+    const net = Math.max(0, it.qty - (it.returned||0));
+    return {...it, qty: net, total: parseFloat((net*it.price).toFixed(2))};
+  }).filter(it=>it.qty > 0);
+
+  // Merge with existing non-pharm items (أشعة/تحاليل/أجهزة/خدمات أخرى التي يضيفها مدخل البيانات)
   const existingOther = (pharmCurrentPatient.items||[]).filter(i=> i.cat!=='أدوية' && i.cat!=='مستلزمات' && i.cat!=='شرائح ومسامير');
-  const merged = [...existingOther, ...pharmBillItems];
-  
-  // Recalculate total
-  const pharmTotal = pharmBillItems.reduce((s,i)=>s+i.total,0);
-  const otherTotal = existingOther.reduce((s,i)=>s+(i.total||0),0);
-  
-  // Build updated patient
+  const merged = [...existingOther, ...finalItems];
+
   const updated = {
     ...pharmCurrentPatient,
     items: merged,
     pharmSavedBy: currentUser.name,
     pharmSavedAt: firebase.firestore.FieldValue.serverTimestamp(),
   };
-  // Recalc total from fees + items
   const fees = (updated.fStay||0)+(updated.fMed||0)+(updated.fNur||0)+(updated.fDoc||0)+
                (updated.fAnes||0)+(updated.fOr||0)+(updated.fEcg||0)+(updated.fPhysio||0)+(updated.fOxy||0)+(updated.fBlood||0);
   updated.total = fees + merged.reduce((s,i)=>s+(i.total||0),0);
-  
+
   try{
     await db.collection('patients').doc(pharmCurrentPatient.firestoreId).set(updated);
-    db.collection('auditLog').add({action:'pharm_save', patient:pharmCurrentPatient.name, items:pharmBillItems.length, user:currentUser.name, role:currentUser.role, at:firebase.firestore.FieldValue.serverTimestamp()}).catch(()=>{});
+    db.collection('auditLog').add({action:'pharm_save', patient:pharmCurrentPatient.name, items:finalItems.length, user:currentUser.name, role:currentUser.role, at:firebase.firestore.FieldValue.serverTimestamp()}).catch(()=>{});
     alert('✅ تم حفظ الصرف للمريض: ' + pharmCurrentPatient.name);
     closePharmModal();
-    await loadPatients(true);
-    renderPharmPatients();
+    await loadPharmPatients();
   }catch(e){ alert('❌ خطأ في الحفظ: '+e.message); }
 }
 
 /* ========== PHARMACY EXCEL EXPORT ========== */
 function exportPharmExcel(){
-  if(!patients.length){ alert('لا يوجد مرضى'); return; }
+  if(!pharmPatients.length){ alert('لا يوجد مرضى لعرضهم في الشيت'); return; }
   
   const wb = XLSX.utils.book_new();
   
   // Build per-patient detail rows
   // Headers: م | اسم المريض | [med1 | qty1 | med2 | qty2...] | [sup1 | qty1...]
-  // Collect all unique med/supply names
+  // Collect all unique med/supply names من مرضى الصيدلي الحالي فقط (نفقة أو تأمين)
   const allMeds = new Set();
   const allSups = new Set();
   const allScrew = new Set();
   
-  patients.forEach(pt=>{
+  pharmPatients.forEach(pt=>{
     (pt.items||[]).forEach(it=>{
       if(it.cat==='أدوية') allMeds.add(it.name);
       else if(it.cat==='مستلزمات') allSups.add(it.name);
@@ -2077,7 +2181,7 @@ function exportPharmExcel(){
   screwList.forEach(s=>{ hdr.push(s); hdr.push('كمية'); });
   
   const rows = [hdr];
-  patients.forEach((pt, idx)=>{
+  pharmPatients.forEach((pt, idx)=>{
     const row = [idx+1, pt.name||''];
     const itemMap = {};
     (pt.items||[]).forEach(it=>{ itemMap[it.cat+'|'+it.name] = it.qty||0; });
@@ -2093,27 +2197,6 @@ function exportPharmExcel(){
   XLSX.writeFile(wb, 'شيت_الصيدلية_'+new Date().toISOString().slice(0,10)+'.xlsx');
 }
 
-function exportInventoryExcel(){
-  if(!Object.keys(inventoryDB).length){ loadInventory().then(()=>{
-    if(!Object.keys(inventoryDB).length){ alert('المخزون فارغ'); return; } _doInvExcel();
-  }); return; }
-  _doInvExcel();
-}
-function _doInvExcel(){
-  const hdr = ['م','الفئة','اسم الصنف','المخزون الحالي'];
-  const rows = [hdr];
-  let idx=1;
-  ['أدوية','مستلزمات','شرائح ومسامير','أشعة','تحاليل','أجهزة'].forEach(cat=>{
-    (inventoryDB[cat]||[]).forEach(x=>{
-      rows.push([idx++, cat, x.name, x.stock||0]);
-    });
-  });
-  const ws = XLSX.utils.aoa_to_sheet(rows);
-  ws['!cols'] = [{wch:6},{wch:16},{wch:28},{wch:14}];
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'المخزون');
-  XLSX.writeFile(wb, 'شيت_المخزون_'+new Date().toISOString().slice(0,10)+'.xlsx');
-}
 
 // منع تغيير الأرقام بعجلة الماوس وأسهم لوحة المفاتيح
 document.addEventListener('wheel', function(e){
