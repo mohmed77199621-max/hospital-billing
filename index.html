@@ -188,6 +188,7 @@ input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
   <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
     <div id="current-user-badge" style="display:none;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);border-radius:8px;padding:5px 12px;color:#fff;font-size:.75rem;font-weight:700"></div>
     <button id="btn-admin" class="btn btn-o" onclick="openSettings()" style="display:none;color:#a8c4ff;border-color:rgba(255,255,255,.25);background:rgba(255,255,255,.08)">⚙ إدارة النظام</button>
+    <button id="btn-pharm-settings" class="btn btn-o" onclick="openSettings()" style="display:none;color:#a8c4ff;border-color:rgba(255,255,255,.25);background:rgba(255,255,255,.08)">⚙ تعديل قائمة الأدوية</button>
     <button id="btn-users" class="btn btn-o" onclick="openUserMgmt()" style="display:none;color:#a8c4ff;border-color:rgba(255,255,255,.25);background:rgba(255,255,255,.08)">👥 المستخدمين</button>
     <button id="btn-excel-pharm" class="btn btn-a" onclick="exportPharmExcel()" style="display:none">📊 شيت الصيدلية</button>
     <button id="btn-excel-all" class="btn btn-a" onclick="exportAllExcel()" style="display:none">📊 تصدير الكل إكسل</button>
@@ -560,20 +561,22 @@ input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
       <h2 style="font-weight:900;font-size:.95rem;color:var(--p)">⚙ إدارة بيانات النظام</h2>
       <button onclick="closeSettings()" style="background:none;border:none;cursor:pointer;font-size:1.4rem;color:var(--tm)">✕</button>
     </div>
-    <div class="tab-btns">
-      <button class="tab-btn active" onclick="sTab('s-items')">الأصناف والأسعار</button>
+    <div class="tab-btns" id="settings-tabs">
+      <button class="tab-btn active" onclick="sTab('s-items')">قائمة مدخل البيانات</button>
+      <button class="tab-btn" id="tab-nafaqa-btn" onclick="sTab('s-nafaqa')" style="background:#fffbee;color:#856404">قائمة نفقة الدولة</button>
+      <button class="tab-btn" id="tab-tamin-btn" onclick="sTab('s-tamin')" style="background:#eef9ff;color:#0c5460">قائمة التأمين</button>
       <button class="tab-btn" onclick="sTab('s-depts')">الأقسام الطبية</button>
     </div>
+
+    <!-- تبويب القائمة الأصلية (مدخل البيانات) -->
     <div id="s-items" class="tab-content active">
+      <div style="background:#fff3cd;border-right:3px solid #856404;padding:7px 12px;border-radius:6px;margin-bottom:12px;font-size:.72rem;color:#856404;font-weight:700">
+        📋 هذه القائمة خاصة بمدخل البيانات (أشعة، تحاليل، أجهزة، خدمات أخرى، وكل الأصناف العامة)
+      </div>
       <div class="g2" style="margin-bottom:14px">
         <div style="background:#f0f4ff;padding:14px;border-radius:10px">
           <div style="font-size:.74rem;font-weight:900;color:var(--p);margin-bottom:10px">➕ إضافة صنف</div>
           <select id="s_cat" class="inp" style="margin-bottom:7px"><option>أدوية</option><option>مستلزمات</option><option>شرائح ومسامير</option><option>أشعة</option><option>تحاليل</option><option>أجهزة</option><option>خدمات أخري</option></select>
-          <select id="s_list" class="inp" style="margin-bottom:7px">
-            <option value="all">للجميع (نفقة + تأمين)</option>
-            <option value="nafaqa">نفقة الدولة فقط</option>
-            <option value="tamin">تأمين صحي / اقتصادي / مجاني فقط</option>
-          </select>
           <input type="text" id="s_name" placeholder="اسم الصنف" class="inp" style="margin-bottom:7px">
           <input type="text" id="s_code" placeholder="كود الصنف (اختياري)" class="inp" style="margin-bottom:7px">
           <input type="number" id="s_price" placeholder="السعر (ج.م)" class="inp" style="margin-bottom:7px" min="0" step="0.01">
@@ -586,6 +589,52 @@ input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
         </div>
       </div>
       <div id="s-items-list" style="max-height:310px;overflow-y:auto"></div>
+    </div>
+
+    <!-- تبويب قائمة نفقة الدولة المستقلة -->
+    <div id="s-nafaqa" class="tab-content">
+      <div style="background:#fff3cd;border-right:3px solid #856404;padding:7px 12px;border-radius:6px;margin-bottom:12px;font-size:.72rem;color:#856404;font-weight:700">
+        💊 قائمة أدوية ومستلزمات نفقة الدولة — مستقلة تماماً — أي تعديل لا يؤثر على أي قائمة أخرى
+      </div>
+      <div class="g2" style="margin-bottom:14px">
+        <div style="background:#fffbee;padding:14px;border-radius:10px;border:1px solid #f0c040">
+          <div style="font-size:.74rem;font-weight:900;color:#856404;margin-bottom:10px">➕ إضافة صنف لقائمة النفقة</div>
+          <select id="pn_cat" class="inp" style="margin-bottom:7px"><option>أدوية</option><option>مستلزمات</option><option>شرائح ومسامير</option></select>
+          <input type="text" id="pn_name" placeholder="اسم الصنف" class="inp" style="margin-bottom:7px">
+          <input type="text" id="pn_code" placeholder="كود الصنف (باركود)" class="inp" style="margin-bottom:7px">
+          <input type="number" id="pn_price" placeholder="السعر (ج.م)" class="inp" style="margin-bottom:7px" min="0" step="0.01">
+          <button onclick="addPharmListItem('nafaqa')" class="btn btn-p" style="width:100%;justify-content:center;background:#856404;border-color:#856404">إضافة لقائمة النفقة</button>
+        </div>
+        <div style="background:#f7f8f9;padding:14px;border-radius:10px">
+          <div style="font-size:.74rem;font-weight:900;color:var(--t);margin-bottom:10px">🔍 بحث في قائمة النفقة</div>
+          <input type="text" id="pn_filter" placeholder="ابحث في أدوية النفقة..." class="inp" oninput="renderPharmListItems('nafaqa')">
+          <div style="margin-top:6px;font-size:.68rem;color:var(--tm)" id="pn_total"></div>
+        </div>
+      </div>
+      <div id="pn-items-list" style="max-height:310px;overflow-y:auto"></div>
+    </div>
+
+    <!-- تبويب قائمة التأمين الصحي المستقلة -->
+    <div id="s-tamin" class="tab-content">
+      <div style="background:#d1ecf1;border-right:3px solid #0c5460;padding:7px 12px;border-radius:6px;margin-bottom:12px;font-size:.72rem;color:#0c5460;font-weight:700">
+        💊 قائمة أدوية ومستلزمات التأمين الصحي — مستقلة تماماً — أي تعديل لا يؤثر على أي قائمة أخرى
+      </div>
+      <div class="g2" style="margin-bottom:14px">
+        <div style="background:#eef9ff;padding:14px;border-radius:10px;border:1px solid #90d5ec">
+          <div style="font-size:.74rem;font-weight:900;color:#0c5460;margin-bottom:10px">➕ إضافة صنف لقائمة التأمين</div>
+          <select id="pt_cat" class="inp" style="margin-bottom:7px"><option>أدوية</option><option>مستلزمات</option><option>شرائح ومسامير</option></select>
+          <input type="text" id="pt_name" placeholder="اسم الصنف" class="inp" style="margin-bottom:7px">
+          <input type="text" id="pt_code" placeholder="كود الصنف (باركود)" class="inp" style="margin-bottom:7px">
+          <input type="number" id="pt_price" placeholder="السعر (ج.م)" class="inp" style="margin-bottom:7px" min="0" step="0.01">
+          <button onclick="addPharmListItem('tamin')" class="btn btn-p" style="width:100%;justify-content:center;background:#0c5460;border-color:#0c5460">إضافة لقائمة التأمين</button>
+        </div>
+        <div style="background:#f7f8f9;padding:14px;border-radius:10px">
+          <div style="font-size:.74rem;font-weight:900;color:var(--t);margin-bottom:10px">🔍 بحث في قائمة التأمين</div>
+          <input type="text" id="pt_filter" placeholder="ابحث في أدوية التأمين..." class="inp" oninput="renderPharmListItems('tamin')">
+          <div style="margin-top:6px;font-size:.68rem;color:var(--tm)" id="pt_total"></div>
+        </div>
+      </div>
+      <div id="pt-items-list" style="max-height:310px;overflow-y:auto"></div>
     </div>
     <div id="s-depts" class="tab-content">
       <div style="display:flex;gap:8px;margin-bottom:14px">
@@ -618,7 +667,13 @@ const db = firebase.firestore();
 /* ========== DEFAULT DATA ========== */
 const DB0 = {"أدوية":[{"name":"ادرينالين ا","price":6.61},{"name":"اركسترا 2.5 ا","price":54.77},{"name":"استيل سيستاين ا","price":48.79},{"name":"افيل برافين ض الحساسية","price":4.48},{"name":"البيومين بشري","price":1256.85},{"name":"التبلاز اكستيلير","price":10828.86},{"name":"ال -كارنتين ا","price":7.76},{"name":"امري ك (ف.ك)أ","price":3.98},{"name":"اميرون -كواردرون","price":3.7},{"name":"امينوفيللين أ","price":6.07},{"name":"انتودين","price":10.3},{"name":"انسولين مائي","price":112.0},{"name":"اوكسي توسيف أ","price":6.72},{"name":"ابيلوج - فتتوين أ","price":3.66},{"name":"ايزوبتن -فيراباميل أ","price":44.91},{"name":"ايمتركس","price":3.92},{"name":"بروتوفكس -زوركال أ","price":36.96},{"name":"بريمبران -ميكلوبرام أ","price":2.74},{"name":"بوتاسيوم كلوريد أ","price":4.2},{"name":"بي كوم -ليفابيون أ","price":4.13},{"name":"تبجاميكلين","price":197.12},{"name":"ثرومبكس أ","price":50.03},{"name":"جاست ريج أ","price":7.18},{"name":"جليكو فوس","price":31.92},{"name":"دانست ايمرست أ","price":6.72},{"name":"دوبامين أ","price":11.48},{"name":"ديبوتركس -دوبياتامين","price":31.36},{"name":"ديكسا ميثازون أ","price":5.6},{"name":"ديكلوفين أ","price":3.92},{"name":"زوميجيول أ","price":14.56},{"name":"كساببرون -دايسنون أ","price":11.2},{"name":"سبازموفري أ","price":11.2},{"name":"سربرو لايسين أ","price":133.0},{"name":"سيدوناز- ستربتوكيناز","price":2525.1},{"name":"صوديوم بيكربونات","price":11.67},{"name":"فلوبرتين","price":8.69},{"name":"فورت ميند -سومازينا","price":10.33},{"name":"كافينو سبير","price":24.64},{"name":"كالسيوم أ","price":18.48},{"name":"كارديكسيل -ديجوكسين أ","price":6.27},{"name":"كلكسان 40","price":108.64},{"name":"كلكسان 60","price":128.8},{"name":"كليندامايمين 300","price":22.4},{"name":"كيبليبسي- يتراتام أ","price":15.68},{"name":"لابي بريس","price":33.6},{"name":"لانكس - لازيفار أ20مجم","price":4.93},{"name":"لوسيفورت","price":22.77},{"name":"ماغنسيوم سلفات أ","price":11.67},{"name":"ميمولال -سربيرو سيتام أ","price":3.18},{"name":"نترونال فيال","price":40.32},{"name":"نورادرينالين 4مجم","price":17.92},{"name":"نورادرينالين 8مجم","price":34.72},{"name":"هيدروكوربتزون أ","price":21.28},{"name":"هيبارين أ","price":43.67},{"name":"ابراوتروبيام","price":5.54},{"name":"اتروفنت","price":3.81},{"name":"بليمكورت","price":24.74},{"name":"فاركولين","price":15.68},{"name":"اسيكلو فيرفيال","price":90.23},{"name":"تارجو سيدفيال","price":450.7},{"name":"تافنيك فيال","price":281.76},{"name":"سوليمد رول 1جم","price":291.2},{"name":"سوليمد رول 500مجم","price":162.4},{"name":"سبفبيم -ماكسبيم","price":55.94},{"name":"سبفوتاكس 1جم","price":22.4},{"name":"سبفترياكسون 1جم","price":22.4},{"name":"فلوموكس","price":11.92},{"name":"فانكو مايسين 500","price":56.0},{"name":"كلاسيد 500","price":231.42},{"name":"كيفاديم -سيفندين","price":30.24},{"name":"ليفوفلوكساسين","price":28.0},{"name":"ميروينم 500مجم","price":95.2},{"name":"ميروينم 1جم","price":145.6},{"name":"يونكتام -التراسيلين","price":24.64},{"name":"امينوفين كبار","price":93.48},{"name":"بي كي ميرز -امانتدين","price":168.0},{"name":"سموف كابفين","price":296.4},{"name":"برفنجان وريد","price":33.6},{"name":"فلاجيل وريد","price":23.52},{"name":"افروزوليد امل","price":168.0},{"name":"ديفلوكان","price":30.24},{"name":"موكسيفلوكس I.v","price":95.2},{"name":"اتراكيم","price":19.04},{"name":"اتروبين","price":5.54},{"name":"افدرين","price":4.48},{"name":"بيوكين -ماركين أ","price":16.8},{"name":"بيوكين -ماركين فيال","price":14.3},{"name":"ديبرفان -بروبوفول","price":62.7},{"name":"بيثدين 50","price":4.76},{"name":"يبيثدين 100","price":8.74},{"name":"فنتانيل","price":19.04},{"name":"مورفين 10","price":14.9},{"name":"ميداثيتك","price":7.0},{"name":"ايزوفلوران 1سم","price":3.7},{"name":"سيفو فلوران 1سم","price":10.59},{"name":"هالوثان 1سم","price":0.57},{"name":"زيلوكين -ليدوكايين 1سم","price":0.36},{"name":"نيو ستجمين فيال 1سم","price":3.18},{"name":"كيتامين -كتلا 1سم","price":3.36},{"name":"ملح 9%","price":20.72},{"name":"ملح 3%","price":22.92},{"name":"جلكوز10%","price":25.76},{"name":"جلكوز 25%","price":30.24},{"name":"جلكوز ملحي","price":21.28},{"name":"رينجر","price":19.04},{"name":"رينجر لاكتال","price":11.52},{"name":"مانيتول","price":46.66},{"name":"بانسول","price":46.66},{"name":"نيومنت","price":23.52},{"name":"الزمندا قطارة","price":20.61},{"name":"بيفاترامين بخاخ","price":48.94},{"name":"جلسرين لبوس","price":0.5},{"name":"ماء مقطر","price":12.03},{"name":"نيترودريوم لزقة","price":12.12},{"name":"ونكيور بوردر","price":28.56},{"name":"ثروميكس جيل","price":55.91},{"name":"منتوبروفين جيل","price":5.21},{"name":"جنتامايسين كريم","price":13.52},{"name":"هيلاريم كريم","price":19.21},{"name":"استيل سيستاين كيس","price":3.19},{"name":"سليمارين كيس","price":0.83},{"name":"لاكتوفرين كيس","price":2.18},{"name":"هيدراسيك كيس","price":2.72},{"name":"ors كيس معالجة جفاف","price":2.63},{"name":"ازيثرومايسيف شراب","price":17.92},{"name":"ايمكسكلاف شراب","price":28.21},{"name":"بروفين شراب","price":13.91},{"name":"بروموهكسيف شراب","price":11.98},{"name":"برنكوتيرول شراب","price":3.92},{"name":"بوتاسيوم كلوريد شراب","price":7.87},{"name":"جولدن فير حديد شراب","price":9.79},{"name":"ريسبربدون شراب","price":7.84},{"name":"زنك شراب","price":11.53},{"name":"زيلون -بديكورت شراب","price":26.88},{"name":"سيتال شراب","price":7.19},{"name":"فلاجيل شراب","price":23.34},{"name":"ماكسيلاز شراب","price":17.68},{"name":"ميوكوسول شراب","price":7.83},{"name":"اجركس -اسيوسيد 75مجم ق","price":0.34},{"name":"اسيرين بروتكت 100مجم ق","price":1.42},{"name":"اكسفورج HCT ق","price":1.1},{"name":"الدكتون -سبيرو نولاكتون ق","price":1.1},{"name":"الدومين -ميثيل دوباف","price":2.8},{"name":"الفترين -امبيزيم ق","price":1.23},{"name":"ايجيبرو ق","price":0.56},{"name":"بارامول ق","price":0.39},{"name":"بروفين 400 ق","price":2.08},{"name":"بلافكس ق","price":10.23},{"name":"بون كير - وان الفا ق","price":3.44},{"name":"ترياكور ق","price":3.26},{"name":"تريتاس 2.5 ق","price":1.39},{"name":"تريتاس 1.25","price":2.16},{"name":"تريتاس","price":3.5},{"name":"داونستيلوون","price":1.86},{"name":"ديكلاك150مجم","price":3.36},{"name":"ديسفلاتيل ق","price":0.67},{"name":"سبا نيلا -فامتاريل ق","price":4.26},{"name":"فاروكال -كالسيمات ق","price":0.26},{"name":"كابوتريل 25 مجم ق","price":0.78},{"name":"كارديكسين ق","price":0.26},{"name":"كارفيد ق","price":0.2},{"name":"كلاتكس ق","price":1.22},{"name":"فلاجيل ق","price":0.84},{"name":"ميتاكارديا ق","price":0.82},{"name":"نور فاسك - ريجيكور ق","price":0.73},{"name":"نيقيلوب ق","price":1.96},{"name":"صبغة اومنيباك","price":540.79},{"name":"صبغة اومنيسكان","price":504.2},{"name":"سلفاديازين كريم","price":5.56},{"name":"ميتا لبزه 25 مجم","price":21657.72},{"name":"ديباكين ق","price":3.7},{"name":"سيكو سيتام ق","price":2.63},{"name":"تجربتول ق","price":1.57},{"name":"محلول امينوليببان","price":152.49},{"name":"اير ستابكس تريوق","price":1.79},{"name":"دياميكرون ق","price":1.22},{"name":"ميجا موكس ق","price":10.1},{"name":"لازكس 40مجم أ","price":24.64},{"name":"حديد قرص","price":0.86},{"name":"سيفترياكسون 500مجم","price":16.24},{"name":"لوكيلما اكياس","price":198.78},{"name":"انتودين ق","price":0.67},{"name":"كليندامايمين900","price":48.72},{"name":"جلكوز 5%","price":15.91}],"مستلزمات":[{"name":"سرنجة انسولين","price":4.0},{"name":"سرنجة 3سم","price":1.21},{"name":"سرنجة 5سم","price":1.47},{"name":"سرنجة 10سم","price":1.89},{"name":"سرنجة 20سم","price":3.67},{"name":"سرنجة 50سم بالابرة","price":6.39},{"name":"سرنجة رايل بوز قسطرة","price":8.4},{"name":"ابرة بزل بنج نصفي م 22","price":32.23},{"name":"ابرة بزل بنج نصفي م 25","price":48.5},{"name":"كانيولا كبار 18","price":6.46},{"name":"كانيولا كبار 20","price":6.46},{"name":"كانيولا كبار 22","price":6.46},{"name":"كانيولا اطفال 24","price":7.9},{"name":"كانيولا اطفال 26","price":7.9},{"name":"نيزل كانيولا حديث الولادة","price":3.23},{"name":"نيزل كبار","price":9.63},{"name":"نيزل اطفال","price":7.68},{"name":"انبوبة تغذية رايل كبار","price":6.14},{"name":"انبوبة تغذية رايل صغار","price":4.61},{"name":"انبوبة حنجرية بالون","price":27.83},{"name":"انبوبة حنجرية بدون بالون","price":16.76},{"name":"جهاز محاليل كبار","price":6.3},{"name":"جهاز محاليل بالمنظم سلوسبت","price":30.71},{"name":"شفاط جراحي جهاز تجميع سوائل","price":76.77},{"name":"خرطوم شفط باليانكر","price":26.93},{"name":"كيس جمع بول","price":8.14},{"name":"ماسك اكسجين كبار","price":14.74},{"name":"ماسك اكسجين اطفال","price":14.7},{"name":"ماسك بخار نيوبلايزر كبار","price":17.36},{"name":"ماسك بخار نيوبلايزر اطفال","price":17.36},{"name":"ماسك سباب انفي وفمي","price":2536.61},{"name":"ماسك تخدي دراجر","price":60.4},{"name":"وصلة تنفس صناعي كبار","price":92.4},{"name":"وصلة ثلاثية","price":7.35},{"name":"وصلة وريد 150 سم","price":4.98},{"name":"وصلة شريانية 100مم","price":10.75},{"name":"وصلة حرف T للتخدير","price":8.08},{"name":"وصلة تخدير خرطومين بالباج كبار","price":78.76},{"name":"وصلة تخدير خرطومين بالباج اطفال","price":350.18},{"name":"ممر هوائي","price":10.5},{"name":"امبوباج كبار","price":406.6},{"name":"قسطرة نيلتون عادية تشفيط","price":5.67},{"name":"قسطرة بولية فولي","price":23.03},{"name":"قسطرة فولي اطفال","price":24.57},{"name":"قسطرة سيليكون","price":75.23},{"name":"قسطرة سيليكون منحنية الطرف","price":49.61},{"name":"قسطرة cvpاطفال","price":767.7},{"name":"قسطرة سرة اطفال","price":65.72},{"name":"مشبك سرة","price":1.38},{"name":"نظارة فوتو حديثة ولادة","price":5.04},{"name":"قسطرة خطوة واحدة زي الخنزير","price":455.9},{"name":"قسطرة حالب مفتوح","price":216.83},{"name":"دعامة حالب طويلة المدي","price":1643.7},{"name":"دعامة حالب قصيرة المدي","price":342.08},{"name":"موسع حالب","price":185.84},{"name":"شيش منظار كلي","price":1976.4},{"name":"طقم نفرستومي","price":1538.12},{"name":"باسكت نيتول دورميا","price":2891.68},{"name":"سلك مرشد sensor","price":1935.28},{"name":"سلك مرشد cebra","price":1677.25},{"name":"ابرة شيبا","price":189.4},{"name":"جراب كاميرا","price":24.57},{"name":"كلبس جراحي وسط","price":67.19},{"name":"كلبس جراحي وسط وكبير","price":80.62},{"name":"كلبس جراحي كبير","price":86.62},{"name":"سلاح شيفر","price":2111.54},{"name":"وصلة مضخة","price":1535.67},{"name":"جيبسونا 10 سم","price":23.47},{"name":"جيبسونا 15 سم","price":34.42},{"name":"جيبسونا20 سم","price":49.12},{"name":"رباط ضاغط 15 سم","price":23.8},{"name":"رباط ضاغط 10سم","price":16.43},{"name":"رباط ضاغط 7.5سم","price":11.76},{"name":"جوانتي لاتكس علبة","price":154.91},{"name":"جوانتي لاتكس زوج","price":3.1},{"name":"جوانتي معقم 7","price":14.92},{"name":"جوانتي معقم 7.5","price":14.92},{"name":"جوانتي معقم 8","price":14.92},{"name":"جوانتي معقم 8.5","price":14.92},{"name":"جوانتي معقم مزدوج 7","price":41.77},{"name":"جوانتي معقم مزدوج 8","price":41.77},{"name":"جاون طبيب معقم","price":42.99},{"name":"جاون مريض نظيف عزل","price":59.24},{"name":"دريسنج","price":4.91},{"name":"فوط بطن30x30","price":11.82},{"name":"قطن 1 كيلو","price":107.48},{"name":"بلاستره 5 سم","price":30.71},{"name":"بلاستره 10 سم","price":56.64},{"name":"بلاسترحرا اختبار تعقيم بكر لاصق","price":56.42},{"name":"شاش 11سم","price":6.91},{"name":"شاش عريض 1متر","price":12.28},{"name":"شاش فازلين 10x10","price":1.75},{"name":"شاش فازلين 10x20","price":3.37},{"name":"شاش فازلين 10x30","price":6.06},{"name":"مريلة عمليات بلاستيك ماكنتوش","price":2.76},{"name":"اوفيد","price":0.92},{"name":"اسورة معصم","price":1.38},{"name":"اوفر هيد رجالي","price":0.92},{"name":"اوفر هيد حريمي","price":0.55},{"name":"ماسك جراحي","price":0.49},{"name":"فرش جراحي معقم","price":214.96},{"name":"فرش عمليات سي ارم","price":35.02},{"name":"مفرش عمليات جراحي ركبة","price":307.08},{"name":"مفرش عمليات جراحي فخذ","price":307.08},{"name":"مفرش عمليات جراحي عمود فقري","price":160.65},{"name":"مفرش عمليات جراحي كتف","price":214.74},{"name":"مفرش عمليات جراحي مفاصل","price":307.08},{"name":"مفرش سرير","price":15.35},{"name":"مفرش عمليات رول 50","price":63.44},{"name":"بيتادين مطهر 10% زجاجة","price":68.25},{"name":"بيتادين مطهر 7.5% لتر","price":367.5},{"name":"بيتادين منظف 7.5% 1سم","price":0.73},{"name":"كحول","price":57.45},{"name":"جاون سايدكس +شرائط اختبار","price":2882.25},{"name":"مشرط","price":4.54},{"name":"الكترو","price":2.5},{"name":"بديا ثرمي","price":48.5},{"name":"كابل دياثرمي","price":344.22},{"name":"عازل دياثرمي","price":48.5},{"name":"خافض لسان","price":3.78},{"name":"سيفتي بوكس 12 لتر","price":42.99},{"name":"سيفتي بوكس 6 لتر","price":32.24},{"name":"بكر موجات صوتية","price":438.1},{"name":"جيل موجات صوتية","price":85.98},{"name":"بكر رسم قلب 5سم","price":30.71},{"name":"بكر رسم قلب 11 سم","price":52.2},{"name":"بكر رسم قلب 6.3 سم","price":34.55},{"name":"بكر رسم قلب 8X6","price":52.2},{"name":"محلول بيرتوني 106%","price":31.25},{"name":"محلول بيرتوني 4.5%","price":35.94},{"name":"فيلم ورق مطبوع زيروكس 17x14","price":18.86},{"name":"فيلم ورق مطبوع زيروكس 14x11","price":16.16},{"name":"شرائح غلق الجلد ستريب","price":74.48},{"name":"سرنجة حقن الصبغة","price":782.32},{"name":"ماسك فنتوري","price":26.25},{"name":"دباسة جلد","price":255.29},{"name":"كاشف كميائي","price":90.09},{"name":"داي فلو","price":25.74},{"name":"وصلة وريديدية 200سم","price":6.33},{"name":"امبوباج اطفال","price":457.56},{"name":"جيل معقم انبوبة","price":118.26},{"name":"فكريل 5 قطع","price":49.61},{"name":"فكريل 5راوند","price":42.88},{"name":"فكريل 1 قاطع","price":43.31},{"name":"فكريل 1 راوند","price":42.53},{"name":"فكريل 2 قاطع","price":50.31},{"name":"فكريل 2 راوند","price":42.88},{"name":"فكريل2/0 قاطع","price":47.25},{"name":"فكريل2/0 راوند","price":42.88},{"name":"فكريل3/0 قاطع","price":42.88},{"name":"فكريل3/0 راوند","price":42.53},{"name":"فكريل4/0","price":40.25},{"name":"فكريل6/0","price":107.0},{"name":"فكريل5/0","price":42.88},{"name":"برولين 5راوند","price":31.5},{"name":"بروين 1 قاطع","price":31.5},{"name":"برولين 1راوند","price":19.25},{"name":"برولين 2/0 راوند","price":31.5},{"name":"برولين 7/0 راوند","price":393.3},{"name":"حرير 5قاطع","price":23.62},{"name":"حرير 1 راوند","price":23.19},{"name":"حرير 1 قاطع","price":23.62},{"name":"حرير 2/0 قاطع","price":23.62},{"name":"حرير 3/0 قاطع","price":28.46},{"name":"بولي دياكيسينون PDS راوند","price":288.78},{"name":"بولي دياكيسينون PDS راوند5/0","price":173.88},{"name":"بولي دياكيسينون PDS راوند4/0","price":254.13},{"name":"بولي دياكيسينون PDS راوند3/0","price":356.67},{"name":"مونوكريل 3/0 قاطع","price":124.83},{"name":"شبكة برولين 11x6","price":128.4},{"name":"شبكة برولين 15x15","price":214.0},{"name":"شبكة برولين 30x30","price":615.25}],"أشعة":[{"name":"اشعة عادية","price":45.0},{"name":"اشعة مسالك عادية","price":55.0},{"name":"اشعة مقطعية علي المخ","price":180.0},{"name":"اشعة مقطعية علي الراس والمخ","price":225.0},{"name":"مقطعية علي اي منطقة اخري بالجسم","price":260.0},{"name":"اشعة مقطعية علي البطن والحوض","price":370.0},{"name":"اشعة ثلاثية الابعاد علي اي منطقة اخري بالجسم","price":330.0},{"name":"اشعة مقطعية علي الصدر","price":270.0},{"name":"اشعة مقطعية علي المسالك البولية","price":350.0},{"name":"رنين علي المخ او اي جزء منه","price":450.0},{"name":"رنين علي المخ جزء محدد","price":550.0},{"name":"رنين علي المخ + شراين المخ","price":800.0},{"name":"رنين علي المخ + اوردة المخ","price":800.0},{"name":"رنين علي الفقرات اي منطقة","price":525.0},{"name":"رنين علي جميع الفقرات","price":1200.0},{"name":"رنين علي العظام او المفاصل او الاطراف","price":575.0},{"name":"رنين علي البطن او الحوض او الصدر","price":600.0},{"name":"رنين علي البطن والحوض","price":850.0},{"name":"رنين علي الشراين او الاوردة للطرف الواحد","price":650.0},{"name":"رنين علي الرقبة","price":500.0},{"name":"الاشعة التلفزيونية علي البطن او الحوض","price":70.0},{"name":"الاشعة التلفزيونية علي البطن والحوض","price":100.0},{"name":"الاشعة التلفزيونية علي الخصية مع دوبلر","price":150.0},{"name":"اشعة تلفزيونية علي الخصية","price":140.0},{"name":"اشعة تلفزيونية علي ثدي واحد","price":70.0},{"name":"اشعة تلفزيونية علي ثدين","price":130.0},{"name":"اشعة تلفزيونية علي الكتفين والركبة","price":150.0},{"name":"اشعة تلفزيونية علي الغدة الدرقية","price":100.0},{"name":"ايكو للكبار","price":200.0},{"name":"ايكو للاطفال","price":250.0}],"تحاليل":[{"name":"صورة دم كاملة CBC","price":55.0},{"name":"سرعة ترسيب ESR","price":25.0},{"name":"كرات دم حمراء","price":25.0},{"name":"هيموجلبين Hb","price":25.0},{"name":"زمن الثرومبوبلاستين الجزئي ptt","price":55.0},{"name":"زمن الثرومبومبين pt","price":40.0},{"name":"وظائف كلي","price":50.0},{"name":"وظائف كبد","price":50.0},{"name":"غازات بالدم","price":140.0},{"name":"املاح","price":145.0}],"أجهزة":[{"name":"مونتور بالساعة","price":60.0},{"name":"تنفس صناعي بالساعة","price":60.0},{"name":"دايثرمي كي كهربائي","price":70.0},{"name":"مثقاب عظام","price":140.0},{"name":"منشار عظام","price":140.0},{"name":"منظار عظام","price":600.0},{"name":"منظار جراحة الصدر","price":600.0},{"name":"مناظير البطن الجراحية","price":600.0},{"name":"منظار الجيوب الانفية","price":400.0},{"name":"منظار مرى ومعدة واثني عشر","price":300.0},{"name":"مضخة كهربائية","price":60.0}],"شرائح ومسامير":[],"خدمات أخري":[]};
 
-let itemDB = JSON.parse(JSON.stringify(DB0));
+let itemDB = JSON.parse(JSON.stringify(DB0)); // قائمة مدخل البيانات (الأصلية)
+
+// قوائم الصيدليات المستقلة — تُحمَّل من Firestore بشكل منفصل
+let pharmItemDB = {
+  nafaqa: {'أدوية':[], 'مستلزمات':[], 'شرائح ومسامير':[]},
+  tamin:  {'أدوية':[], 'مستلزمات':[], 'شرائح ومسامير':[]},
+};
 
 // تحويل جميع أدوية ومستلزمات DB0 الأصلية إلى نفقة الدولة
 ['أدوية','مستلزمات'].forEach(cat=>{
@@ -688,19 +743,15 @@ function init(){
   
   setStatus('wait');
   ensureAdminSeed();
+  // تحميل القائمة الأصلية (مدخل البيانات)
   db.collection('settings').doc('main').get()
     .then(snap=>{
       if(snap.exists){
         const d=snap.data();
         if(d.itemDB){
           itemDB=d.itemDB;
-          // ترقية: أي دواء أو مستلزم بدون list أو list=all يصبح nafaqa
-          ['أدوية','مستلزمات'].forEach(cat=>{
-            (itemDB[cat]||[]).forEach(x=>{ if(!x.list || x.list==='all') x.list='nafaqa'; });
-          });
         }
         if(d.depts&&d.depts.length){
-          // دمج الأقسام المحفوظة مع الأقسام الجديدة
           const extraDepts = [
             'مركزة اطفال','مركزة باطنة','مركزة ICU',
             'عناية مركزة HUB','عناية مركزة حروق',
@@ -714,8 +765,54 @@ function init(){
         }
         renderDepts();
       }
-    }).catch(e=>console.log('Settings:',e));
+    }).catch(e=>console.log('Main settings:', e));
+
+  // تحميل قوائم الصيدليات المستقلة في الخلفية
+  loadPharmItemDBs();
   loadPatients(true);
+}
+
+// تحميل قوائم أدوية الصيدليات المستقلة من Firestore
+async function loadPharmItemDBs(){
+  try{
+    const [nafaqaSnap, taminSnap] = await Promise.all([
+      db.collection('settings').doc('nafaqa').get(),
+      db.collection('settings').doc('tamin').get(),
+    ]);
+
+    if(nafaqaSnap.exists && nafaqaSnap.data().itemDB){
+      pharmItemDB.nafaqa = nafaqaSnap.data().itemDB;
+    } else {
+      // أول مرة: انسخ الأدوية والمستلزمات الموجودة في main كنقطة بداية
+      await seedPharmItemDB('nafaqa');
+    }
+
+    if(taminSnap.exists && taminSnap.data().itemDB){
+      pharmItemDB.tamin = taminSnap.data().itemDB;
+    } else {
+      await seedPharmItemDB('tamin');
+    }
+  }catch(e){ console.error('loadPharmItemDBs:', e); }
+}
+
+// نسخ الأدوية والمستلزمات من القائمة الأصلية كنقطة بداية لأول مرة
+async function seedPharmItemDB(listType){
+  try{
+    const mainSnap = await db.collection('settings').doc('main').get();
+    const mainDB = mainSnap.exists ? mainSnap.data().itemDB || itemDB : itemDB;
+    const seed = {
+      'أدوية':           JSON.parse(JSON.stringify(mainDB['أدوية']||[])),
+      'مستلزمات':       JSON.parse(JSON.stringify(mainDB['مستلزمات']||[])),
+      'شرائح ومسامير':  JSON.parse(JSON.stringify(mainDB['شرائح ومسامير']||[])),
+    };
+    pharmItemDB[listType] = seed;
+    await db.collection('settings').doc(listType).set({
+      itemDB: seed,
+      seededAt: firebase.firestore.FieldValue.serverTimestamp(),
+      seededFrom: 'main'
+    });
+    console.log('Seeded', listType, 'from main');
+  }catch(e){ console.error('seedPharmItemDB:', e); }
 }
 
 /* ========== LOAD PATIENTS (Paginated) ========== */
@@ -766,9 +863,34 @@ let _stimer=null;
 function saveSettings(){
   clearTimeout(_stimer);
   _stimer=setTimeout(()=>{
-    db.collection('settings').doc('main').set({itemDB,depts,updatedAt:firebase.firestore.FieldValue.serverTimestamp()})
-      .catch(e=>console.error('Settings save:',e));
-  },800);
+    const role = currentUser ? currentUser.role : 'admin';
+    if(role === 'nafaqa'){
+      // يحفظ فقط قائمة النفقة المستقلة
+      db.collection('settings').doc('nafaqa')
+        .set({itemDB: pharmItemDB.nafaqa, updatedAt: firebase.firestore.FieldValue.serverTimestamp()})
+        .catch(e=>console.error('Nafaqa settings save:', e));
+    } else if(role === 'tamin'){
+      // يحفظ فقط قائمة التأمين المستقلة
+      db.collection('settings').doc('tamin')
+        .set({itemDB: pharmItemDB.tamin, updatedAt: firebase.firestore.FieldValue.serverTimestamp()})
+        .catch(e=>console.error('Tamin settings save:', e));
+    } else {
+      // مدير أو مدخل بيانات — يحفظ القائمة الأصلية
+      db.collection('settings').doc('main')
+        .set({itemDB, depts, updatedAt: firebase.firestore.FieldValue.serverTimestamp()})
+        .catch(e=>console.error('Main settings save:', e));
+    }
+  }, 800);
+}
+
+// حفظ قائمة صيدلية معينة بشكل صريح (يستخدمه المدير عند تعديل أي قائمة)
+function savePharmSettings(listType){
+  clearTimeout(_stimer);
+  _stimer=setTimeout(()=>{
+    db.collection('settings').doc(listType)
+      .set({itemDB: pharmItemDB[listType], updatedAt: firebase.firestore.FieldValue.serverTimestamp()})
+      .catch(e=>console.error(listType+' settings save:', e));
+  }, 800);
 }
 
 /* ========== DEPTS ========== */
@@ -1473,12 +1595,164 @@ function exportAllExcel(){
 }
 
 /* ========== SETTINGS MODAL ========== */
-function openSettings(){renderSetItems();renderSetDepts();$('set-modal').style.display='flex';}
+function openSettings(){
+  const role = currentUser ? currentUser.role : 'admin';
+  // تحكم في ظهور التبويبات حسب الدور
+  const nafaqaTab = $('tab-nafaqa-btn');
+  const taminTab  = $('tab-tamin-btn');
+  if(role === 'nafaqa'){
+    // صيدلي النفقة يرى قائمة النفقة فقط — افتح مباشرة على تبويب النفقة
+    if(nafaqaTab) nafaqaTab.style.display='';
+    if(taminTab)  taminTab.style.display='none';
+    $('set-modal').style.display='flex';
+    sTab('s-nafaqa');
+    return;
+  } else if(role === 'tamin'){
+    // صيدلي التأمين يرى قائمة التأمين فقط
+    if(nafaqaTab) nafaqaTab.style.display='none';
+    if(taminTab)  taminTab.style.display='';
+    $('set-modal').style.display='flex';
+    sTab('s-tamin');
+    return;
+  } else {
+    // مدير يرى كل التبويبات
+    if(nafaqaTab) nafaqaTab.style.display='';
+    if(taminTab)  taminTab.style.display='';
+  }
+  renderSetItems(); renderSetDepts();
+  $('set-modal').style.display='flex';
+}
 function closeSettings(){$('set-modal').style.display='none';}
 function sTab(id){
-  document.querySelectorAll('.tab-btn').forEach((b,i)=>b.classList.toggle('active',['s-items','s-depts'][i]===id));
-  document.querySelectorAll('.tab-content').forEach(c=>c.classList.toggle('active',c.id===id));
+  document.querySelectorAll('#settings-tabs .tab-btn').forEach(b=>b.classList.remove('active'));
+  const tabMap={'s-items':0,'s-nafaqa':1,'s-tamin':2,'s-depts':3};
+  const btns=document.querySelectorAll('#settings-tabs .tab-btn');
+  if(btns[tabMap[id]]) btns[tabMap[id]].classList.add('active');
+  document.querySelectorAll('.tab-content').forEach(el=>el.classList.toggle('active',el.id===id));
+  if(id==='s-nafaqa') renderPharmListItems('nafaqa');
+  if(id==='s-tamin')  renderPharmListItems('tamin');
 }
+
+/* ========== إدارة قوائم أدوية الصيدليات المستقلة ========== */
+
+function renderPharmListItems(listType){
+  const isNafaqa = listType === 'nafaqa';
+  const prefix = isNafaqa ? 'pn' : 'pt';
+  const q = (document.getElementById(prefix+'_filter')?.value||'').toLowerCase();
+  const db2 = pharmItemDB[listType];
+  const cats = ['أدوية','مستلزمات','شرائح ومسامير'];
+  let total=0, html='';
+  const color = isNafaqa ? '#856404' : '#0c5460';
+  const bg    = isNafaqa ? '#fff3cd' : '#d1ecf1';
+
+  cats.forEach(cat=>{
+    const arr = db2[cat]||[];
+    const items = q ? arr.filter(x=>x.name.toLowerCase().includes(q)||(x.code||'').toLowerCase().includes(q)) : arr;
+    if(!items.length) return;
+    total += items.length;
+    html += `<div style="margin-bottom:12px">
+      <div style="font-size:.69rem;font-weight:900;color:${color};padding:4px 9px;background:${bg};border-radius:5px;margin-bottom:5px">${cat} — ${items.length} صنف</div>
+      ${items.map(x=>{
+        const realIdx = arr.indexOf(x);
+        const stock = x.stock||0;
+        const lowStock = stock <= 5;
+        const stockColor = stock === 0 ? '#c0392b' : lowStock ? '#e67e22' : '#27ae60';
+        const codeStr = x.code ? `<span style="background:#eef2ff;color:var(--p);font-size:.58rem;padding:1px 6px;border-radius:4px;font-weight:700;margin-right:4px">🏷 ${x.code}</span>` : '';
+        return `<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 10px;background:#fff;border-radius:6px;margin-bottom:4px;border:1.5px solid ${stock===0?'#fbb':lowStock?'#fde':'var(--b)'};gap:6px;flex-wrap:wrap">
+          <div style="flex:1;min-width:120px">
+            <span style="font-size:.75rem;font-weight:700">${x.name}</span>
+            ${codeStr}
+            <span style="font-size:.65rem;font-weight:900;color:${stockColor};background:${stock===0?'#fdecea':lowStock?'#fff3e0':'#eafaf1'};padding:1px 7px;border-radius:10px;margin-right:4px">
+              ${stock===0?'⛔ نفد المخزون':lowStock?'⚠️ مخزون منخفض: '+stock:'📦 '+stock}
+            </span>
+          </div>
+          <div style="display:flex;align-items:center;gap:5px;flex-shrink:0;flex-wrap:wrap">
+            <input type="text" value="${x.code||''}" placeholder="كود" title="كود الباركود"
+              style="width:60px;padding:3px 5px;border:1px solid var(--b);border-radius:5px;font-size:.68rem;text-align:center;font-family:'Noto Kufi Arabic',sans-serif"
+              onchange="updatePharmListCode('${listType}','${cat}',${realIdx},this.value)">
+            <input type="number" value="${x.price}" min="0" step="0.01" title="السعر"
+              style="width:72px;padding:3px 6px;border:1px solid var(--b);border-radius:5px;font-size:.75rem;font-weight:800;color:${color};text-align:center;font-family:'Noto Kufi Arabic',sans-serif"
+              onchange="updatePharmListPrice('${listType}','${cat}',${realIdx},this.value)">
+            <span style="font-size:.65rem;color:var(--tm)">ج</span>
+            <span style="font-size:.65rem;color:var(--tm);margin-right:2px">ورود:</span>
+            <input type="number" placeholder="0" min="1" step="1" id="stock-add-${listType}-${cat}-${realIdx}"
+              style="width:56px;padding:3px 5px;border:1.5px solid ${color};border-radius:5px;font-size:.72rem;text-align:center;font-family:'Noto Kufi Arabic',sans-serif"
+              title="أضف كمية واردة للمخزون">
+            <button onclick="addStockQty('${listType}','${cat}',${realIdx})"
+              style="background:${color};color:#fff;border:none;border-radius:5px;padding:3px 7px;font-size:.7rem;font-weight:700;cursor:pointer;white-space:nowrap">+ ورود</button>
+            <button onclick="delPharmListItem('${listType}','${cat}',${realIdx})" style="background:none;border:none;cursor:pointer;color:#e57373;font-size:.95rem;line-height:1" title="حذف">🗑</button>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>`;
+  });
+
+  const totalEl = document.getElementById(prefix+'_total');
+  if(totalEl) totalEl.textContent = 'إجمالي: '+total+' صنف';
+  const listEl = document.getElementById(prefix+'-items-list');
+  if(listEl) listEl.innerHTML = html||'<p style="text-align:center;color:var(--tm);font-size:.78rem;padding:14px">لا يوجد أصناف بعد</p>';
+}
+
+function addPharmListItem(listType){
+  const isNafaqa = listType === 'nafaqa';
+  const prefix = isNafaqa ? 'pn' : 'pt';
+  const cat   = document.getElementById(prefix+'_cat')?.value;
+  const name  = (document.getElementById(prefix+'_name')?.value||'').trim();
+  const code  = (document.getElementById(prefix+'_code')?.value||'').trim();
+  const price = parseFloat(document.getElementById(prefix+'_price')?.value);
+  if(!name||isNaN(price)||price<0){ alert('يرجى ملء الاسم والسعر'); return; }
+  if(!pharmItemDB[listType][cat]) pharmItemDB[listType][cat]=[];
+  if(pharmItemDB[listType][cat].find(x=>x.name===name)){ alert('هذا الصنف موجود بالفعل في القائمة'); return; }
+  const entry = {name, price, stock: 0};
+  if(code) entry.code = code;
+  pharmItemDB[listType][cat].push(entry);
+  document.getElementById(prefix+'_name').value='';
+  document.getElementById(prefix+'_price').value='';
+  document.getElementById(prefix+'_code').value='';
+  renderPharmListItems(listType);
+  savePharmSettings(listType);
+}
+
+function addStockQty(listType, cat, idx){
+  const inputId = `stock-add-${listType}-${cat}-${idx}`;
+  const el = document.getElementById(inputId);
+  const qty = parseInt(el ? el.value : 0);
+  if(!qty || qty <= 0){ alert('⚠️ أدخل الكمية الواردة أولاً'); return; }
+  if(!pharmItemDB[listType][cat] || !pharmItemDB[listType][cat][idx]){ return; }
+  const item = pharmItemDB[listType][cat][idx];
+  item.stock = (item.stock||0) + qty;
+  if(el) el.value = '';
+  renderPharmListItems(listType);
+  savePharmSettings(listType);
+  // تسجيل في سجل العمليات
+  db.collection('auditLog').add({
+    action:'stock_in', listType, cat, name:item.name, qty,
+    user: currentUser?currentUser.name:'', at: firebase.firestore.FieldValue.serverTimestamp()
+  }).catch(()=>{});
+}
+
+function delPharmListItem(listType, cat, idx){
+  if(!confirm('حذف هذا الصنف من قائمة '+(listType==='nafaqa'?'النفقة':'التأمين')+'؟')) return;
+  pharmItemDB[listType][cat].splice(idx,1);
+  renderPharmListItems(listType);
+  savePharmSettings(listType);
+}
+
+function updatePharmListPrice(listType, cat, idx, val){
+  const p = parseFloat(val);
+  if(isNaN(p)||p<0){ renderPharmListItems(listType); return; }
+  pharmItemDB[listType][cat][idx].price = p;
+  savePharmSettings(listType);
+}
+
+function updatePharmListCode(listType, cat, idx, val){
+  const code = val.trim();
+  if(code) pharmItemDB[listType][cat][idx].code = code;
+  else delete pharmItemDB[listType][cat][idx].code;
+  savePharmSettings(listType);
+}
+
+/* تفعيل زر "إعدادات" للصيدلي — يفتح فقط على قائمته */
 function renderSetItems(){
   const q=(Vv('s_filter')||'').toLowerCase();
   const cats=['أدوية','مستلزمات','شرائح ومسامير','أشعة','تحاليل','أجهزة','خدمات أخري'];
@@ -1491,17 +1765,11 @@ function renderSetItems(){
       <div style="font-size:.69rem;font-weight:900;color:var(--tm);padding:4px 9px;background:var(--s2);border-radius:5px;margin-bottom:5px">${cat} — ${items.length} صنف</div>
       ${items.map(x=>{
         const realIdx=arr.indexOf(x);
-        const lt=x.list||'all';
-        const ltLabel=lt==='nafaqa'
-          ?'<span style="background:#fff3cd;color:#856404;font-size:.58rem;padding:1px 5px;border-radius:4px;margin-left:4px">نفقة</span>'
-          :lt==='tamin'
-            ?'<span style="background:#d1ecf1;color:#0c5460;font-size:.58rem;padding:1px 5px;border-radius:4px;margin-left:4px">تأمين</span>'
-            :'<span style="background:#e2e3e5;color:#383d41;font-size:.58rem;padding:1px 5px;border-radius:4px;margin-left:4px">للجميع</span>';
         const codeStr=x.code?`<span style="background:#eef2ff;color:var(--p);font-size:.58rem;padding:1px 6px;border-radius:4px;font-weight:700;margin-left:4px">🏷 ${x.code}</span>`:'';
         return `<div id="item-row-${cat}-${realIdx}" style="display:flex;justify-content:space-between;align-items:center;padding:6px 10px;background:#fff;border-radius:6px;margin-bottom:3px;border:1px solid var(--b);gap:6px;flex-wrap:wrap">
           <div style="flex:1;min-width:0">
             <span style="font-size:.75rem;font-weight:700">${x.name}</span>
-            <span style="display:inline-flex;gap:3px;margin-right:4px">${ltLabel}${codeStr}</span>
+            <span style="display:inline-flex;gap:3px;margin-right:4px">${codeStr}</span>
           </div>
           <div style="display:flex;align-items:center;gap:5px;flex-shrink:0">
             <input type="text" value="${x.code||''}" placeholder="كود" title="كود الصنف"
@@ -1539,12 +1807,11 @@ function updateDBCode(cat,idx,val){
 }
 function addNewItem(){
   const cat=Vv('s_cat'),name=Vv('s_name').trim(),price=parseFloat(Vv('s_price'));
-  const listType=Vv('s_list')||'all';
   const code=Vv('s_code').trim();
   if(!name||isNaN(price)||price<0){alert('يرجى ملء الاسم والسعر بشكل صحيح');return;}
   if(!itemDB[cat])itemDB[cat]=[];
   if(itemDB[cat].find(x=>x.name===name)){alert('هذا الصنف موجود بالفعل في القائمة');return;}
-  const entry={name,price,list:listType};
+  const entry={name,price};
   if(code) entry.code=code;
   itemDB[cat].push(entry);
   $('s_name').value=''; $('s_price').value=''; $('s_code').value='';
@@ -1695,7 +1962,7 @@ function applyRoleUI(){
     // Hide everything
     $('main-content').style.display='none';
     $('pharm-section').style.display='none';
-    ['btn-admin','btn-users','btn-excel-all','btn-excel-pharm','btn-new-patient','current-user-badge'].forEach(id=>{
+    ['btn-admin','btn-users','btn-excel-all','btn-excel-pharm','btn-new-patient','btn-pharm-settings','current-user-badge'].forEach(id=>{
       const el=$(id); if(el) el.style.display='none';
     });
     return;
@@ -1732,6 +1999,8 @@ function applyRoleUI(){
     $('btn-users').style.display='none';
     $('btn-excel-all').style.display='none';
     $('btn-new-patient').style.display='none';
+    $('btn-pharm-settings').style.display='';
+    $('btn-admin').style.display='none';
     loadPharmPatients();
   }
 }
@@ -1955,13 +2224,11 @@ function closePharmModal(){ $('pharm-pt-modal').style.display='none'; pharmCurre
 function getPharmItemList(){
   const cat = Vv('ph_cat');
   const role = currentUser ? currentUser.role : '';
-  const listType = role==='nafaqa' ? 'nafaqa' : role==='tamin' ? 'tamin' : null;
-  const arr = (itemDB[cat]||[]).filter(x=>{
-    if(!listType) return true;
-    if(cat!=='أدوية' && cat!=='مستلزمات') return true; // شرائح etc تظهر للجميع
-    return !x.list || x.list==='all' || x.list===listType;
-  });
-  return arr;
+  // الصيدلي يرى قائمته الخاصة المستقلة تماماً
+  if(role === 'nafaqa') return pharmItemDB.nafaqa[cat] || [];
+  if(role === 'tamin')  return pharmItemDB.tamin[cat]  || [];
+  // المدير يرى القائمة الأصلية (لأغراض الإدارة)
+  return itemDB[cat] || [];
 }
 
 function resetPharmSel(){ $('ph_q').value=''; hidePharmDD(); }
@@ -1992,16 +2259,16 @@ function handleBarcodeKey(e){
   if(!val) return;
 
   const role = currentUser ? currentUser.role : '';
-  const listType = role==='nafaqa' ? 'nafaqa' : role==='tamin' ? 'tamin' : null;
+  let sourceDB2;
+  if(role === 'nafaqa') sourceDB2 = pharmItemDB.nafaqa;
+  else if(role === 'tamin') sourceDB2 = pharmItemDB.tamin;
+  else sourceDB2 = itemDB;
   let found = null, foundCat = '';
   const cats = ['أدوية','مستلزمات','شرائح ومسامير'];
   for(const cat of cats){
-    const arr = (itemDB[cat]||[]);
+    const arr = (sourceDB2[cat]||[]);
     const match = arr.find(x=> x.code && x.code.toLowerCase()===val.toLowerCase());
-    if(match){
-      if((cat==='أدوية'||cat==='مستلزمات') && listType && match.list && match.list!=='all' && match.list!==listType) continue;
-      found = match; foundCat = cat; break;
-    }
+    if(match){ found = match; foundCat = cat; break; }
   }
 
   if(!found){
@@ -2038,7 +2305,28 @@ function addBarcodeItemWithQty(){
   const qty = parseFloat($('ph_qty').value);
   if(!qty || qty<=0){ alert('⚠️ أدخل الكمية المصروفة'); return; }
   const {cat, name, code, price} = pendingBarcodeItem;
-  const existing = pharmBillItems.find(x=>x.name===name && x.cat===cat);
+
+  // فحص المخزون
+  const role = currentUser ? currentUser.role : '';
+  const listType = role==='nafaqa'?'nafaqa':role==='tamin'?'tamin':null;
+  if(listType){
+    const srcArr = (pharmItemDB[listType][cat]||[]);
+    const srcItem = srcArr.find(x=>x.name===name);
+    if(srcItem !== undefined){
+      const alreadyInBill = (pharmBillItems.find(x=>x.name===name&&x.cat===cat)?.qty||0);
+      const available = (srcItem.stock||0) - alreadyInBill;
+      if(qty > available){
+        alert(`⛔ لا يمكن الصرف
+الكمية المطلوبة: ${qty}
+المتاح في المخزون: ${Math.max(0,available)}
+يرجى تعديل كمية الورود أولاً`);
+        return;
+      }
+    }
+  }
+
+  const existing2 = pharmBillItems.find(x=>x.name===name && x.cat===cat);
+  const existing = existing2;
   if(existing){ existing.qty+=qty; existing.total=parseFloat((existing.qty*existing.price).toFixed(2)); }
   else {
     pharmBillItems.push({cat, name, code, qty, price, total:parseFloat((qty*price).toFixed(2)), returned:0, addedBy:currentUser?currentUser.name:''});
@@ -2057,13 +2345,27 @@ function addPharmItem(){
   const qty = parseFloat($('ph_qty').value)||1;
   if(!name){ alert('اختر الصنف أولاً'); return; }
   const role = currentUser ? currentUser.role : '';
-  const listType = role==='nafaqa' ? 'nafaqa' : role==='tamin' ? 'tamin' : null;
-  const items = itemDB[cat]||[];
+  let sourceDB;
+  if(role === 'nafaqa') sourceDB = pharmItemDB.nafaqa;
+  else if(role === 'tamin') sourceDB = pharmItemDB.tamin;
+  else sourceDB = itemDB;
+  const items = sourceDB[cat]||[];
   let item = items.find(x=>x.name===name);
   if(!item){ alert('الصنف غير موجود في القائمة'); return; }
-  if((cat==='أدوية'||cat==='مستلزمات') && listType && item.list && item.list!=='all' && item.list!==listType){
-    alert('⚠️ هذا الصنف غير متاح لنوع خدمتك'); return;
+
+  // فحص المخزون قبل الصرف
+  if(role==='nafaqa'||role==='tamin'){
+    const alreadyInBill = (pharmBillItems.find(x=>x.name===name&&x.cat===cat)?.qty||0);
+    const available = (item.stock||0) - alreadyInBill;
+    if(qty > available){
+      alert(`⛔ لا يمكن الصرف
+الكمية المطلوبة: ${qty}
+المتاح في المخزون: ${Math.max(0,available)}
+يرجى تعديل كمية الورود في قائمة الأصناف أولاً`);
+      return;
+    }
   }
+
   const existing = pharmBillItems.find(x=>x.name===name && x.cat===cat);
   if(existing){ existing.qty+=qty; existing.total=parseFloat((existing.qty*existing.price).toFixed(2)); }
   else {
@@ -2095,9 +2397,20 @@ function renderPharmBill(){
   body.innerHTML = pharmBillItems.map((it,i)=>{
     const net = Math.max(0, it.qty - (it.returned||0));
     const netTotal = parseFloat((net*it.price).toFixed(2));
+    // حساب المخزون المتاح من pharmItemDB
+    const role2 = currentUser?currentUser.role:'';
+    const lt2 = role2==='nafaqa'?'nafaqa':role2==='tamin'?'tamin':null;
+    let stockLeft = null;
+    if(lt2){
+      const si = (pharmItemDB[lt2][it.cat]||[]).find(x=>x.name===it.name);
+      if(si) stockLeft = si.stock||0;
+    }
+    const stockBadge = stockLeft!==null
+      ? `<span style="font-size:.6rem;font-weight:700;color:${stockLeft<=5?'#c0392b':'#27ae60'};margin-right:4px">(مخزون: ${stockLeft})</span>`
+      : '';
     return `<tr>
       <td>${i+1}</td>
-      <td>${it.name}${it.addedBy?`<span style="font-size:.6rem;color:var(--tm);margin-right:4px">(${it.addedBy})</span>`:''}</td>
+      <td>${it.name}${it.addedBy?`<span style="font-size:.6rem;color:var(--tm);margin-right:4px">(${it.addedBy})</span>`:''}${stockBadge}</td>
       <td>${it.cat}</td>
       <td style="text-align:center">${it.qty}</td>
       <td style="text-align:center">${it.price}</td>
@@ -2142,6 +2455,25 @@ async function savePharmItems(){
 
   try{
     await db.collection('patients').doc(pharmCurrentPatient.firestoreId).set(updated);
+
+    // تحديث المخزون: طرح الكميات المصروفة الصافية + إضافة المرتجع
+    const listType2 = currentUser.role==='nafaqa'?'nafaqa':currentUser.role==='tamin'?'tamin':null;
+    if(listType2){
+      let stockChanged = false;
+      pharmBillItems.forEach(it=>{
+        const srcArr = pharmItemDB[listType2][it.cat]||[];
+        const srcItem = srcArr.find(x=>x.name===it.name);
+        if(srcItem){
+          const netDispatched = Math.max(0, it.qty - (it.returned||0));
+          const returnedQty   = it.returned||0;
+          // اطرح الصافي المصروف وأضف المرتجع
+          srcItem.stock = Math.max(0, (srcItem.stock||0) - netDispatched + returnedQty);
+          stockChanged = true;
+        }
+      });
+      if(stockChanged) savePharmSettings(listType2);
+    }
+
     db.collection('auditLog').add({action:'pharm_save', patient:pharmCurrentPatient.name, items:finalItems.length, user:currentUser.name, role:currentUser.role, at:firebase.firestore.FieldValue.serverTimestamp()}).catch(()=>{});
     alert('✅ تم حفظ الصرف للمريض: ' + pharmCurrentPatient.name);
     closePharmModal();
