@@ -753,8 +753,16 @@ function init(){
     .then(snap=>{
       if(snap.exists){
         const d=snap.data();
-        if(d.itemDB){
+        // استخدم itemDB من Firebase فقط إذا كانت غير فارغة
+        if(d.itemDB && ((d.itemDB['أدوية']||[]).length>0 || (d.itemDB['مستلزمات']||[]).length>0 || (d.itemDB['أشعة']||[]).length>0)){
           itemDB=d.itemDB;
+        } else {
+          // البيانات فارغة في Firebase — استخدم DB0 الجديد واحفظه
+          itemDB = JSON.parse(JSON.stringify(DB0));
+          db.collection('settings').doc('main')
+            .set({itemDB, updatedAt: firebase.firestore.FieldValue.serverTimestamp()}, {merge:true})
+            .then(()=>console.log('main itemDB seeded from DB0'))
+            .catch(e=>console.error('main seed error:', e));
         }
         if(d.depts&&d.depts.length){
           const extraDepts = [
@@ -785,18 +793,18 @@ async function loadPharmItemDBs(){
       db.collection('settings').doc('tamin').get(),
     ]);
 
-    if(nafaqaSnap.exists && nafaqaSnap.data().itemDB){
-      pharmItemDB.nafaqa = nafaqaSnap.data().itemDB;
-    } else {
-      // أول مرة: انسخ الأدوية والمستلزمات الموجودة في main كنقطة بداية
-      await seedPharmItemDB('nafaqa');
-    }
+    // نفقة: إذا كانت البيانات موجودة وغير فارغة نستخدمها، وإلا نزرع الافتراضي
+    const nafaqaData = nafaqaSnap.exists ? nafaqaSnap.data().itemDB : null;
+    const nafaqaEmpty = !nafaqaData || ((nafaqaData['أدوية']||[]).length===0 && (nafaqaData['مستلزمات']||[]).length===0);
+    if(!nafaqaEmpty){ pharmItemDB.nafaqa = nafaqaData; }
+    else { await seedPharmItemDB('nafaqa'); }
 
-    if(taminSnap.exists && taminSnap.data().itemDB){
-      pharmItemDB.tamin = taminSnap.data().itemDB;
-    } else {
-      await seedPharmItemDB('tamin');
-    }
+    // تأمين: نفس المنطق
+    const taminData = taminSnap.exists ? taminSnap.data().itemDB : null;
+    const taminEmpty = !taminData || ((taminData['أدوية']||[]).length===0 && (taminData['مستلزمات']||[]).length===0);
+    if(!taminEmpty){ pharmItemDB.tamin = taminData; }
+    else { await seedPharmItemDB('tamin'); }
+
   }catch(e){ console.error('loadPharmItemDBs:', e); }
 }
 
