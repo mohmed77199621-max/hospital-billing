@@ -1155,13 +1155,14 @@ function filterDD(){
   const isTamin  = stype==='تأمين صحي';
   const list=(itemDB[cat]||[]).filter(x=>{
     const lt = x.list || 'all';
-    // أصناف بدون list (أشعة، تحاليل، أجهزة...) أو list='all' تظهر للجميع
+    // أصناف بدون list (أشعة، تحاليل، أجهزة...) تظهر للجميع
     if(lt === 'all') return true;
-    // أصناف نفقة: تظهر لنفقة الدولة وللاقتصادي والمجاني (أي غير تأمين)
-    if(lt === 'nafaqa') return !isTamin;
-    // أصناف تأمين: تظهر للتأمين وللاقتصادي والمجاني (أي غير نفقة)
-    if(lt === 'tamin')  return !isNafaqa;
-    return true;
+    // نفقة الدولة: يرى nafaqa فقط
+    if(isNafaqa) return lt === 'nafaqa';
+    // تأمين صحي: يرى tamin فقط
+    if(isTamin)  return lt === 'tamin';
+    // اقتصادي ومجاني: يرى tamin فقط
+    return lt === 'tamin';
   }).filter(x=>x.name.toLowerCase().includes(q));
   const dd=$('i_dd');
   if(list.length){
