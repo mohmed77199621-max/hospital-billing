@@ -1203,15 +1203,21 @@ function updateItemQty(id, val){
   const qty = Math.max(0.01, parseFloat(val)||0.01);
   item.qty = qty;
   item.total = parseFloat((item.price * qty).toFixed(4));
+  // تحديث خانة الإجمالي في نفس السطر مباشرة بدون إعادة رسم الجدول
+  const totalCell = document.querySelector(`[data-total-id="${id}"]`);
+  if(totalCell) totalCell.textContent = fmt(item.total);
   calcTotal();
 }
 function updateItemPrice(id, val){
   const item = billItems.find(x=>x.id===id);
   if(!item) return;
   const price = Math.max(0, parseFloat(val)||0);
-  if(item.origPrice === undefined) item.origPrice = item.price; // احتفظ بالسعر الأصلي
+  if(item.origPrice === undefined) item.origPrice = item.price;
   item.price = price;
   item.total = parseFloat((price * item.qty).toFixed(4));
+  // تحديث خانة الإجمالي في نفس السطر مباشرة
+  const totalCell = document.querySelector(`[data-total-id="${id}"]`);
+  if(totalCell) totalCell.textContent = fmt(item.total);
   calcTotal();
 }
 function renderBill(){
@@ -1239,7 +1245,7 @@ function renderBill(){
         title="السعر الأصلي: ${fmt(i.origPrice??i.price)}">
       <span class="print-only">${fmt(i.price)}</span>
     </td>
-    <td style="text-align:left;font-weight:800;color:var(--p)">${fmt(i.total)}</td>
+    <td style="text-align:left;font-weight:800;color:var(--p)" data-total-id="${i.id}">${fmt(i.total)}</td>
     <td class="no-print" style="text-align:center">
       <button onclick="delItem(${i.id})" style="background:none;border:none;cursor:pointer;color:#e57373;font-size:1rem">🗑</button>
     </td></tr>`).join('');
