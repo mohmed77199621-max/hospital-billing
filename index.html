@@ -191,7 +191,7 @@ input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
     <button id="btn-pharm-settings" class="btn btn-o" onclick="openSettings()" style="display:none;color:#a8c4ff;border-color:rgba(255,255,255,.25);background:rgba(255,255,255,.08)">⚙ تعديل قائمة الأدوية</button>
     <button id="btn-data-settings" class="btn btn-o" onclick="openSettings()" style="display:none;color:#a8c4ff;border-color:rgba(255,255,255,.25);background:rgba(255,255,255,.08)">⚙ تعديل أسعار الأدوية والمستلزمات</button>
     <button id="btn-users" class="btn btn-o" onclick="openUserMgmt()" style="display:none;color:#a8c4ff;border-color:rgba(255,255,255,.25);background:rgba(255,255,255,.08)">👥 المستخدمين</button>
-    <button id="btn-excel-all" class="btn btn-a" onclick="exportAllExcel()" style="display:none">📊 تصدير الكل إكسل</button>
+    <button id="btn-excel-all" class="btn btn-a" onclick="openExcelExportModal()" style="display:none">📊 تصدير إكسل</button>
     <button id="btn-new-patient" class="btn btn-g" onclick="clearForm()" style="display:none">+ مريض جديد</button>
     <button class="btn btn-r btn-sm" onclick="doLogout()" style="background:rgba(184,50,50,.7);border:1px solid rgba(255,100,100,.3)">خروج</button>
   </div>
@@ -1192,11 +1192,28 @@ function addItem(){
     existing.qty=parseFloat((existing.qty+qty).toFixed(4));
     existing.total=parseFloat((existing.price*existing.qty).toFixed(4));
   } else {
-    billItems.push({id:Date.now(),name:selItem.name,cat,price:selItem.price,qty,total:selItem.price*qty});
+    billItems.push({id:Date.now(),name:selItem.name,cat,price:selItem.price,origPrice:selItem.price,qty,total:selItem.price*qty});
   }
   renderBill(); resetSel(); $('i_qty').value=1;
 }
 function delItem(id){billItems=billItems.filter(x=>x.id!==id);renderBill();}
+function updateItemQty(id, val){
+  const item = billItems.find(x=>x.id===id);
+  if(!item) return;
+  const qty = Math.max(0.01, parseFloat(val)||0.01);
+  item.qty = qty;
+  item.total = parseFloat((item.price * qty).toFixed(4));
+  calcTotal();
+}
+function updateItemPrice(id, val){
+  const item = billItems.find(x=>x.id===id);
+  if(!item) return;
+  const price = Math.max(0, parseFloat(val)||0);
+  if(item.origPrice === undefined) item.origPrice = item.price; // احتفظ بالسعر الأصلي
+  item.price = price;
+  item.total = parseFloat((price * item.qty).toFixed(4));
+  calcTotal();
+}
 function renderBill(){
   const tb=$('bill-body');
   if(!billItems.length){
@@ -1207,8 +1224,21 @@ function renderBill(){
     <td style="color:var(--tm);font-size:.72rem">${n+1}</td>
     <td style="font-weight:700">${i.name}</td>
     <td style="text-align:center"><span class="badge bp">${i.cat}</span></td>
-    <td style="text-align:center;font-weight:600">${i.qty}</td>
-    <td style="text-align:center;color:var(--tm)">${fmt(i.price)}</td>
+    <td style="text-align:center">
+      <input type="number" value="${i.qty}" min="0.01" step="0.01"
+        onchange="updateItemQty(${i.id},this.value)"
+        style="width:60px;text-align:center;border:1px solid var(--b);border-radius:6px;padding:2px 4px;font-family:inherit;font-size:.82rem;background:#f8f9ff"
+        class="no-print">
+      <span class="print-only">${i.qty}</span>
+    </td>
+    <td style="text-align:center">
+      <input type="number" value="${fmt(i.price)}" min="0" step="0.01"
+        onchange="updateItemPrice(${i.id},this.value)"
+        style="width:70px;text-align:center;border:1px solid var(--b);border-radius:6px;padding:2px 4px;font-family:inherit;font-size:.82rem;background:#fff8e1"
+        class="no-print"
+        title="السعر الأصلي: ${fmt(i.origPrice??i.price)}">
+      <span class="print-only">${fmt(i.price)}</span>
+    </td>
     <td style="text-align:left;font-weight:800;color:var(--p)">${fmt(i.total)}</td>
     <td class="no-print" style="text-align:center">
       <button onclick="delItem(${i.id})" style="background:none;border:none;cursor:pointer;color:#e57373;font-size:1rem">🗑</button>
@@ -1317,9 +1347,10 @@ function buildInvoice(pt){
       <tr><td class="inv-grand" style="padding:8px 10px">▌ الإجمالي الكلي المطلوب</td><td class="inv-grand" style="text-align:center;padding:8px 10px">${grand.toLocaleString('ar-EG',{minimumFractionDigits:2})} ج.م</td></tr>    </table>
   </div>
   ${notes?`<div style="margin-top:7px;padding:6px 10px;border:1.5px solid #000;font-size:9pt"><span style="font-weight:900">ملاحظات: </span>${notes}</div>`:''}
-  <div class="inv-sigs" style="grid-template-columns:1fr 1fr">
+  <div class="inv-sigs" style="grid-template-columns:1fr 1fr 1fr">
     <div class="inv-sig">مدخل البيانات<br><br><span style="font-size:8pt;font-weight:400">الاسم: ${dataEntryName||'.....................'}</span></div>
-    <div class="inv-sig">مكتب القرارات — يعتمد<br><br><span style="font-size:8pt;font-weight:400">الاسم: .....................</span></div>
+    <div class="inv-sig">حسابات المرضى<br><br><span style="font-size:8pt;font-weight:400">الاسم: .....................</span></div>
+    <div class="inv-sig">يعتمد<br><br><span style="font-size:8pt;font-weight:400">الاسم: .....................</span></div>
   </div>
   <div style="text-align:center;font-size:8pt;color:#555;margin-top:10px;border-top:1px solid #999;padding-top:5px">مستشفى سوهاج العام — تاريخ الطباعة: ${new Date().toLocaleDateString('ar-EG')}</div>
   </div>
@@ -1414,6 +1445,34 @@ function printCurrentInvoice(pt){
         <span>فاتورة مريض: ${patientName}</span>
         <span>تاريخ الطباعة: ${new Date().toLocaleDateString('ar-EG')}</span>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- EXCEL EXPORT MODAL -->
+<div id="excel-modal" class="modal" onclick="if(event.target===this)closeExcelModal()" style="display:none">
+  <div class="modal-box" style="max-width:420px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;border-bottom:2px solid var(--b);padding-bottom:12px">
+      <h2 style="font-weight:900;font-size:.95rem;color:var(--p)">📊 تصدير سجل المرضى — إكسل</h2>
+      <button onclick="closeExcelModal()" style="background:none;border:none;cursor:pointer;font-size:1.4rem;color:var(--tm)">✕</button>
+    </div>
+    <div style="font-size:.82rem;color:var(--tm);margin-bottom:14px">اختر الفترة الزمنية للتصدير:</div>
+    <div class="g2" style="margin-bottom:14px">
+      <div>
+        <label class="lbl">من تاريخ</label>
+        <input type="date" id="excel-from" class="inp">
+      </div>
+      <div>
+        <label class="lbl">إلى تاريخ</label>
+        <input type="date" id="excel-to" class="inp">
+      </div>
+    </div>
+    <div style="font-size:.78rem;color:var(--tm);margin-bottom:16px;background:#f0f4ff;padding:8px 12px;border-radius:8px">
+      💡 اتركهما فارغين لتصدير جميع المرضى
+    </div>
+    <div style="display:flex;gap:10px;justify-content:flex-end">
+      <button onclick="closeExcelModal()" class="btn btn-o">إلغاء</button>
+      <button onclick="exportAllExcel()" class="btn btn-p">📥 تصدير</button>
     </div>
   </div>
 </div>
@@ -1626,8 +1685,54 @@ function renderPendingPharmList(){
 
 
 /* ========== EXCEL EXPORT ========== */
-function exportAllExcel(){
+function openExcelExportModal(){
   if(!patients.length){alert('لا يوجد مرضي محفوظون');return;}
+  // ضع تاريخ اليوم كحد أقصى افتراضي
+  const today = new Date().toISOString().slice(0,10);
+  $('excel-to').value = today;
+  $('excel-from').value = '';
+  $('excel-modal').style.display = 'flex';
+}
+function closeExcelModal(){ $('excel-modal').style.display='none'; }
+
+function exportAllExcel(){
+  closeExcelModal();
+  if(!patients.length){alert('لا يوجد مرضي محفوظون');return;}
+
+  // فلتر التاريخ
+  const fromVal = $('excel-from').value;
+  const toVal   = $('excel-to').value;
+  const fromDate = fromVal ? new Date(fromVal + 'T00:00:00') : null;
+  const toDate   = toVal   ? new Date(toVal   + 'T23:59:59') : null;
+
+  // دالة تحويل تاريخ النص إلى Date
+  function parsePatientDate(str){
+    if(!str) return null;
+    // يدعم: DD/MM/YYYY أو YYYY-MM-DD
+    if(str.includes('/')){
+      const [d,m,y] = str.split('/');
+      return new Date(`${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}T00:00:00`);
+    }
+    return new Date(str + 'T00:00:00');
+  }
+
+  let filtered = patients;
+  if(fromDate || toDate){
+    filtered = patients.filter(pt=>{
+      const entryDate = parsePatientDate(pt.entry || pt.entryRaw);
+      if(!entryDate) return true; // إذا لم يوجد تاريخ، اشمله
+      if(fromDate && entryDate < fromDate) return false;
+      if(toDate   && entryDate > toDate)   return false;
+      return true;
+    });
+  }
+
+  if(!filtered.length){
+    alert('لا يوجد مرضي في هذه الفترة الزمنية');return;
+  }
+
+  const fromLabel = fromVal || 'الكل';
+  const toLabel   = toVal   || 'الكل';
   const hdr=[
     'رقم التذكرة','اسم المريض','القسم الطبي','نوع الخدمة','فئة التأمين','المجموعة','رقم الخطاب / القرار',
     'تاريخ الدخول','تاريخ الخروج','مدة الإقامة (يوم)',
@@ -1638,7 +1743,7 @@ function exportAllExcel(){
     'إجمالي التحاليل','إجمالي الأجهزة','إجمالي خدمات أخري',
     'إجمالي الفاتورة','ملاحظات'
   ];
-  const rows=patients.map(pt=>{
+  const rows=filtered.map(pt=>{
     const c={'أدوية':0,'مستلزمات':0,'شرائح ومسامير':0,'أشعة':0,'تحاليل':0,'أجهزة':0,'خدمات أخري':0};
     (pt.items||[]).forEach(i=>{if(i.cat in c)c[i.cat]+=i.total;});
     const stay=parseFloat(fmt(pt.fStay||0));
@@ -1669,7 +1774,8 @@ function exportAllExcel(){
   ws['!freeze']={xSplit:0,ySplit:1};
   const wb=XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb,ws,'سجل المرضي');
-  XLSX.writeFile(wb,'سجل_مرضي_سوهاج_'+new Date().toISOString().slice(0,10)+'.xlsx');
+  const rangeLabel = (fromVal||toVal) ? `_${fromLabel}_الي_${toLabel}` : '_الكل';
+  XLSX.writeFile(wb,'سجل_مرضي_سوهاج'+rangeLabel+'_'+new Date().toISOString().slice(0,10)+'.xlsx');
 }
 
 /* ========== SETTINGS MODAL ========== */
@@ -2467,5 +2573,33 @@ document.addEventListener('keydown', function(e){
 
 window.onload = init;
 </script>
+
+<!-- EXCEL EXPORT MODAL -->
+<div id="excel-modal" class="modal" onclick="if(event.target===this)closeExcelModal()" style="display:none">
+  <div class="modal-box" style="max-width:420px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;border-bottom:2px solid var(--b);padding-bottom:12px">
+      <h2 style="font-weight:900;font-size:.95rem;color:var(--p)">📊 تصدير سجل المرضى — إكسل</h2>
+      <button onclick="closeExcelModal()" style="background:none;border:none;cursor:pointer;font-size:1.4rem;color:var(--tm)">✕</button>
+    </div>
+    <div style="font-size:.82rem;color:var(--tm);margin-bottom:14px">اختر الفترة الزمنية للتصدير:</div>
+    <div class="g2" style="margin-bottom:14px">
+      <div>
+        <label class="lbl">من تاريخ</label>
+        <input type="date" id="excel-from" class="inp">
+      </div>
+      <div>
+        <label class="lbl">إلى تاريخ</label>
+        <input type="date" id="excel-to" class="inp">
+      </div>
+    </div>
+    <div style="font-size:.78rem;color:var(--tm);margin-bottom:16px;background:#f0f4ff;padding:8px 12px;border-radius:8px">
+      💡 اتركهما فارغين لتصدير جميع المرضى
+    </div>
+    <div style="display:flex;gap:10px;justify-content:flex-end">
+      <button onclick="closeExcelModal()" class="btn btn-o">إلغاء</button>
+      <button onclick="exportAllExcel()" class="btn btn-p">📥 تصدير</button>
+    </div>
+  </div>
+</div>
 </body>
 </html>
