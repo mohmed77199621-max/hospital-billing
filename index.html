@@ -2003,12 +2003,10 @@ function renderSetItems(){
         const realIdx=arr.indexOf(x);
         const curList = x.list || 'all';
         const lc = LIST_COLORS[curList];
-        const listSelect = isOwnedCat ? `<select title="هذا الصنف خاص بـ" onchange="updateDBList('${cat}',${realIdx},this.value)"
-              style="width:108px;padding:3px 5px;border:1.5px solid ${lc.c};border-radius:5px;font-size:.66rem;font-weight:800;color:${lc.c};background:${lc.bg};text-align:center;font-family:'Noto Kufi Arabic',sans-serif">
-              <option value="all" ${curList==='all'?'selected':''}>👥 الجميع</option>
-              <option value="nafaqa" ${curList==='nafaqa'?'selected':''}>💊 نفقة الدولة</option>
-              <option value="tamin" ${curList==='tamin'?'selected':''}>🏥 التأمين</option>
-            </select>` : '';
+        const listLabel = curList==='nafaqa' ? '💊 نفقة الدولة' : curList==='tamin' ? '🏥 التأمين' : '👥 الجميع';
+        const listSelect = isOwnedCat
+          ? `<span style="padding:3px 8px;border:1.5px solid ${lc.c};border-radius:5px;font-size:.66rem;font-weight:800;color:${lc.c};background:${lc.bg}">${listLabel}</span>`
+          : '';
         return `<div id="item-row-${cat}-${realIdx}" style="display:flex;justify-content:space-between;align-items:center;padding:6px 10px;background:#fff;border-radius:6px;margin-bottom:3px;border:1px solid var(--b);gap:6px;flex-wrap:wrap">
           <div style="flex:1;min-width:0">
             <span style="font-size:.75rem;font-weight:700">${x.name}</span>
@@ -2039,12 +2037,7 @@ function updateDBPrice(cat,idx,val){
   saveSettings();
   flashSaved('item-row-'+cat+'-'+idx);
 }
-function updateDBList(cat,idx,val){
-  if(!itemDB[cat] || !itemDB[cat][idx]) return;
-  itemDB[cat][idx].list = val; // 'all' | 'nafaqa' | 'tamin'
-  renderSetItems();
-  saveSettings();
-}
+
 function onAddCatChange(){
   const cat = Vv('s_cat');
   const wrap = $('s_list_wrap');
