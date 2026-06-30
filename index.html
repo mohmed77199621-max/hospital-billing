@@ -52,6 +52,7 @@ body{font-family:'Noto Kufi Arabic',sans-serif;background:#eef2f7;color:var(--t)
 .dot-err{background:#f87171}
 .dot-wait{background:#fbbf24}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+@keyframes fadeInDown{from{opacity:0;transform:translate(-50%,-12px)}to{opacity:1;transform:translate(-50%,0)}}
 /* Loading overlay */
 #loading{position:fixed;inset:0;background:rgba(10,25,60,.85);z-index:900;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#fff;font-family:'Noto Kufi Arabic',sans-serif}
 #loading.hidden{display:none}
@@ -308,8 +309,8 @@ input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
       <div class="card">
         <div class="sec-title">فترة الإقامة</div>
         <div class="g2">
-          <div><label class="lbl">تاريخ الدخول</label><input type="date" id="p_entry" class="inp" style="font-size:.79rem"></div>
-          <div><label class="lbl">تاريخ الخروج</label><input type="date" id="p_exit" class="inp" style="font-size:.79rem"></div>
+          <div><label class="lbl">تاريخ الدخول</label><input type="date" id="p_entry" class="inp" style="font-size:.79rem;padding-left:8px;box-sizing:border-box;width:100%"></div>
+          <div><label class="lbl">تاريخ الخروج</label><input type="date" id="p_exit" class="inp" style="font-size:.79rem;padding-left:8px;box-sizing:border-box;width:100%"></div>
         </div>
         <div class="days-badge">
           <span style="font-size:.72rem;font-weight:700;color:var(--tm)">عدد أيام الإقامة</span>
@@ -568,8 +569,9 @@ input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
 
     <!-- تبويب القائمة الأصلية (مدخل البيانات) -->
     <div id="s-items" class="tab-content active">
-      <div style="background:#fff3cd;border-right:3px solid #856404;padding:7px 12px;border-radius:6px;margin-bottom:12px;font-size:.72rem;color:#856404;font-weight:700">
-        📋 هذه القائمة خاصة بمدخل البيانات (أشعة، تحاليل، أجهزة، خدمات أخرى، وكل الأصناف العامة) — لأصناف الأدوية والمستلزمات يمكنك تحديد ما إذا كان الصنف خاصًا بالتأمين، أو بنفقة الدولة، أو متاحًا للجميع
+      <div style="background:#fff3cd;border-right:3px solid #856404;padding:7px 12px;border-radius:6px;margin-bottom:12px;font-size:.72rem;color:#856404;font-weight:700;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+        <span>📋 هذه القائمة خاصة بمدخل البيانات (أشعة، تحاليل، أجهزة، خدمات أخرى، وكل الأصناف العامة) — لأصناف الأدوية والمستلزمات يمكنك تحديد ما إذا كان الصنف خاصًا بالتأمين، أو بنفقة الدولة، أو متاحًا للجميع</span>
+        <button onclick="downloadItemDBExcel()" class="btn btn-a" style="flex-shrink:0;font-size:.72rem;padding:6px 12px">📥 تنزيل إكسل</button>
       </div>
       <div class="g2" style="margin-bottom:14px">
         <div style="background:#f0f4ff;padding:14px;border-radius:10px">
@@ -601,8 +603,9 @@ input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
 
     <!-- تبويب قائمة نفقة الدولة المستقلة -->
     <div id="s-nafaqa" class="tab-content">
-      <div style="background:#fff3cd;border-right:3px solid #856404;padding:7px 12px;border-radius:6px;margin-bottom:12px;font-size:.72rem;color:#856404;font-weight:700">
-        💊 قائمة أدوية ومستلزمات نفقة الدولة — مستقلة تماماً — أي تعديل لا يؤثر على أي قائمة أخرى — يمكنك تعديل السعر، أو الإضافة، أو الحذف
+      <div style="background:#fff3cd;border-right:3px solid #856404;padding:7px 12px;border-radius:6px;margin-bottom:12px;font-size:.72rem;color:#856404;font-weight:700;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+        <span>💊 قائمة أدوية ومستلزمات نفقة الدولة — مستقلة تماماً — أي تعديل لا يؤثر على أي قائمة أخرى — يمكنك تعديل السعر، أو الإضافة، أو الحذف</span>
+        <button onclick="downloadPharmExcel('nafaqa')" class="btn btn-a" style="flex-shrink:0;font-size:.72rem;padding:6px 12px;background:#856404;border-color:#856404">📥 تنزيل إكسل</button>
       </div>
       <div class="g2" style="margin-bottom:14px">
         <div style="background:#fffbee;padding:14px;border-radius:10px;border:1px solid #f0c040">
@@ -623,8 +626,9 @@ input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
 
     <!-- تبويب قائمة التأمين الصحي المستقلة -->
     <div id="s-tamin" class="tab-content">
-      <div style="background:#d1ecf1;border-right:3px solid #0c5460;padding:7px 12px;border-radius:6px;margin-bottom:12px;font-size:.72rem;color:#0c5460;font-weight:700">
-        💊 قائمة أدوية ومستلزمات التأمين الصحي — مستقلة تماماً — أي تعديل لا يؤثر على أي قائمة أخرى — يمكنك تعديل السعر، أو الإضافة، أو الحذف
+      <div style="background:#d1ecf1;border-right:3px solid #0c5460;padding:7px 12px;border-radius:6px;margin-bottom:12px;font-size:.72rem;color:#0c5460;font-weight:700;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+        <span>💊 قائمة أدوية ومستلزمات التأمين الصحي — مستقلة تماماً — أي تعديل لا يؤثر على أي قائمة أخرى — يمكنك تعديل السعر، أو الإضافة، أو الحذف</span>
+        <button onclick="downloadPharmExcel('tamin')" class="btn btn-a" style="flex-shrink:0;font-size:.72rem;padding:6px 12px;background:#0c5460;border-color:#0c5460">📥 تنزيل إكسل</button>
       </div>
       <div class="g2" style="margin-bottom:14px">
         <div style="background:#eef9ff;padding:14px;border-radius:10px;border:1px solid #90d5ec">
@@ -752,21 +756,20 @@ function init(){
   
   setStatus('wait');
   ensureAdminSeed();
-  // تحميل القائمة الأصلية (مدخل البيانات)
-  db.collection('settings').doc('main').get()
-    .then(snap=>{
+
+  // تحميل القائمة الأصلية (مدخل البيانات) — استماع مباشر للتحديثات الفورية
+  let mainFirstLoad = true;
+  db.collection('settings').doc('main').onSnapshot(snap=>{
       if(snap.exists){
         const d=snap.data();
-        // استخدم itemDB من Firebase فقط إذا كانت الأدوية والمستلزمات غير فارغة
         const fbItemDB = d.itemDB || {};
         const hasMeds = (fbItemDB['أدوية']||[]).length > 0;
         const hasSupplies = (fbItemDB['مستلزمات']||[]).length > 0;
         if(d.itemDB && hasMeds && hasSupplies){
           itemDB = d.itemDB;
-        } else {
-          // الأدوية أو المستلزمات فارغة في Firebase — استخدم DB0 الجديد وادمج معه باقي البيانات الموجودة
+        } else if(mainFirstLoad) {
+          // الأدوية أو المستلزمات فارغة في Firebase — استخدم DB0 الجديد وادمج معه باقي البيانات الموجودة (مرة واحدة فقط)
           const freshDB = JSON.parse(JSON.stringify(DB0));
-          // احتفظ بأي فئات أخرى موجودة في Firebase (أشعة، تحاليل، أجهزة...) إذا كانت معدّلة
           ['أشعة','تحاليل','أجهزة','شرائح ومسامير','خدمات أخري'].forEach(cat=>{
             if(fbItemDB[cat] && fbItemDB[cat].length > 0) freshDB[cat] = fbItemDB[cat];
           });
@@ -789,35 +792,50 @@ function init(){
           depts = merged;
         }
         renderDepts();
+        // إذا كانت نافذة الإعدادات مفتوحة على تبويب مدخل البيانات، حدّثها فوراً
+        if(typeof renderSetItems==='function' && $('s-items') && $('s-items').classList.contains('active')) renderSetItems();
+        // إذا كانت قائمة البحث عن الأصناف مفتوحة في الفاتورة، حدّثها أيضاً
+        if(typeof filterDD==='function' && $('i_dd') && $('i_dd').style.display==='block') filterDD();
       }
-    }).catch(e=>console.log('Main settings:', e));
+      mainFirstLoad = false;
+    }, e=>console.log('Main settings:', e));
 
   // تحميل قوائم الصيدليات المستقلة في الخلفية
   loadPharmItemDBs();
   loadPatients(true);
 }
 
-// تحميل قوائم أدوية الصيدليات المستقلة من Firestore
-async function loadPharmItemDBs(){
-  try{
-    const [nafaqaSnap, taminSnap] = await Promise.all([
-      db.collection('settings').doc('nafaqa').get(),
-      db.collection('settings').doc('tamin').get(),
-    ]);
-
-    // نفقة: إذا كانت البيانات موجودة وغير فارغة نستخدمها، وإلا نزرع الافتراضي
-    const nafaqaData = nafaqaSnap.exists ? nafaqaSnap.data().itemDB : null;
+// تحميل قوائم أدوية الصيدليات المستقلة من Firestore — استماع مباشر للتحديثات الفورية
+let _nafaqaFirstLoad = true, _taminFirstLoad = true;
+function loadPharmItemDBs(){
+  db.collection('settings').doc('nafaqa').onSnapshot(snap=>{
+    const nafaqaData = snap.exists ? snap.data().itemDB : null;
     const nafaqaEmpty = !nafaqaData || ((nafaqaData['أدوية']||[]).length===0 && (nafaqaData['مستلزمات']||[]).length===0);
-    if(!nafaqaEmpty){ pharmItemDB.nafaqa = nafaqaData; }
-    else { await seedPharmItemDB('nafaqa'); }
+    if(!nafaqaEmpty){
+      pharmItemDB.nafaqa = nafaqaData;
+      // حدّث الواجهات المعتمدة على هذه البيانات فوراً
+      if(typeof renderPharmListItems==='function' && $('s-nafaqa') && $('s-nafaqa').classList.contains('active')) renderPharmListItems('nafaqa');
+      if(typeof filterDD==='function' && $('i_dd') && $('i_dd').style.display==='block') filterDD();
+      if(typeof filterPharmDD==='function' && $('ph_dd') && $('ph_dd').style.display==='block') filterPharmDD();
+    } else if(_nafaqaFirstLoad){
+      seedPharmItemDB('nafaqa');
+    }
+    _nafaqaFirstLoad = false;
+  }, e=>console.error('nafaqa listener:', e));
 
-    // تأمين: نفس المنطق
-    const taminData = taminSnap.exists ? taminSnap.data().itemDB : null;
+  db.collection('settings').doc('tamin').onSnapshot(snap=>{
+    const taminData = snap.exists ? snap.data().itemDB : null;
     const taminEmpty = !taminData || ((taminData['أدوية']||[]).length===0 && (taminData['مستلزمات']||[]).length===0);
-    if(!taminEmpty){ pharmItemDB.tamin = taminData; }
-    else { await seedPharmItemDB('tamin'); }
-
-  }catch(e){ console.error('loadPharmItemDBs:', e); }
+    if(!taminEmpty){
+      pharmItemDB.tamin = taminData;
+      if(typeof renderPharmListItems==='function' && $('s-tamin') && $('s-tamin').classList.contains('active')) renderPharmListItems('tamin');
+      if(typeof filterDD==='function' && $('i_dd') && $('i_dd').style.display==='block') filterDD();
+      if(typeof filterPharmDD==='function' && $('ph_dd') && $('ph_dd').style.display==='block') filterPharmDD();
+    } else if(_taminFirstLoad){
+      seedPharmItemDB('tamin');
+    }
+    _taminFirstLoad = false;
+  }, e=>console.error('tamin listener:', e));
 }
 
 // نسخ الأدوية والمستلزمات من القائمة الأصلية كنقطة بداية لأول مرة
@@ -845,7 +863,7 @@ async function loadPatients(reset=false){
     if(!reset && lastDoc) q=q.startAfter(lastDoc);
     const snap=await q.get();
     if(reset){ patients=[]; lastDoc=null; allLoaded=false; }
-    if(snap.empty && reset){ renderPatients(); setStatus('ok'); loadingMore=false; updateLoadMoreBtn('done'); return; }
+    if(snap.empty && reset){ renderPatients(); setStatus('ok'); loadingMore=false; updateLoadMoreBtn('done'); _startPatientsLiveListener(); return; }
     snap.docs.forEach(doc=>patients.push({...doc.data(),firestoreId:doc.id}));
     lastDoc=snap.docs[snap.docs.length-1]||null;
     allLoaded=snap.docs.length<PAGE_SIZE;
@@ -857,6 +875,41 @@ async function loadPatients(reset=false){
   }
   loadingMore=false;
   updateLoadMoreBtn(allLoaded?'done':'more');
+  if(reset) _startPatientsLiveListener();
+}
+
+/* استماع مباشر لأي تغيير في قائمة المرضى (إضافة/تعديل/حذف) من أي مستخدم آخر */
+let _patientsUnsub = null;
+let _lastKnownSavedAt = null;
+function _startPatientsLiveListener(){
+  if(_patientsUnsub) _patientsUnsub(); // أوقف المستمع القديم لو موجود
+  _patientsUnsub = db.collection('patients').orderBy('savedAt','desc').limit(1)
+    .onSnapshot(snap=>{
+      if(snap.empty) return;
+      const doc = snap.docs[0];
+      const ts = doc.data().savedAt;
+      const tsKey = ts ? (ts.seconds||ts) : doc.id;
+      if(_lastKnownSavedAt === null){
+        _lastKnownSavedAt = tsKey; // أول مرة، فقط سجل القيمة بدون تنبيه
+        return;
+      }
+      if(tsKey !== _lastKnownSavedAt){
+        _lastKnownSavedAt = tsKey;
+        _showLiveUpdateBanner();
+      }
+    }, e=>console.error('patients live listener:', e));
+}
+
+function _showLiveUpdateBanner(){
+  let banner = $('live-update-banner');
+  if(!banner){
+    banner = document.createElement('div');
+    banner.id = 'live-update-banner';
+    banner.style.cssText = 'position:fixed;top:14px;left:50%;transform:translateX(-50%);z-index:9999;background:#0c5460;color:#fff;padding:10px 20px;border-radius:30px;font-size:.8rem;font-weight:800;box-shadow:0 6px 20px rgba(0,0,0,.25);cursor:pointer;display:flex;align-items:center;gap:8px;animation:fadeInDown .3s ease';
+    banner.innerHTML = '🔄 يوجد تحديثات جديدة — اضغط للتحديث';
+    banner.onclick = ()=>{ banner.remove(); loadPatients(true); };
+    document.body.appendChild(banner);
+  }
 }
 
 function updateLoadMoreBtn(state){
@@ -1588,10 +1641,15 @@ async function savePatient(){
       .get();
     const dup = dupSnap.docs.find(d=>d.id !== editId);
     if(dup){
-      alert('⚠️ تم تسجيل هذا المريض من قبل (رقم التذكرة '+ticket+' مسجل بالفعل في قسم '+dept+')');
+      const dd = dup.data();
+      alert('⚠️ تم تسجيل هذا المريض من قبل\nرقم التذكرة: '+ticket+'\nالقسم: '+dept+'\nالاسم: '+(dd.name||'—')+'\nتاريخ الدخول: '+(dd.entry||'—'));
       return;
     }
-  }catch(e){ alert('❌ خطأ في التحقق من رقم التذكرة: '+e.message); return; }
+  }catch(e){
+    // لا نسمح بالحفظ إذا فشل التحقق من التكرار لأي سبب — هذا أهم من أي خطأ آخر
+    alert('❌ تعذر التحقق من تكرار رقم التذكرة، لم يتم الحفظ لحمايتك من التكرار.\nالسبب: '+e.message+'\nحاول مرة أخرى أو تأكد من اتصال الإنترنت.');
+    return;
+  }
 
   const pt={...getFormData(), savedAt:firebase.firestore.FieldValue.serverTimestamp(), savedBy: currentUser?currentUser.name:'', savedByRole: currentUser?currentUser.role:''};
   setStatus('save');
@@ -2025,6 +2083,60 @@ function renderSetItems(){
   });
   if($('s_total'))$('s_total').innerText='إجمالي: '+total+' صنف';
   $('s-items-list').innerHTML=html||'<p style="text-align:center;color:var(--tm);font-size:.78rem;padding:14px">لا نتائج</p>';
+}
+function downloadPharmExcel(listType){
+  const cats = ['أدوية','مستلزمات','شرائح ومسامير'];
+  const label = listType==='nafaqa' ? 'نفقة الدولة' : 'التأمين الصحي';
+  const wb = XLSX.utils.book_new();
+  let totalItems = 0;
+
+  cats.forEach(cat=>{
+    const arr = (pharmItemDB[listType] && pharmItemDB[listType][cat]) || [];
+    if(!arr.length) return;
+    totalItems += arr.length;
+
+    const rows = [['مستشفى سوهاج العام — '+label+' — '+cat], [], ['م','اسم الصنف','السعر']];
+    arr.forEach((x,i)=> rows.push([i+1, x.name, x.price]));
+    rows.push(['', 'إجمالي: '+arr.length+' صنف', '']);
+
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    ws['!cols'] = [{wch:5},{wch:35},{wch:12}];
+    XLSX.utils.book_append_sheet(wb, ws, cat.slice(0,31));
+  });
+
+  if(totalItems===0){ alert('لا توجد أصناف لتصديرها'); return; }
+
+  const today = new Date().toISOString().slice(0,10);
+  XLSX.writeFile(wb, 'قائمة_'+label+'_'+today+'.xlsx');
+}
+function downloadItemDBExcel(){
+  const cats = ['أدوية','مستلزمات','شرائح ومسامير','أشعة','تحاليل','أجهزة','خدمات أخري'];
+  const wb = XLSX.utils.book_new();
+  let totalItems = 0;
+
+  cats.forEach(cat=>{
+    const arr = itemDB[cat] || [];
+    if(!arr.length) return;
+    totalItems += arr.length;
+
+    const rows = [['مستشفى سوهاج العام — '+cat], [], ['م','اسم الصنف','السعر','الملكية']];
+    arr.forEach((x,i)=>{
+      const listLabel = x.list==='nafaqa' ? 'نفقة الدولة' : x.list==='tamin' ? 'التأمين' : 'الجميع';
+      rows.push([i+1, x.name, x.price, listLabel]);
+    });
+    rows.push(['', 'إجمالي: '+arr.length+' صنف', '', '']);
+
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    ws['!cols'] = [{wch:5},{wch:35},{wch:12},{wch:18}];
+    // اسم الشيت لا يتعدى 31 حرف ولا يحتوي على رموز خاصة
+    const sheetName = cat.slice(0,31);
+    XLSX.utils.book_append_sheet(wb, ws, sheetName);
+  });
+
+  if(totalItems===0){ alert('لا توجد أصناف لتصديرها'); return; }
+
+  const today = new Date().toISOString().slice(0,10);
+  XLSX.writeFile(wb, 'قائمة_مدخل_البيانات_'+today+'.xlsx');
 }
 function delDBItem(cat,idx){
   if(!confirm('حذف هذا الصنف نهائياً؟'))return;
