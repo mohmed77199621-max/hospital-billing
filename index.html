@@ -193,7 +193,7 @@ input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
     <button id="btn-data-settings" class="btn btn-o" onclick="openSettings()" style="display:none;color:#a8c4ff;border-color:rgba(255,255,255,.25);background:rgba(255,255,255,.08)">⚙ تعديل أسعار الأدوية والمستلزمات</button>
     <button id="btn-users" class="btn btn-o" onclick="openUserMgmt()" style="display:none;color:#a8c4ff;border-color:rgba(255,255,255,.25);background:rgba(255,255,255,.08)">👥 المستخدمين</button>
     <button id="btn-excel-all" class="btn btn-a" onclick="openExcelExportModal()" style="display:none">📊 تصدير إكسل</button>
-    <button id="btn-new-patient" class="btn btn-g" onclick="clearForm()" style="display:none">+ مريض جديد</button>
+    <button id="btn-new-patient" class="btn btn-g" onclick="confirmNewPatient()" style="display:none">+ مريض جديد</button>
     <button class="btn btn-r btn-sm" onclick="doLogout()" style="background:rgba(184,50,50,.7);border:1px solid rgba(255,100,100,.3)">خروج</button>
   </div>
 </div>
@@ -250,11 +250,11 @@ input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
       <div class="card">
         <div class="sec-title">بيانات المريض الإدارية</div>
         <div style="display:flex;flex-direction:column;gap:10px">
-          <div><label class="lbl">اسم المريض رباعياً</label><input type="text" id="p_name" class="inp" placeholder="الاسم الكامل للمريض"></div>
+          <div><label class="lbl">اسم المريض رباعياً</label><input type="text" id="p_name" class="inp" placeholder="الاسم الكامل للمريض" oninput="markFormDirty()"></div>
           <div class="g2">
             <div>
               <label class="lbl">رقم التذكرة</label>
-              <input type="text" id="p_ticket" class="inp" onblur="checkTicketDuplicate()" onkeydown="if(event.key==='Tab'||event.key==='Enter')checkTicketDuplicate()">
+              <input type="text" id="p_ticket" class="inp" onblur="checkTicketDuplicate()" oninput="markFormDirty()" onkeydown="if(event.key==='Tab'||event.key==='Enter')checkTicketDuplicate()">
               <div id="ticket-msg" style="display:none;margin-top:5px;padding:7px 10px;border-radius:7px;font-size:.78rem;font-weight:700"></div>
             </div>
             <div><label class="lbl">القسم الطبي</label><select id="p_dept" class="inp" onchange="onDeptChange()"></select></div>
@@ -309,8 +309,8 @@ input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
       <div class="card">
         <div class="sec-title">فترة الإقامة</div>
         <div class="g2">
-          <div><label class="lbl">تاريخ الدخول</label><input type="date" id="p_entry" class="inp" dir="ltr" style="font-size:.79rem;padding-left:8px;box-sizing:border-box;width:100%;text-align:left"></div>
-          <div><label class="lbl">تاريخ الخروج</label><input type="date" id="p_exit" class="inp" dir="ltr" style="font-size:.79rem;padding-left:8px;box-sizing:border-box;width:100%;text-align:left"></div>
+          <div><label class="lbl">تاريخ الدخول</label><input type="date" id="p_entry" class="inp" dir="ltr" onchange="markFormDirty()" style="font-size:.79rem;padding-left:8px;box-sizing:border-box;width:100%;text-align:left"></div>
+          <div><label class="lbl">تاريخ الخروج</label><input type="date" id="p_exit" class="inp" dir="ltr" onchange="markFormDirty()" style="font-size:.79rem;padding-left:8px;box-sizing:border-box;width:100%;text-align:left"></div>
         </div>
         <div class="days-badge">
           <span style="font-size:.72rem;font-weight:700;color:var(--tm)">عدد أيام الإقامة</span>
@@ -791,7 +791,11 @@ function init(){
           extraDepts.forEach(nd=>{ if(!merged.includes(nd)) merged.push(nd); });
           depts = merged;
         }
+        // احتفظ بالقسم المختار حالياً قبل إعادة بناء القائمة
+        const _savedDept = $('p_dept') ? $('p_dept').value : '';
         renderDepts();
+        // أعد القسم المختار بعد إعادة البناء
+        if(_savedDept && $('p_dept')) $('p_dept').value = _savedDept;
         // إذا كانت نافذة الإعدادات مفتوحة على تبويب مدخل البيانات، حدّثها فوراً
         if(typeof renderSetItems==='function' && $('s-items') && $('s-items').classList.contains('active')) renderSetItems();
         // إذا كانت قائمة البحث عن الأصناف مفتوحة في الفاتورة، حدّثها أيضاً
@@ -1250,6 +1254,7 @@ function addItem(){
     existing.total=parseFloat((existing.price*existing.qty).toFixed(4));
   } else {
     billItems.push({id:Date.now(),name:selItem.name,cat,price:selItem.price,origPrice:selItem.price,qty,total:selItem.price*qty});
+    markFormDirty();
   }
   renderBill(); resetSel(); $('i_qty').value=1;
 }
@@ -1283,7 +1288,7 @@ function checkTicketDuplicate(){
     setTimeout(()=>{ msgDiv.style.display='none'; }, 3000);
   }
 }
-function updateItemQty(id, val){
+function updateItemQty(id, val){ markFormDirty();
   const item = billItems.find(x=>x.id===id);
   if(!item) return;
   const qty = Math.max(0.01, parseFloat(val)||0.01);
@@ -1294,7 +1299,7 @@ function updateItemQty(id, val){
   if(totalCell) totalCell.textContent = fmt(item.total);
   calcTotal();
 }
-function updateItemPrice(id, val){
+function updateItemPrice(id, val){ markFormDirty();
   const item = billItems.find(x=>x.id===id);
   if(!item) return;
   const price = Math.max(0, parseFloat(val)||0);
@@ -1703,8 +1708,18 @@ async function deletePatient(fid){
   catch(e){alert('❌ خطأ في الحذف:\n'+e.message);setStatus('err');}
 }
 
+// تتبع إذا كان هناك تعديلات غير محفوظة في الفاتورة
+let _formDirty = false;
+function markFormDirty(){ _formDirty = true; }
+function confirmNewPatient(){
+  if(_formDirty && (Vv('p_name').trim() || Vv('p_ticket').trim())){
+    if(!confirm('⚠️ يوجد بيانات غير محفوظة، هل تريد إلغاءها والبدء بمريض جديد؟')) return;
+  }
+  clearForm();
+}
+
 function clearForm(){
-  editId=null;
+  editId=null;  _formDirty=false;
   ['p_name','p_ticket','p_letter','p_entry','p_exit'].forEach(id=>$(id).value='');
   $('ticket-msg').style.display='none';
   $('p_notes').value=''; $('p_optype').value='';
@@ -2176,11 +2191,18 @@ function renderSetDepts(){
 function addDept(){
   const n=Vv('s_dept').trim();if(!n)return;
   depts.push(n);$('s_dept').value='';
-  renderDepts();renderSetDepts();saveSettings();
+  const _sd1=$('p_dept')?$('p_dept').value:'';
+  renderDepts();
+  if(_sd1&&$('p_dept'))$('p_dept').value=_sd1;
+  renderSetDepts();saveSettings();
 }
 function delDept(i){
   if(!confirm('حذف القسم: '+depts[i]+'؟'))return;
-  depts.splice(i,1);renderDepts();renderSetDepts();saveSettings();
+  const _sd2=$('p_dept')?$('p_dept').value:'';
+  depts.splice(i,1);
+  renderDepts();
+  if(_sd2&&$('p_dept'))$('p_dept').value=_sd2;
+  renderSetDepts();saveSettings();
 }
 
 
@@ -2297,13 +2319,18 @@ async function doLogin(){
 }
 
 function doLogout(){
-  if(!confirm('تأكيد تسجيل الخروج؟')) return;
+  if(_formDirty && (Vv('p_name').trim() || Vv('p_ticket').trim())){
+    if(!confirm('⚠️ يوجد بيانات مريض غير محفوظة، هل تريد تسجيل الخروج وفقدانها؟')) return;
+  } else if(!confirm('تأكيد تسجيل الخروج؟')) return;
+  // إيقاف جميع المستمعات الفورية
+  if(_pharmPatientsUnsub){ _pharmPatientsUnsub(); _pharmPatientsUnsub=null; }
+  if(_patientsUnsub){ _patientsUnsub(); _patientsUnsub=null; }
   currentUser = null;
+  pharmPatients = []; patients = [];
   $('login-screen').style.display='flex';
   showLoginScreen();
   $('l_user').value=''; $('l_pass').value='';
   $('login-err').style.display='none';
-  // Reset UI
   applyRoleUI();
 }
 
@@ -2433,28 +2460,32 @@ let pharmPatients = []; // patients loaded specifically for the pharmacy view (o
 /* خريطة نوع الخدمة <-> دور الصيدلي */
 const STYPE_FOR_ROLE = { nafaqa: 'نفقة دولة', tamin: 'تأمين صحي' };
 
-async function loadPharmPatients(){
+let _pharmPatientsUnsub = null;
+function loadPharmPatients(){
   const role = currentUser ? currentUser.role : '';
   const myStype = STYPE_FOR_ROLE[role];
   if(!myStype){ pharmPatients=[]; renderPharmPatients(); return; }
   $('pharm-patients-list').innerHTML = `<div style="text-align:center;padding:24px;color:var(--tm)">⏳ جاري التحميل...</div>`;
-  try{
-    const snap = await db.collection('patients')
-      .where('stype','==', myStype)
-      .where('finalized','==', false)
-      .get();
-    pharmPatients = snap.docs.map(d=>({...d.data(), firestoreId:d.id}));
-    // الأحدث أولاً (بدون الاعتماد على فهرس مركّب، نرتب يدوياً)
-    pharmPatients.sort((a,b)=>{
-      const ta = a.savedAt && a.savedAt.toMillis ? a.savedAt.toMillis() : 0;
-      const tb = b.savedAt && b.savedAt.toMillis ? b.savedAt.toMillis() : 0;
-      return tb - ta;
+
+  // أوقف المستمع القديم لو موجود
+  if(_pharmPatientsUnsub){ _pharmPatientsUnsub(); _pharmPatientsUnsub=null; }
+
+  _pharmPatientsUnsub = db.collection('patients')
+    .where('stype','==', myStype)
+    .where('finalized','==', false)
+    .onSnapshot(snap=>{
+      pharmPatients = snap.docs.map(d=>({...d.data(), firestoreId:d.id}));
+      pharmPatients.sort((a,b)=>{
+        const ta = a.savedAt && a.savedAt.toMillis ? a.savedAt.toMillis() : 0;
+        const tb = b.savedAt && b.savedAt.toMillis ? b.savedAt.toMillis() : 0;
+        return tb - ta;
+      });
+      renderPharmPatients();
+    }, e=>{
+      console.error('loadPharmPatients:', e);
+      pharmPatients = [];
+      renderPharmPatients();
     });
-  }catch(e){
-    console.error('loadPharmPatients:', e);
-    pharmPatients = [];
-  }
-  renderPharmPatients();
 }
 
 function renderPharmPatients(){
@@ -2492,7 +2523,7 @@ function countPharmItems(pt){
 
 /* ===== تسجيل مريض جديد بواسطة الصيدلي ===== */
 function openNewPharmPatientModal(){
-  $('np_dept').innerHTML = depts.map(x=>`<option>${x}</option>`).join('');
+  $('np_dept').innerHTML = '<option value="">— اختر القسم —</option>' + depts.map(x=>`<option>${x}</option>`).join('');
   $('np_name').value=''; $('np_ticket').value='';
   $('np-err').style.display='none';
   $('np-modal').style.display='flex';
