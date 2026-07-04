@@ -1296,11 +1296,16 @@ function checkTicketDuplicate(){
 function updateItemQty(id, val){ markFormDirty();
   const item = billItems.find(x=>x.id===id);
   if(!item) return;
-  const qty = Math.max(0.01, parseFloat(val)||0.01);
+  const qty = parseFloat(val);
+  // لو الكمية صفر أو أقل → احذف الصنف فوراً
+  if(!qty || qty <= 0){
+    billItems = billItems.filter(x=>x.id!==id);
+    renderBill(); calcTotal();
+    return;
+  }
   item.qty = qty;
   item.total = parseFloat((item.price * qty).toFixed(4));
-  // تحديث خانة الإجمالي في نفس السطر مباشرة بدون إعادة رسم الجدول
-  const totalCell = document.querySelector(`[data-total-id="${id}"]`);
+  const totalCell = document.querySelector('[data-total-id="'+id+'"]');
   if(totalCell) totalCell.textContent = fmt(item.total);
   calcTotal();
 }
