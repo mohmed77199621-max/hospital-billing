@@ -1826,12 +1826,19 @@ function exportAllExcel(){
   // دالة تحويل تاريخ النص إلى Date
   function parsePatientDate(str){
     if(!str) return null;
-    // يدعم: DD/MM/YYYY أو YYYY-MM-DD
     if(str.includes('/')){
       const [d,m,y] = str.split('/');
       return new Date(`${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}T00:00:00`);
     }
     return new Date(str + 'T00:00:00');
+  }
+
+  // تحويل Date إلى رقم Excel (serial date) لكي يُعرض كتاريخ حقيقي في Excel
+  function toExcelDate(str){
+    const d = parsePatientDate(str);
+    if(!d || isNaN(d)) return '';
+    // Excel serial: الأيام منذ 1900-01-00 (مع تصحيح خطأ Excel الشهير بيوم 60)
+    return (d - new Date(Date.UTC(1899,11,30))) / 86400000;
   }
 
   let filtered = patients;
@@ -1867,7 +1874,7 @@ function exportAllExcel(){
     const stay=parseFloat(fmt(pt.fStay||0));
     return [
       pt.ticket||'', pt.name||'', pt.dept||'', pt.stype||'', pt.taminType||'', pt.group||'', pt.letter||'',
-      pt.entry||'', pt.exit||'', pt.days||0,
+      toExcelDate(pt.entry||pt.entryRaw), toExcelDate(pt.exit||pt.exitRaw), pt.days||0,
       stay, pt.fMed||0, pt.fNur||0,
       pt.fDoc||0, pt.fAnes||0, pt.fOr||0, pt.optype||'',
       pt.fEcg||0, pt.fPhysio||0, pt.fOxy||0, pt.fBlood||0,
@@ -1887,6 +1894,18 @@ function exportAllExcel(){
     return parseFloat(fmt(val));
   });
   const ws=XLSX.utils.aoa_to_sheet([hdr,...rows,tot]);
+  // تنسيق خلايا التاريخ (عمود H=7 وعمود I=8) كتاريخ حقيقي في Excel
+  const dateColIdxs = [7, 8]; // تاريخ الدخول وتاريخ الخروج
+  const totalRows = 1 + rows.length + 1; // header + data + total
+  dateColIdxs.forEach(ci=>{
+    for(let ri=1; ri<totalRows-1; ri++){
+      const cellAddr = XLSX.utils.encode_cell({r:ri, c:ci});
+      if(ws[cellAddr] && ws[cellAddr].v !== ''){
+        ws[cellAddr].t = 'n';
+        ws[cellAddr].z = 'DD/MM/YYYY';
+      }
+    }
+  });
   ws['!cols']=hdr.map((_,i)=>({wch:[14,22,16,14,12,14,18,12,12,12,12,12,12,12,12,14,16,14,12,12,12,12,14,14,12,12,12,14,14,24][i]||14}));
   // تجميد الصف الأول
   ws['!freeze']={xSplit:0,ySplit:1};
