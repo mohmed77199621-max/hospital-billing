@@ -61,6 +61,7 @@ body{font-family:'Noto Kufi Arabic',sans-serif;background:#eef2f7;color:var(--t)
 /* Print */
 @media print{
   .no-print{display:none!important}
+  .zero-qty-row{display:none!important}
   body{background:#fff!important;margin:0!important;padding:0!important}
   .hdr,.modal,#patients-section{display:none!important}
   #print-area{display:block!important}
@@ -1327,7 +1328,7 @@ function renderBill(){
     tb.innerHTML='<tr><td colspan="6" style="text-align:center;padding:22px;color:var(--tm);font-size:.8rem">لا توجد بنود — أضف الأدوية والمستلزمات والفحوصات</td></tr>';
     calcTotal(); return;
   }
-  tb.innerHTML=billItems.map((i,n)=>`<tr style="${i.qty===0?'opacity:.5;background:#f8f8f8':''}"
+  tb.innerHTML=billItems.map((i,n)=>`<tr class="${i.qty===0?'zero-qty-row':''}" style="${i.qty===0?'opacity:.5;background:#f8f8f8':''}"
     <td style="color:var(--tm);font-size:.72rem">${n+1}</td>
     <td style="font-weight:700">${i.name}</td>
     <td style="text-align:center"><span class="badge bp">${i.cat}</span></td>
