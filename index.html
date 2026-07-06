@@ -334,7 +334,6 @@ input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
           <div><label class="lbl">رسم القلب (ECG)</label><input type="number" id="f_ecg" value="0" oninput="calcTotal()" class="inp inp-blue" min="0"></div>
           <div><label class="lbl">علاج طبيعي</label><input type="number" id="f_physio" value="0" oninput="calcTotal()" class="inp inp-blue" min="0"></div>
           <div><label class="lbl">أكسجين / أجهزة</label><input type="number" id="f_oxy" value="0" oninput="calcTotal()" class="inp inp-blue" min="0"></div>
-          <div><label class="lbl">بنك الدم</label><input type="number" id="f_blood" value="0" oninput="calcTotal()" class="inp inp-blue" min="0"></div>
         </div>
       </div>
 
@@ -1367,7 +1366,6 @@ function getFixed(){
     {label:'رسم القلب (ECG)'  ,val:parseFloat(Vv('f_ecg'))||0,   key:'ecg'},
     {label:'علاج طبيعي'       ,val:parseFloat(Vv('f_physio'))||0,key:'physio'},
     {label:'أكسجين / أجهزة'   ,val:parseFloat(Vv('f_oxy'))||0,   key:'oxy'},
-    {label:'بنك الدم'          ,val:parseFloat(Vv('f_blood'))||0, key:'blood'},
   ].filter(x=>x.val>0);
 }
 function calcTotal(){
@@ -1613,7 +1611,7 @@ function getFormData(){
     fNur:parseFloat(Vv('f_nur'))||0,    fDoc:parseFloat(Vv('f_doc'))||0,
     fAnes:parseFloat(Vv('f_anes'))||0,  fOr:parseFloat(Vv('f_or'))||0,
     fEcg:parseFloat(Vv('f_ecg'))||0,    fPhysio:parseFloat(Vv('f_physio'))||0,
-    fOxy:parseFloat(Vv('f_oxy'))||0,    fBlood:parseFloat(Vv('f_blood'))||0,
+    fOxy:parseFloat(Vv('f_oxy'))||0,
     finalized: true, // مدخل بيانات/مدير أكمل بيانات المريض بالكامل من هذه الشاشة
   };
 }
@@ -1706,7 +1704,7 @@ function editPatient(fid){
     if(pt.obs) $('p_obs').value=pt.obs;
   }
   $('p_entry').value=pt.entryRaw||''; $('p_exit').value=pt.exitRaw||''; $('stay_days').value=pt.days||0; calcTotal();
-  const fm={fStay:'f_stay',fMed:'f_med',fNur:'f_nur',fDoc:'f_doc',fAnes:'f_anes',fOr:'f_or',fEcg:'f_ecg',fPhysio:'f_physio',fOxy:'f_oxy',fBlood:'f_blood'};
+  const fm={fStay:'f_stay',fMed:'f_med',fNur:'f_nur',fDoc:'f_doc',fAnes:'f_anes',fOr:'f_or',fEcg:'f_ecg',fPhysio:'f_physio',fOxy:'f_oxy'};
   Object.entries(fm).forEach(([k,id])=>$(id).value=pt[k]||0);
   billItems=JSON.parse(JSON.stringify(pt.items||[]));
   // أضف الأصناف الافتراضية الغير موجودة (بكمية 0)
@@ -1809,7 +1807,7 @@ function clearForm(){
   $('p_obs').value=''; $('obs-wrap').style.display='none';
   $('p_tamin_type').value=''; $('tamin-wrap').style.display='none';
   $('p_group').value=''; $('group-wrap').style.display='none';
-  ['f_stay','f_med','f_nur','f_doc','f_anes','f_or','f_ecg','f_physio','f_oxy','f_blood'].forEach(id=>$(id).value=0);
+  ['f_stay','f_med','f_nur','f_doc','f_anes','f_or','f_ecg','f_physio','f_oxy'].forEach(id=>$(id).value=0);
   billItems=[];
   // تحميل الأصناف الافتراضية بكمية 0
   setTimeout(()=>loadDefaultBillItems(), 50); $('stay_days').value=0; renderBill();
@@ -2020,7 +2018,7 @@ function exportAllExcel(){
     'تاريخ الدخول','تاريخ الخروج','مدة الإقامة (يوم)',
     'الإقامة (ج.م)','إشراف طبي','إشراف تمريض',
     'أجر الطبيب','أجر التخدير','فتح غرفة العمليات','نوع العملية',
-    'رسم القلب','علاج طبيعي','أكسجين / أجهزة','بنك الدم (ثابت)',
+    'رسم القلب','علاج طبيعي','أكسجين / أجهزة',
     'إجمالي الأدوية','إجمالي المستلزمات','إجمالي شرائح ومسامير','إجمالي الأشعة',
     'إجمالي التحاليل','إجمالي بنك الدم','إجمالي الأجهزة','إجمالي خدمات أخري',
     'إجمالي الفاتورة','ملاحظات'
@@ -2034,10 +2032,10 @@ function exportAllExcel(){
       toExcelDate(pt.entry||pt.entryRaw), toExcelDate(pt.exit||pt.exitRaw), pt.days||0,
       stay, pt.fMed||0, pt.fNur||0,
       pt.fDoc||0, pt.fAnes||0, pt.fOr||0, pt.optype||'',
-      pt.fEcg||0, pt.fPhysio||0, pt.fOxy||0, pt.fBlood||0,
+      pt.fEcg||0, pt.fPhysio||0, pt.fOxy||0,
       parseFloat(fmt(c['أدوية'])), parseFloat(fmt(c['مستلزمات'])), parseFloat(fmt(c['شرائح ومسامير'])),
       parseFloat(fmt(c['أشعة'])), parseFloat(fmt(c['تحاليل'])),
-      parseFloat(fmt(c['بنك الدم'])), parseFloat(fmt(c['أجهزة'])), parseFloat(fmt(c['خدمات أخري'])),
+      parseFloat(fmt(c['بنك الدم'])) + (pt.fBlood||0), parseFloat(fmt(c['أجهزة'])), parseFloat(fmt(c['خدمات أخري'])),
       parseFloat(fmt(pt.total)),
       pt.notes||''
     ];
@@ -2743,7 +2741,7 @@ async function saveNewPharmPatient(){
   const newPt = {
     name, dept, ticket, stype: myStype,
     items: [], fixed: [], feesSum:0, itemsSum:0, total:0,
-    fStay:0, fMed:0, fNur:0, fDoc:0, fAnes:0, fOr:0, fEcg:0, fPhysio:0, fOxy:0, fBlood:0,
+    fStay:0, fMed:0, fNur:0, fDoc:0, fAnes:0, fOr:0, fEcg:0, fPhysio:0, fOxy:0,
     finalized: false, // لم يُكمل مدخل البيانات بياناته بعد
     savedAt: firebase.firestore.FieldValue.serverTimestamp(),
     savedBy: currentUser.name, savedByRole: currentUser.role,
@@ -2902,7 +2900,7 @@ async function savePharmItems(){
     pharmSavedAt: firebase.firestore.FieldValue.serverTimestamp(),
   };
   const fees = (updated.fStay||0)+(updated.fMed||0)+(updated.fNur||0)+(updated.fDoc||0)+
-               (updated.fAnes||0)+(updated.fOr||0)+(updated.fEcg||0)+(updated.fPhysio||0)+(updated.fOxy||0)+(updated.fBlood||0);
+               (updated.fAnes||0)+(updated.fOr||0)+(updated.fEcg||0)+(updated.fPhysio||0)+(updated.fOxy||0);
   updated.total = fees + merged.reduce((s,i)=>s+(i.total||0),0);
 
   try{
@@ -2932,31 +2930,5 @@ window.onload = init;
 </script>
 
 <!-- EXCEL EXPORT MODAL -->
-<div id="excel-modal" class="modal" onclick="if(event.target===this)closeExcelModal()" style="display:none">
-  <div class="modal-box" style="max-width:420px">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;border-bottom:2px solid var(--b);padding-bottom:12px">
-      <h2 style="font-weight:900;font-size:.95rem;color:var(--p)">📊 تصدير سجل المرضى — إكسل</h2>
-      <button onclick="closeExcelModal()" style="background:none;border:none;cursor:pointer;font-size:1.4rem;color:var(--tm)">✕</button>
-    </div>
-    <div style="font-size:.82rem;color:var(--tm);margin-bottom:14px">اختر الفترة الزمنية للتصدير:</div>
-    <div class="g2" style="margin-bottom:14px">
-      <div>
-        <label class="lbl">من تاريخ</label>
-        <input type="date" id="excel-from" class="inp">
-      </div>
-      <div>
-        <label class="lbl">إلى تاريخ</label>
-        <input type="date" id="excel-to" class="inp">
-      </div>
-    </div>
-    <div style="font-size:.78rem;color:var(--tm);margin-bottom:16px;background:#f0f4ff;padding:8px 12px;border-radius:8px">
-      💡 اتركهما فارغين لتصدير جميع المرضى
-    </div>
-    <div style="display:flex;gap:10px;justify-content:flex-end">
-      <button onclick="closeExcelModal()" class="btn btn-o">إلغاء</button>
-      <button onclick="exportAllExcel()" class="btn btn-p">📥 تصدير</button>
-    </div>
-  </div>
-</div>
 </body>
 </html>
