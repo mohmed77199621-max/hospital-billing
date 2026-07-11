@@ -1321,8 +1321,16 @@ function updateItemQty(id, val){ markFormDirty();
   }
   item.qty = qty;
   item.total = parseFloat((item.price * qty).toFixed(4));
+  // تحديث الإجمالي في نفس الصف
   const totalCell = document.querySelector('[data-total-id="'+id+'"]');
   if(totalCell) totalCell.textContent = fmt(item.total);
+  // تغيير لون الصف فوراً: إذا أصبحت الكمية > 0 → أزرق، إذا = 0 → أحمر
+  const row = document.getElementById('bill-row-'+id);
+  if(row){
+    row.classList.remove('bill-card-default','bill-card-added','zero-qty-row');
+    if(qty > 0){ row.classList.add('bill-card-added'); }
+    else { row.classList.add('bill-card-default','zero-qty-row'); }
+  }
   calcTotal();
 }
 function updateItemPrice(id, val){ markFormDirty();
@@ -1343,7 +1351,7 @@ function renderBill(){
     tb.innerHTML='<tr><td colspan="6" style="text-align:center;padding:22px;color:var(--tm);font-size:.8rem">لا توجد بنود — أضف الأدوية والمستلزمات والفحوصات</td></tr>';
     calcTotal(); return;
   }
-  tb.innerHTML=billItems.map((i,n)=>`<tr class="${i.qty===0?'zero-qty-row ':''} ${i.isDefault&&i.qty===0?'bill-card-default':i.qty>0?'bill-card-added':''}"
+  tb.innerHTML=billItems.map((i,n)=>`<tr class="${i.qty===0?'zero-qty-row ':''} ${i.isDefault&&i.qty===0?'bill-card-default':i.qty>0?'bill-card-added':''}" id="bill-row-${i.id}">
     <td style="color:var(--tm);font-size:.72rem">${n+1}</td>
     <td style="font-weight:700">${i.name}</td>
     <td style="text-align:center"><span class="badge bp">${i.cat}</span></td>
