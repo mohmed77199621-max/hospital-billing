@@ -2256,43 +2256,23 @@ function exportAllExcel(){
   ws['!cols']=hdr.map((_,i)=>({wch:[14,22,16,14,12,14,18,12,12,12,12,12,12,12,12,14,16,14,12,12,14,14,18,18,12,20,14,14,14,24][i]||14}));
   ws['!freeze']={xSplit:0,ySplit:dataOffset+1}; // تجميد صفوف الرأس + هيدر الجدول
 
-  // === RTL + ضبط الطباعة لورقة واحدة ===
+  // === RTL + ضبط الطباعة + ارتفاع الصفوف ===
+  ws['!sheetViews']   = [{rightToLeft: true, showGridLines: true}];
+  ws['!pageSetup']    = {orientation:'landscape', fitToPage:true, fitToWidth:1, fitToHeight:0, paperSize:9};
+  ws['!printOptions'] = {fitToPage: true};
+  ws['!rows'] = [
+    {hpt:28, hpx:28},  // محافظة سوهاج
+    {hpt:24, hpx:24},  // مديرية الشئون
+    {hpt:24, hpx:24},  // مستشفى سوهاج
+    {hpt:10, hpx:10},  // فارغ
+    {hpt:20, hpx:20}   // هيدر الجدول
+  ];
+
   const wb=XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb,ws,'سجل المرضي');
 
-  // إضافة RTL وإعدادات الطباعة
-  // تنسيق صفوف الرأس (خط عريض + حجم أكبر)
-  // الصف 0 = محافظة سوهاج + العنوان الوسط
-  // الصف 1 = مديرية الشئون الصحية + القسم
-  // الصف 2 = مستشفى سوهاج العام
-  [0,1,2].forEach(ri=>{
-    hdr.forEach((_,ci)=>{
-      const addr = XLSX.utils.encode_cell({r:ri,c:ci});
-      if(ws[addr]){
-        ws[addr].s = {
-          font:{bold:true, sz: ri===0 ? 14 : 12, color:{rgb:'1a3a6b'}},
-          alignment:{horizontal: ci===0 ? 'right' : 'center', vertical:'center', readingOrder:2}
-        };
-      }
-    });
-  });
-  // ارتفاع الصفوف الثلاثة
-  ws['!rows'] = [
-    {hpt:24},{hpt:22},{hpt:22},{hpt:10}, // رأس الصفحة + فارغ
-    {hpt:20}                              // هيدر الجدول
-  ];
-  wb.Sheets['سجل المرضي']['!sheetViews'] = [{rightToLeft: true}];
-  wb.Sheets['سجل المرضي']['!pageSetup'] = {
-    orientation: 'landscape',
-    fitToPage: true,
-    fitToWidth: 1,
-    fitToHeight: 0,
-    paperSize: 9  // A4
-  };
-  wb.Sheets['سجل المرضي']['!printOptions'] = {fitToPage: true};
-
   const rangeLabel = (fromVal||toVal) ? `_${fromLabel}_الي_${toLabel}` : '_الكل';
-  XLSX.writeFile(wb,'سجل_مرضي_سوهاج'+rangeLabel+'_'+new Date().toISOString().slice(0,10)+'.xlsx', {bookSST:false});
+  XLSX.writeFile(wb,'سجل_مرضي_سوهاج'+rangeLabel+'_'+new Date().toISOString().slice(0,10)+'.xlsx', {bookSST:false, cellStyles:true});
 }
 
 /* ========== SETTINGS MODAL ========== */
