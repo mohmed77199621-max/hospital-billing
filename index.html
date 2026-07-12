@@ -2060,171 +2060,12 @@ function exportAllExcel(){
     const val = rows.reduce((a,r)=>a+(typeof r[i]==='number'?r[i]:0), 0);
     return parseFloat(fmt(val));
   });
-  // ======= جدول الإجماليات الديناميكي (يأخذ من جدول المرضي) =======
-  // الأعمدة المطلوبة: الأول (A=رقم التذكرة/العنوان)، الثالث (C=القسم)، والأخير (إجمالي الفاتورة)
-  // لكن المطلوب هو جدول إجماليات مالية بمعادلات
-  // الأعمدة المالية التي نريد إجمالياتها (indexes في hdr):
-  // 20=إجمالي الأدوية، 21=إجمالي المستلزمات، 28=إجمالي الفاتورة
-  const dataStart = 2;      // صف البيانات يبدأ من الصف 2 (1-indexed في Excel)
-  const dataEnd   = rows.length + 1; // آخر صف بيانات
-  const totalRowIdx = rows.length + 2; // صف الإجمالي في الشيت
+  const ws=XLSX.utils.aoa_to_sheet([hdr,...rows,tot]);
 
-  // أعمدة الإجماليات الديناميكية (A,B,C...)
-  const colLetter = n => {
-    let s=''; n++;
-    while(n>0){s=String.fromCharCode(64+(n%26||26))+s;n=Math.floor((n-(n%26?0:26))/26);}
-    return s;
-  };
-
-  // صف عناوين جدول الإجماليات (فارغ + 3 خانات فقط)
-  // العمود الأول: العنوان، الثالث: القسم (نصي - لا نجمعه)، الأخير: إجمالي الفاتورة
-  const summaryLabel = ['البيان','','','','','','','','','','','','','','','','','','','','الأدوية مضاف لها 7%','المستلزمات مضاف اليها 7%','','','','','','','الاجمالي الثاني','' ];
-  const summaryLabel2 = ['القيمة','','','','','','','','','','','','','','','','','','','','قيمة الأدوية +7%من قيمة اجمالي الأدوية','قيمة المستلزمات +7%من قيمة المستلزمات','','','','','','','الاجمالي بعد اضافة 7%الخاصة بالأدوية والمستلزمات-(اجمالي الأدوية+اجمالي المستلزمات)','' ];
-
-  // جدول الإجماليات المطلوب (6 أعمدة مرئية فقط: A, C, T=الأدوية, U=المستلزمات, AB=إجمالي ثاني, AC=نهائي)
-  // حسب المطلوب: عمود 1 (A) + عمود 3 (C) + عمود الأخير
-  // وفق الجدول: الأدوية مضاف 7%, المستلزمات مضاف 7%, الإجمالي الثاني, بعد 7%, نسبة 10%, الإجمالي النهائي
-
-  const aDrugs    = colLetter(20); // إجمالي الأدوية
-  const aSupplies = colLetter(21); // إجمالي المستلزمات
-  const aTotal    = colLetter(28); // إجمالي الفاتورة
-
-  // صفوف جدول الإجماليات (صفان: عناوين + معادلات)
-  const summHdr = hdr.map((h,i)=>{
-    if(i===0) return 'جدول الإجماليات';
-    if(i===20) return 'الأدوية مضاف لها 7%';
-    if(i===21) return 'المستلزمات مضاف اليها 7%';
-    if(i===22) return 'الاجمالي بعد اضافة 7%';
-    if(i===23) return 'الاجمالي الثاني';
-    if(i===24) return 'نسبة 10%';
-    if(i===25) return 'الاجمالي النهائي للمطالبة';
-    return '';
-  });
-
-  // خلايا المعادلات (Excel formulas كـ strings تبدأ بـ =)
-  const summFormulas = hdr.map((_,i)=>{
-    const dr = `${dataStart}:${dataEnd}`;
-    if(i===0) return 'القيمة';
-    // إجمالي الأدوية من عمود U (index 20) × 1.07
-    if(i===20){ const c=colLetter(20); return {f:`SUM(${c}${dataStart}:${c}${dataEnd})*1.07`}; }
-    // إجمالي المستلزمات × 1.07
-    if(i===21){ const c=colLetter(21); return {f:`SUM(${c}${dataStart}:${c}${dataEnd})*1.07`}; }
-    // بعد إضافة 7%: إجمالي الفاتورة + أدوية7% + مستلزمات7%
-    if(i===22){ const cT=colLetter(28); const cD=colLetter(20); const cS=colLetter(21);
-      return {f:`SUM(${cT}${dataStart}:${cT}${dataEnd})+${summaryLabel2[20] ? '' : ''}INDIRECT("${colLetter(20)}"&(ROW()))*0`};
-    }
-    // نُبسّط: الإجمالي الثاني = مجموع إجمالي الفاتورة - أدوية - مستلزمات
-    if(i===23){ const cT=colLetter(28); const cD=colLetter(20); const cS=colLetter(21);
-      return {f:`SUM(${cT}${dataStart}:${cT}${dataEnd})-(SUM(${cD}${dataStart}:${cD}${dataEnd})+SUM(${cS}${dataStart}:${cS}${dataEnd}))`};
-    }
-    if(i===24) return ''; // نسبة 10% - تُحسب من i===22
-    if(i===25) return ''; // الإجمالي النهائي
-    return '';
-  });
-
-  // === بناء الجدول أسفل البيانات ===
-  // صف فارغ فاصل
-  const blankRow = hdr.map(()=>'');
-
-  // الصف الأول: عناوين الجدول المطلوب
-  const sumRow1 = hdr.map((_,i)=>{
-    if(i===0) return 'البيان';
-    if(i===20) return 'الأدوية مضاف لها 7%';
-    if(i===21) return 'المستلزمات مضاف اليها 7%';
-    if(i===22) return 'الاجمالي بعد اضافة 7%الخاصة بالادوية والمستلزمات';
-    if(i===23) return 'الاجمالي الثاني';
-    if(i===24) return 'نسبة 10%';
-    if(i===25) return 'الاجمالي النهائي للمطالبة';
-    return '';
-  });
-
-  // الصف الثاني: المعادلات (بصيغة XLSX formula objects)
-  const lastDataRow = rows.length + 1; // الصف الأخير للبيانات (1-indexed)
-  const sumRow2 = hdr.map((_,i)=>{
-    if(i===0) return 'القيمة';
-    const cDrugs    = colLetter(20);
-    const cSupplies = colLetter(21);
-    const cTotal    = colLetter(28);
-    const r1 = 2, r2 = lastDataRow;
-    if(i===20) return {f:`SUM(${cDrugs}${r1}:${cDrugs}${r2})*1.07`};
-    if(i===21) return {f:`SUM(${cSupplies}${r1}:${cSupplies}${r2})*1.07`};
-    // الاجمالي بعد اضافة 7% = مجموع الفاتورة + أدوية×7% + مستلزمات×7%
-    const sumRow2R = lastDataRow + 3; // صف المعادلات نفسه
-    if(i===22) return {f:`SUM(${cTotal}${r1}:${cTotal}${r2})+(SUM(${cDrugs}${r1}:${cDrugs}${r2})*0.07)+(SUM(${cSupplies}${r1}:${cSupplies}${r2})*0.07)`};
-    // الاجمالي الثاني = الاجمالي بعد 7% - (أدوية+مستلزمات أصلي)
-    if(i===23) return {f:`${colLetter(22)}${sumRow2R}-(SUM(${cDrugs}${r1}:${cDrugs}${r2})+SUM(${cSupplies}${r1}:${cSupplies}${r2}))`};
-    // نسبة 10% = الاجمالي الثاني × 10%
-    if(i===24) return {f:`${colLetter(23)}${sumRow2R}*0.10`};
-    // الاجمالي النهائي = الاجمالي بعد 7% - نسبة 10%
-    if(i===25) return {f:`${colLetter(22)}${sumRow2R}-${colLetter(24)}${sumRow2R}`};
-    return '';
-  });
-
-  // ============================================================
-  // رأس الصفحة: استخرج الشهر والقسم من البيانات المُصدَّرة
-  // ============================================================
-  const MONTHS_AR = ['يناير','فبراير','مارس','أبريل','مايو','يونيو',
-                     'يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
-
-  // استخرج شهر الخروج (exit) من المرضى المفلترين
-  const exitMonths = new Set();
-  const deptNames  = new Set();
-  filtered.forEach(pt=>{
-    // شهر الخروج
-    const exitStr = pt.exit || pt.exitRaw || '';
-    let exitMonth = '';
-    if(exitStr){
-      let d;
-      if(exitStr.includes('/')){
-        const [dd,mm,yy]=exitStr.split('/');
-        d=new Date(`${yy}-${mm.padStart(2,'0')}-${dd.padStart(2,'0')}`);
-      } else { d=new Date(exitStr); }
-      if(d && !isNaN(d)) exitMonth = MONTHS_AR[d.getMonth()]+' '+d.getFullYear();
-    }
-    if(exitMonth) exitMonths.add(exitMonth);
-    if(pt.dept)   deptNames.add(pt.dept);
-  });
-
-  // لو نتيجة واحدة فقط → استخدمها، وإلا اتركها فارغة
-  const monthLabel = exitMonths.size===1 ? [...exitMonths][0] : '';
-  const deptLabel  = deptNames.size===1  ? [...deptNames][0]  : '';
-
-  // صف رأس الصفحة (3 صفوف فوق هيدر الجدول)
-  const hdrCols = hdr.length;
-  const emptyHdr = Array(hdrCols).fill('');
-
-  // الصف 1: اسم المحافظة (أقصى اليمين = index 0) + العنوان الوسط
-  const titleRow1 = [...emptyHdr];
-  titleRow1[0] = 'محافظة سوهاج';
-  const midCol1 = Math.floor(hdrCols/2) - 2;
-  titleRow1[midCol1] = monthLabel
-    ? `قيمة المطالبة من مصروفات عن شهر ${monthLabel}`
-    : 'قيمة المطالبة من مصروفات';
-
-  // الصف 2: مديرية الشئون الصحية + القسم
-  const titleRow2 = [...emptyHdr];
-  titleRow2[0] = 'مديرية الشئون الصحية بسوهاج';
-  if(deptLabel){
-    titleRow2[midCol1] = `قسم ${deptLabel}`;
-  }
-
-  // الصف 3: اسم المستشفى
-  const titleRow3 = [...emptyHdr];
-  titleRow3[0] = 'مستشفى سوهاج العام';
-
-  // صف فارغ فاصل بين الرأس والجدول
-  const sepRow = [...emptyHdr];
-
-  const ws=XLSX.utils.aoa_to_sheet([titleRow1,titleRow2,titleRow3,sepRow,hdr,...rows,tot,blankRow,sumRow1,sumRow2]);
-
-  // تعديل مراجع المعادلات (كل الصفوف تزاحت بـ 4 أسطر للأسفل)
-  const dataOffset = 4; // titleRow1 + titleRow2 + titleRow3 + sepRow
-
-  // تنسيق خلايا التاريخ (مع الأخذ بعين الاعتبار صفوف الرأس)
+  // تنسيق خلايا التاريخ
   const dateColIdxs = [7, 8];
-  const hdrRowIdx  = dataOffset;           // صف هيدر الجدول (0-indexed)
-  const dataRowStart = dataOffset + 1;     // أول صف بيانات
-  const dataRowEnd   = dataOffset + rows.length; // آخر صف بيانات
+  const dataRowStart = 1;     // أول صف بيانات
+  const dataRowEnd   = rows.length; // آخر صف بيانات
   dateColIdxs.forEach(ci=>{
     for(let ri=dataRowStart; ri<=dataRowEnd; ri++){
       const cellAddr = XLSX.utils.encode_cell({r:ri, c:ci});
@@ -2235,38 +2076,8 @@ function exportAllExcel(){
     }
   });
 
-  // إضافة formulas مع الـ offset (صفوف الرأس الأربعة)
-  // صف sumRow2 الفعلي = dataOffset + hdr(1) + rows + tot(1) + blank(1) + sumRow1(1) + sumRow2(0-indexed)
-  const sumRow2Idx = dataOffset + 1 + rows.length + 1 + 1 + 1; // = dataOffset + rows.length + 4
-  hdr.forEach((_,ci)=>{
-    const cellVal = sumRow2[ci];
-    if(cellVal && typeof cellVal === 'object' && cellVal.f){
-      const addr = XLSX.utils.encode_cell({r: sumRow2Idx, c: ci});
-      // أيضاً نعدّل المراجع داخل المعادلة لتعكس الـ offset
-      const r1Excel = dataOffset + 2;        // أول صف بيانات (1-indexed في Excel)
-      const r2Excel = dataOffset + 1 + rows.length;
-      let formula = cellVal.f
-        .replace(/2/g, String(r1Excel))
-        .replace(new RegExp('\b'+(rows.length+1)+'\b','g'), String(r2Excel))
-        .replace(new RegExp('\b'+(rows.length+3)+'\b','g'), String(sumRow2Idx+1));
-      ws[addr] = {t:'n', f: formula};
-    }
-  });
-
   ws['!cols']=hdr.map((_,i)=>({wch:[14,22,16,14,12,14,18,12,12,12,12,12,12,12,12,14,16,14,12,12,14,14,18,18,12,20,14,14,14,24][i]||14}));
-  ws['!freeze']={xSplit:0,ySplit:dataOffset+1}; // تجميد صفوف الرأس + هيدر الجدول
-
-  // === RTL + ضبط الطباعة + ارتفاع الصفوف ===
-  ws['!sheetViews']   = [{rightToLeft: true, showGridLines: true}];
-  ws['!pageSetup']    = {orientation:'landscape', fitToPage:true, fitToWidth:1, fitToHeight:0, paperSize:9};
-  ws['!printOptions'] = {fitToPage: true};
-  ws['!rows'] = [
-    {hpt:28, hpx:28},  // محافظة سوهاج
-    {hpt:24, hpx:24},  // مديرية الشئون
-    {hpt:24, hpx:24},  // مستشفى سوهاج
-    {hpt:10, hpx:10},  // فارغ
-    {hpt:20, hpx:20}   // هيدر الجدول
-  ];
+  ws['!freeze']={xSplit:0,ySplit:1}; // تجميد صف الهيدر
 
   const wb=XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb,ws,'سجل المرضي');
