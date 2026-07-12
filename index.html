@@ -285,7 +285,12 @@ input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
           <!-- حقل المجموعة — يظهر فقط عند اختيار قسم العظام -->
           <div id="group-wrap" style="display:none">
             <label class="lbl" style="color:#5d4037;font-weight:900">🦴 المجموعة</label>
-            <input type="text" id="p_group" class="inp" placeholder="أدخل رقم أو اسم المجموعة" style="border-color:#5d4037">
+            <select id="p_group" class="inp" style="border-color:#5d4037">
+              <option value="">— اختر المجموعة —</option>
+              <option>م1أ</option><option>م1ب</option>
+              <option>م2أ</option><option>م2ب</option>
+              <option>م3أ</option><option>م3ب</option>
+            </select>
           </div>
           <div><label class="lbl">نوع الخدمة</label>
             <select id="p_stype" class="inp" onchange="onStypeChange()">
@@ -1098,6 +1103,21 @@ const OP_FEES = {...FEES_TAMIN, ...FEES_OBS};
 
 /* ===== عند تغيير القسم ===== */
 function onDeptChange(){
+  const dept = Vv('p_dept');
+  const isOrthopedic = dept && dept.includes('عظام');
+  const grpInput  = $('p_group');
+  const grpSelect = $('p_group_select');
+  if(grpInput && grpSelect){
+    if(isOrthopedic){
+      grpInput.style.display  = 'none';
+      grpSelect.style.display = '';
+      grpSelect.value = grpInput.value || '';
+    } else {
+      grpInput.style.display  = '';
+      grpSelect.style.display = 'none';
+      grpInput.value = grpSelect.value || grpInput.value;
+    }
+  }
   const dept  = Vv('p_dept');
   const tag   = getDeptTag(dept);
   const isObs = tag === 'obs';
@@ -1693,7 +1713,7 @@ function editPatient(fid){
   }
   if(getDeptTag(pt.dept)==='bone' && pt.group){
     $('group-wrap').style.display='';
-    $('p_group').value=pt.group||'';
+    if($('p_group')) $('p_group').value=pt.group||'';
   }
   if(getDeptTag(pt.dept)==='obs'){
     $('obs-wrap').style.display='';
@@ -1762,6 +1782,12 @@ const DEFAULT_BILL_ITEMS = [
   {name:'بيتادين مطهر 10% زجاجة', cat:'مستلزمات'},
   {name:'دباسة جلد',              cat:'مستلزمات'},
   {name:'دريسنج',                 cat:'مستلزمات'},
+  {name:'جوانتي لاتكس زوج',       cat:'مستلزمات'},
+  {name:'ماسك جراحي',             cat:'مستلزمات'},
+  {name:'كابل دياثرمي',           cat:'مستلزمات'},
+  {name:'عازل دياثرمي',           cat:'مستلزمات'},
+  {name:'بلاستر 10سم (1سم )',      cat:'مستلزمات'},
+  {name:'قطن 1جم',                cat:'مستلزمات'},
   {name:'صورة دم كاملة CBC',              cat:'تحاليل'},
   {name:'زمن الثرومبوبلاستين الجزئي ptt', cat:'تحاليل'},
   {name:'زمن الثرومبومبين pt',            cat:'تحاليل'},
@@ -2049,12 +2075,113 @@ function exportAllExcel(){
     const val = rows.reduce((a,r)=>a+(typeof r[i]==='number'?r[i]:0), 0);
     return parseFloat(fmt(val));
   });
-  const ws=XLSX.utils.aoa_to_sheet([hdr,...rows,tot]);
-  // تنسيق خلايا التاريخ (عمود H=7 وعمود I=8) كتاريخ حقيقي في Excel
-  const dateColIdxs = [7, 8]; // تاريخ الدخول وتاريخ الخروج
-  const totalRows = 1 + rows.length + 1; // header + data + total
+  // ======= جدول الإجماليات الديناميكي (يأخذ من جدول المرضي) =======
+  // الأعمدة المطلوبة: الأول (A=رقم التذكرة/العنوان)، الثالث (C=القسم)، والأخير (إجمالي الفاتورة)
+  // لكن المطلوب هو جدول إجماليات مالية بمعادلات
+  // الأعمدة المالية التي نريد إجمالياتها (indexes في hdr):
+  // 20=إجمالي الأدوية، 21=إجمالي المستلزمات، 28=إجمالي الفاتورة
+  const dataStart = 2;      // صف البيانات يبدأ من الصف 2 (1-indexed في Excel)
+  const dataEnd   = rows.length + 1; // آخر صف بيانات
+  const totalRowIdx = rows.length + 2; // صف الإجمالي في الشيت
+
+  // أعمدة الإجماليات الديناميكية (A,B,C...)
+  const colLetter = n => {
+    let s=''; n++;
+    while(n>0){s=String.fromCharCode(64+(n%26||26))+s;n=Math.floor((n-(n%26?0:26))/26);}
+    return s;
+  };
+
+  // صف عناوين جدول الإجماليات (فارغ + 3 خانات فقط)
+  // العمود الأول: العنوان، الثالث: القسم (نصي - لا نجمعه)، الأخير: إجمالي الفاتورة
+  const summaryLabel = ['البيان','','','','','','','','','','','','','','','','','','','','الأدوية مضاف لها 7%','المستلزمات مضاف اليها 7%','','','','','','','الاجمالي الثاني','' ];
+  const summaryLabel2 = ['القيمة','','','','','','','','','','','','','','','','','','','','قيمة الأدوية +7%من قيمة اجمالي الأدوية','قيمة المستلزمات +7%من قيمة المستلزمات','','','','','','','الاجمالي بعد اضافة 7%الخاصة بالأدوية والمستلزمات-(اجمالي الأدوية+اجمالي المستلزمات)','' ];
+
+  // جدول الإجماليات المطلوب (6 أعمدة مرئية فقط: A, C, T=الأدوية, U=المستلزمات, AB=إجمالي ثاني, AC=نهائي)
+  // حسب المطلوب: عمود 1 (A) + عمود 3 (C) + عمود الأخير
+  // وفق الجدول: الأدوية مضاف 7%, المستلزمات مضاف 7%, الإجمالي الثاني, بعد 7%, نسبة 10%, الإجمالي النهائي
+
+  const aDrugs    = colLetter(20); // إجمالي الأدوية
+  const aSupplies = colLetter(21); // إجمالي المستلزمات
+  const aTotal    = colLetter(28); // إجمالي الفاتورة
+
+  // صفوف جدول الإجماليات (صفان: عناوين + معادلات)
+  const summHdr = hdr.map((h,i)=>{
+    if(i===0) return 'جدول الإجماليات';
+    if(i===20) return 'الأدوية مضاف لها 7%';
+    if(i===21) return 'المستلزمات مضاف اليها 7%';
+    if(i===22) return 'الاجمالي بعد اضافة 7%';
+    if(i===23) return 'الاجمالي الثاني';
+    if(i===24) return 'نسبة 10%';
+    if(i===25) return 'الاجمالي النهائي للمطالبة';
+    return '';
+  });
+
+  // خلايا المعادلات (Excel formulas كـ strings تبدأ بـ =)
+  const summFormulas = hdr.map((_,i)=>{
+    const dr = `${dataStart}:${dataEnd}`;
+    if(i===0) return 'القيمة';
+    // إجمالي الأدوية من عمود U (index 20) × 1.07
+    if(i===20){ const c=colLetter(20); return {f:`SUM(${c}${dataStart}:${c}${dataEnd})*1.07`}; }
+    // إجمالي المستلزمات × 1.07
+    if(i===21){ const c=colLetter(21); return {f:`SUM(${c}${dataStart}:${c}${dataEnd})*1.07`}; }
+    // بعد إضافة 7%: إجمالي الفاتورة + أدوية7% + مستلزمات7%
+    if(i===22){ const cT=colLetter(28); const cD=colLetter(20); const cS=colLetter(21);
+      return {f:`SUM(${cT}${dataStart}:${cT}${dataEnd})+${summaryLabel2[20] ? '' : ''}INDIRECT("${colLetter(20)}"&(ROW()))*0`};
+    }
+    // نُبسّط: الإجمالي الثاني = مجموع إجمالي الفاتورة - أدوية - مستلزمات
+    if(i===23){ const cT=colLetter(28); const cD=colLetter(20); const cS=colLetter(21);
+      return {f:`SUM(${cT}${dataStart}:${cT}${dataEnd})-(SUM(${cD}${dataStart}:${cD}${dataEnd})+SUM(${cS}${dataStart}:${cS}${dataEnd}))`};
+    }
+    if(i===24) return ''; // نسبة 10% - تُحسب من i===22
+    if(i===25) return ''; // الإجمالي النهائي
+    return '';
+  });
+
+  // === بناء الجدول أسفل البيانات ===
+  // صف فارغ فاصل
+  const blankRow = hdr.map(()=>'');
+
+  // الصف الأول: عناوين الجدول المطلوب
+  const sumRow1 = hdr.map((_,i)=>{
+    if(i===0) return 'البيان';
+    if(i===20) return 'الأدوية مضاف لها 7%';
+    if(i===21) return 'المستلزمات مضاف اليها 7%';
+    if(i===22) return 'الاجمالي بعد اضافة 7%الخاصة بالادوية والمستلزمات';
+    if(i===23) return 'الاجمالي الثاني';
+    if(i===24) return 'نسبة 10%';
+    if(i===25) return 'الاجمالي النهائي للمطالبة';
+    return '';
+  });
+
+  // الصف الثاني: المعادلات (بصيغة XLSX formula objects)
+  const lastDataRow = rows.length + 1; // الصف الأخير للبيانات (1-indexed)
+  const sumRow2 = hdr.map((_,i)=>{
+    if(i===0) return 'القيمة';
+    const cDrugs    = colLetter(20);
+    const cSupplies = colLetter(21);
+    const cTotal    = colLetter(28);
+    const r1 = 2, r2 = lastDataRow;
+    if(i===20) return {f:`SUM(${cDrugs}${r1}:${cDrugs}${r2})*1.07`};
+    if(i===21) return {f:`SUM(${cSupplies}${r1}:${cSupplies}${r2})*1.07`};
+    // الاجمالي بعد اضافة 7% = مجموع الفاتورة + أدوية×7% + مستلزمات×7%
+    const sumRow2R = lastDataRow + 3; // صف المعادلات نفسه
+    if(i===22) return {f:`SUM(${cTotal}${r1}:${cTotal}${r2})+(SUM(${cDrugs}${r1}:${cDrugs}${r2})*0.07)+(SUM(${cSupplies}${r1}:${cSupplies}${r2})*0.07)`};
+    // الاجمالي الثاني = الاجمالي بعد 7% - (أدوية+مستلزمات أصلي)
+    if(i===23) return {f:`${colLetter(22)}${sumRow2R}-(SUM(${cDrugs}${r1}:${cDrugs}${r2})+SUM(${cSupplies}${r1}:${cSupplies}${r2}))`};
+    // نسبة 10% = الاجمالي الثاني × 10%
+    if(i===24) return {f:`${colLetter(23)}${sumRow2R}*0.10`};
+    // الاجمالي النهائي = الاجمالي بعد 7% - نسبة 10%
+    if(i===25) return {f:`${colLetter(22)}${sumRow2R}-${colLetter(24)}${sumRow2R}`};
+    return '';
+  });
+
+  const ws=XLSX.utils.aoa_to_sheet([hdr,...rows,tot,blankRow,sumRow1,sumRow2]);
+
+  // تنسيق خلايا التاريخ
+  const dateColIdxs = [7, 8];
+  const totalRows2 = 1 + rows.length + 1;
   dateColIdxs.forEach(ci=>{
-    for(let ri=1; ri<totalRows-1; ri++){
+    for(let ri=1; ri<totalRows2-1; ri++){
       const cellAddr = XLSX.utils.encode_cell({r:ri, c:ci});
       if(ws[cellAddr] && ws[cellAddr].v !== ''){
         ws[cellAddr].t = 'n';
@@ -2062,13 +2189,37 @@ function exportAllExcel(){
       }
     }
   });
-  ws['!cols']=hdr.map((_,i)=>({wch:[14,22,16,14,12,14,18,12,12,12,12,12,12,12,12,14,16,14,12,12,12,12,14,14,12,12,12,14,14,24][i]||14}));
-  // تجميد الصف الأول
+
+  // إضافة formulas يدوياً في صف sumRow2
+  const sumRow2Idx = rows.length + 4; // 0-indexed: hdr(0) + rows + tot + blank + sumRow1 + sumRow2
+  hdr.forEach((_,ci)=>{
+    const cellVal = sumRow2[ci];
+    if(cellVal && typeof cellVal === 'object' && cellVal.f){
+      const addr = XLSX.utils.encode_cell({r: sumRow2Idx, c: ci});
+      ws[addr] = {t:'n', f: cellVal.f};
+    }
+  });
+
+  ws['!cols']=hdr.map((_,i)=>({wch:[14,22,16,14,12,14,18,12,12,12,12,12,12,12,12,14,16,14,12,12,14,14,18,18,12,20,14,14,14,24][i]||14}));
   ws['!freeze']={xSplit:0,ySplit:1};
+
+  // === RTL + ضبط الطباعة لورقة واحدة ===
   const wb=XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb,ws,'سجل المرضي');
+
+  // إضافة RTL وإعدادات الطباعة
+  wb.Sheets['سجل المرضي']['!sheetViews'] = [{rightToLeft: true}];
+  wb.Sheets['سجل المرضي']['!pageSetup'] = {
+    orientation: 'landscape',
+    fitToPage: true,
+    fitToWidth: 1,
+    fitToHeight: 0,
+    paperSize: 9  // A4
+  };
+  wb.Sheets['سجل المرضي']['!printOptions'] = {fitToPage: true};
+
   const rangeLabel = (fromVal||toVal) ? `_${fromLabel}_الي_${toLabel}` : '_الكل';
-  XLSX.writeFile(wb,'سجل_مرضي_سوهاج'+rangeLabel+'_'+new Date().toISOString().slice(0,10)+'.xlsx');
+  XLSX.writeFile(wb,'سجل_مرضي_سوهاج'+rangeLabel+'_'+new Date().toISOString().slice(0,10)+'.xlsx', {bookSST:false});
 }
 
 /* ========== SETTINGS MODAL ========== */
