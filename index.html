@@ -2175,13 +2175,73 @@ function exportAllExcel(){
     return '';
   });
 
-  const ws=XLSX.utils.aoa_to_sheet([hdr,...rows,tot,blankRow,sumRow1,sumRow2]);
+  // ============================================================
+  // رأس الصفحة: استخرج الشهر والقسم من البيانات المُصدَّرة
+  // ============================================================
+  const MONTHS_AR = ['يناير','فبراير','مارس','أبريل','مايو','يونيو',
+                     'يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
 
-  // تنسيق خلايا التاريخ
+  // استخرج شهر الخروج (exit) من المرضى المفلترين
+  const exitMonths = new Set();
+  const deptNames  = new Set();
+  filtered.forEach(pt=>{
+    // شهر الخروج
+    const exitStr = pt.exit || pt.exitRaw || '';
+    let exitMonth = '';
+    if(exitStr){
+      let d;
+      if(exitStr.includes('/')){
+        const [dd,mm,yy]=exitStr.split('/');
+        d=new Date(`${yy}-${mm.padStart(2,'0')}-${dd.padStart(2,'0')}`);
+      } else { d=new Date(exitStr); }
+      if(d && !isNaN(d)) exitMonth = MONTHS_AR[d.getMonth()]+' '+d.getFullYear();
+    }
+    if(exitMonth) exitMonths.add(exitMonth);
+    if(pt.dept)   deptNames.add(pt.dept);
+  });
+
+  // لو نتيجة واحدة فقط → استخدمها، وإلا اتركها فارغة
+  const monthLabel = exitMonths.size===1 ? [...exitMonths][0] : '';
+  const deptLabel  = deptNames.size===1  ? [...deptNames][0]  : '';
+
+  // صف رأس الصفحة (3 صفوف فوق هيدر الجدول)
+  const hdrCols = hdr.length;
+  const emptyHdr = Array(hdrCols).fill('');
+
+  // الصف 1: اسم المحافظة (أقصى اليمين = index 0) + العنوان الوسط
+  const titleRow1 = [...emptyHdr];
+  titleRow1[0] = 'محافظة سوهاج';
+  const midCol1 = Math.floor(hdrCols/2) - 2;
+  titleRow1[midCol1] = monthLabel
+    ? `قيمة المطالبة من مصروفات عن شهر ${monthLabel}`
+    : 'قيمة المطالبة من مصروفات';
+
+  // الصف 2: مديرية الشئون الصحية + القسم
+  const titleRow2 = [...emptyHdr];
+  titleRow2[0] = 'مديرية الشئون الصحية بسوهاج';
+  if(deptLabel){
+    titleRow2[midCol1] = `قسم ${deptLabel}`;
+  }
+
+  // الصف 3: اسم المستشفى
+  const titleRow3 = [...emptyHdr];
+  titleRow3[0] = 'مستشفى سوهاج العام';
+
+  // صف فارغ فاصل بين الرأس والجدول
+  const sepRow = [...emptyHdr];
+
+  const ws=XLSX.utils.aoa_to_sheet([titleRow1,titleRow2,titleRow3,sepRow,hdr,...rows,tot,blankRow,sumRow1,sumRow2]);
+
+  // تعديل مراجع المعادلات (كل الصفوف تزاحت بـ 4 أسطر للأسفل)
+  const dataOffset = 4; // titleRow1 + titleRow2 + titleRow3 + sepRow
+
+  // تنسيق خلايا التاريخ (مع الأخذ بعين الاعتبار صفوف الرأس)
   const dateColIdxs = [7, 8];
-  const totalRows2 = 1 + rows.length + 1;
+  const hdrRowIdx  = dataOffset;           // صف هيدر الجدول (0-indexed)
+  const dataRowStart = dataOffset + 1;     // أول صف بيانات
+  const dataRowEnd   = dataOffset + rows.length; // آخر صف بيانات
   dateColIdxs.forEach(ci=>{
-    for(let ri=1; ri<totalRows2-1; ri++){
+    for(let ri=dataRowStart; ri<=dataRowEnd; ri++){
       const cellAddr = XLSX.utils.encode_cell({r:ri, c:ci});
       if(ws[cellAddr] && ws[cellAddr].v !== ''){
         ws[cellAddr].t = 'n';
@@ -2190,24 +2250,52 @@ function exportAllExcel(){
     }
   });
 
-  // إضافة formulas يدوياً في صف sumRow2
-  const sumRow2Idx = rows.length + 4; // 0-indexed: hdr(0) + rows + tot + blank + sumRow1 + sumRow2
+  // إضافة formulas مع الـ offset (صفوف الرأس الأربعة)
+  // صف sumRow2 الفعلي = dataOffset + hdr(1) + rows + tot(1) + blank(1) + sumRow1(1) + sumRow2(0-indexed)
+  const sumRow2Idx = dataOffset + 1 + rows.length + 1 + 1 + 1; // = dataOffset + rows.length + 4
   hdr.forEach((_,ci)=>{
     const cellVal = sumRow2[ci];
     if(cellVal && typeof cellVal === 'object' && cellVal.f){
       const addr = XLSX.utils.encode_cell({r: sumRow2Idx, c: ci});
-      ws[addr] = {t:'n', f: cellVal.f};
+      // أيضاً نعدّل المراجع داخل المعادلة لتعكس الـ offset
+      const r1Excel = dataOffset + 2;        // أول صف بيانات (1-indexed في Excel)
+      const r2Excel = dataOffset + 1 + rows.length;
+      let formula = cellVal.f
+        .replace(/2/g, String(r1Excel))
+        .replace(new RegExp('\b'+(rows.length+1)+'\b','g'), String(r2Excel))
+        .replace(new RegExp('\b'+(rows.length+3)+'\b','g'), String(sumRow2Idx+1));
+      ws[addr] = {t:'n', f: formula};
     }
   });
 
   ws['!cols']=hdr.map((_,i)=>({wch:[14,22,16,14,12,14,18,12,12,12,12,12,12,12,12,14,16,14,12,12,14,14,18,18,12,20,14,14,14,24][i]||14}));
-  ws['!freeze']={xSplit:0,ySplit:1};
+  ws['!freeze']={xSplit:0,ySplit:dataOffset+1}; // تجميد صفوف الرأس + هيدر الجدول
 
   // === RTL + ضبط الطباعة لورقة واحدة ===
   const wb=XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb,ws,'سجل المرضي');
 
   // إضافة RTL وإعدادات الطباعة
+  // تنسيق صفوف الرأس (خط عريض + حجم أكبر)
+  // الصف 0 = محافظة سوهاج + العنوان الوسط
+  // الصف 1 = مديرية الشئون الصحية + القسم
+  // الصف 2 = مستشفى سوهاج العام
+  [0,1,2].forEach(ri=>{
+    hdr.forEach((_,ci)=>{
+      const addr = XLSX.utils.encode_cell({r:ri,c:ci});
+      if(ws[addr]){
+        ws[addr].s = {
+          font:{bold:true, sz: ri===0 ? 14 : 12, color:{rgb:'1a3a6b'}},
+          alignment:{horizontal: ci===0 ? 'right' : 'center', vertical:'center', readingOrder:2}
+        };
+      }
+    });
+  });
+  // ارتفاع الصفوف الثلاثة
+  ws['!rows'] = [
+    {hpt:24},{hpt:22},{hpt:22},{hpt:10}, // رأس الصفحة + فارغ
+    {hpt:20}                              // هيدر الجدول
+  ];
   wb.Sheets['سجل المرضي']['!sheetViews'] = [{rightToLeft: true}];
   wb.Sheets['سجل المرضي']['!pageSetup'] = {
     orientation: 'landscape',
