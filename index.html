@@ -1104,21 +1104,6 @@ const OP_FEES = {...FEES_TAMIN, ...FEES_OBS};
 /* ===== عند تغيير القسم ===== */
 function onDeptChange(){
   const dept = Vv('p_dept');
-  const isOrthopedic = dept && dept.includes('عظام');
-  const grpInput  = $('p_group');
-  const grpSelect = $('p_group_select');
-  if(grpInput && grpSelect){
-    if(isOrthopedic){
-      grpInput.style.display  = 'none';
-      grpSelect.style.display = '';
-      grpSelect.value = grpInput.value || '';
-    } else {
-      grpInput.style.display  = '';
-      grpSelect.style.display = 'none';
-      grpInput.value = grpSelect.value || grpInput.value;
-    }
-  }
-  const dept  = Vv('p_dept');
   const tag   = getDeptTag(dept);
   const isObs = tag === 'obs';
   const isBone= tag === 'bone';
