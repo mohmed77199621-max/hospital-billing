@@ -2191,8 +2191,9 @@ function printCostSummary(){
   const MONTHS_AR=['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
   const monthLabel = MONTHS_AR[mm-1]+' '+yy;
 
-  // === إخفاء عمودي رقم التذكرة والملاحظات دائماً، وأي عمود كل قيمه فارغة/صفر ===
-  const hiddenCols = new Set([0, 29]); // رقم التذكرة، ملاحظات
+  // === إخفاء عمودي رقم التذكرة والملاحظات دائماً، والقسم/نوع الخدمة/فئة التأمين لأنها مذكورة في العنوان،
+  //     وأي عمود كل قيمه فارغة/صفر ===
+  const hiddenCols = new Set([0, 2, 3, 4, 29]); // رقم التذكرة، القسم الطبي، نوع الخدمة، فئة التأمين، ملاحظات
   hdr.forEach((_,i)=>{
     if(hiddenCols.has(i)) return;
     const allEmpty = rows.every(r=>{
@@ -2204,14 +2205,26 @@ function printCostSummary(){
   });
   const visibleCols = hdr.map((_,i)=>i).filter(i=>!hiddenCols.has(i));
 
+  // أوزان تقريبية لعرض كل عمود (نفس نسب أعمدة شيت الإكسل) لتوزيع عرض الجدول بما يضمن بقاءه داخل عرض الورقة
+  const COL_W = [14,22,16,14,12,14,18,12,12,12,12,12,12,12,12,14,16,14,12,12,14,14,18,18,12,20,14,14,14,24];
+  const totalW = visibleCols.reduce((a,i)=>a+(COL_W[i]||14),0);
+  const colgroupHtml = '<colgroup>'+visibleCols.map(i=>`<col style="width:${((COL_W[i]||14)/totalW*100).toFixed(3)}%">`).join('')+'</colgroup>';
+
+  const STAY_COL = 9; // "مدة الإقامة (يوم)" — تظهر كرقم صحيح بدون كسور
+  const fmtCell = (v,i)=>{
+    if(typeof v!=='number') return v||'—';
+    return (i===STAY_COL) ? String(Math.round(v)) : fmt(v);
+  };
+
   const theadHtml = '<tr>'+visibleCols.map(i=>`<th>${hdr[i]}</th>`).join('')+'</tr>';
   const bodyHtml = rows.map(r=>'<tr>'+visibleCols.map(i=>{
     const v=r[i];
-    return `<td${typeof v==='number'?' style="text-align:center"':''}>${typeof v==='number'?fmt(v):(v||'—')}</td>`;
+    return `<td${typeof v==='number'?' style="text-align:center"':''}>${fmtCell(v,i)}</td>`;
   }).join('')+'</tr>').join('');
-  const totHtml = '<tr class="pc-tot-row">'+visibleCols.map(i=>{
-    const v=tot[i];
-    return `<td>${typeof v==='number'?fmt(v):v}</td>`;
+  const totHtml = '<tr class="pc-tot-row">'+visibleCols.map((i,idx)=>{
+    let v=tot[i];
+    if(idx===0 && (v==='' || v===undefined)) v='الإجمالي الكلي';
+    return `<td>${fmtCell(v,i)}</td>`;
   }).join('')+'</tr>';
 
   // === عنوان الفاتورة في المنتصف: نوع الخدمة + الشهر + القسم + فئة التأمين ===
@@ -2229,6 +2242,7 @@ function printCostSummary(){
     <div style="font-size:9.6pt;font-weight:800">${claimTitle}</div>
   </div>
   <table class="pc-table">
+    ${colgroupHtml}
     <thead>${theadHtml}</thead>
     <tbody>${bodyHtml}${totHtml}</tbody>
   </table>
@@ -2279,9 +2293,9 @@ function printCostSummary(){
   .tb-close{background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.3)}
   /* رأس الصفحة — نفس تصميم فاتورة المريض */
   .inv-hdr{text-align:center;border-bottom:2px solid #000;padding-bottom:6px;margin-bottom:10px;direction:rtl;font-family:'Noto Kufi Arabic',sans-serif;color:#000}
-  .pc-table{width:100%;border-collapse:collapse;direction:rtl;font-size:7.6pt}
-  .pc-table th{background:#fff;border:1px solid #000;padding:3px 2px;font-weight:900;white-space:nowrap}
-  .pc-table td{border:1px solid #000;padding:3px 2px;text-align:center;background:#fff}
+  .pc-table{width:100%;table-layout:fixed;border-collapse:collapse;direction:rtl;font-size:7.1pt}
+  .pc-table th{background:#fff;border:1px solid #000;padding:3px 2px;font-weight:900;white-space:normal;overflow-wrap:break-word;line-height:1.2}
+  .pc-table td{border:1px solid #000;padding:3px 2px;text-align:center;background:#fff;white-space:normal;overflow-wrap:break-word;line-height:1.2}
   .pc-tot-row td{font-weight:900;background:#f5f5f5!important}
   .pc-summary{width:100%;border-collapse:collapse;direction:rtl;margin-top:14px}
   .pc-summary th{border:1.5px solid #000;padding:6px 8px;font-weight:900;font-size:9pt;background:#fff}
