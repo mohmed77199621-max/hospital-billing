@@ -197,6 +197,7 @@ input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
     <button id="btn-data-settings" class="btn btn-o" onclick="openSettings()" style="display:none;color:#a8c4ff;border-color:rgba(255,255,255,.25);background:rgba(255,255,255,.08)">⚙ تعديل أسعار الأدوية والمستلزمات</button>
     <button id="btn-users" class="btn btn-o" onclick="openUserMgmt()" style="display:none;color:#a8c4ff;border-color:rgba(255,255,255,.25);background:rgba(255,255,255,.08)">👥 المستخدمين</button>
     <button id="btn-excel-all" class="btn btn-a" onclick="openExcelExportModal()" style="display:none">📊 تصدير إكسل</button>
+    <button id="btn-print-cost" class="btn btn-a" onclick="openPrintCostModal()" style="display:none">🖨 طباعة تكلفة الفواتير</button>
     <button id="btn-new-patient" class="btn btn-g" onclick="confirmNewPatient()" style="display:none">+ مريض جديد</button>
     <button class="btn btn-r btn-sm" onclick="doLogout()" style="background:rgba(184,50,50,.7);border:1px solid rgba(255,100,100,.3)">خروج</button>
   </div>
@@ -2086,6 +2087,228 @@ function exportAllExcel(){
   XLSX.writeFile(wb,'سجل_مرضي_سوهاج'+rangeLabel+'_'+new Date().toISOString().slice(0,10)+'.xlsx', {bookSST:false, cellStyles:true});
 }
 
+/* ========== طباعة تكلفة الفواتير الإجمالية (حسب شهر خروج/قسم/نوع خدمة/فئة تأمين) ========== */
+
+// يبني نفس الأعمدة المستخدمة في شيت الإكسل (ملخص) لأي مجموعة مرضى مُمرَّرة
+function buildCostSummaryRows(list){
+  const hdr=[
+    'رقم التذكرة','اسم المريض','القسم الطبي','نوع الخدمة','فئة التأمين','المجموعة','رقم الخطاب / القرار',
+    'تاريخ الدخول','تاريخ الخروج','مدة الإقامة (يوم)',
+    'الإقامة (ج.م)','إشراف طبي','إشراف تمريض',
+    'أجر الطبيب','أجر التخدير','فتح غرفة العمليات','نوع العملية',
+    'رسم القلب','علاج طبيعي','أكسجين / أجهزة',
+    'إجمالي الأدوية','إجمالي المستلزمات','إجمالي شرائح ومسامير','إجمالي الأشعة',
+    'إجمالي التحاليل','إجمالي بنك الدم','إجمالي الأجهزة','إجمالي خدمات أخري',
+    'إجمالي الفاتورة','ملاحظات'
+  ];
+  const rows=list.map(pt=>{
+    const c={'أدوية':0,'مستلزمات':0,'شرائح ومسامير':0,'أشعة':0,'تحاليل':0,'بنك الدم':0,'أجهزة':0,'خدمات أخري':0};
+    (pt.items||[]).forEach(i=>{if(i.cat in c)c[i.cat]+=i.total;});
+    const stay=parseFloat(fmt(pt.fStay||0));
+    return [
+      pt.ticket||'', pt.name||'', pt.dept||'', pt.stype||'', pt.taminType||'', pt.group||'', pt.letter||'',
+      pt.entry||pt.entryRaw||'', pt.exit||pt.exitRaw||'', pt.days||0,
+      stay, pt.fMed||0, pt.fNur||0,
+      pt.fDoc||0, pt.fAnes||0, pt.fOr||0, pt.optype||'',
+      pt.fEcg||0, pt.fPhysio||0, pt.fOxy||0,
+      parseFloat(fmt(c['أدوية'])), parseFloat(fmt(c['مستلزمات'])), parseFloat(fmt(c['شرائح ومسامير'])),
+      parseFloat(fmt(c['أشعة'])), parseFloat(fmt(c['تحاليل'])),
+      parseFloat(fmt(c['بنك الدم'])) + (pt.fBlood||0), parseFloat(fmt(c['أجهزة'])), parseFloat(fmt(c['خدمات أخري'])),
+      parseFloat(fmt(pt.total)),
+      pt.notes||''
+    ];
+  });
+  const TEXT_COLS=new Set([0,1,2,3,4,5,6,7,8,17,29]);
+  const tot=hdr.map((_,i)=>{
+    if(i===0) return 'الإجمالي الكلي';
+    if(TEXT_COLS.has(i)) return '';
+    const val=rows.reduce((a,r)=>a+(typeof r[i]==='number'?r[i]:0),0);
+    return parseFloat(fmt(val));
+  });
+  const drugsTotal    = rows.reduce((a,r)=>a+(r[20]||0),0);
+  const suppliesTotal = rows.reduce((a,r)=>a+(r[21]||0),0);
+  const invoiceTotal  = rows.reduce((a,r)=>a+(r[28]||0),0);
+  return {hdr, rows, tot, drugsTotal, suppliesTotal, invoiceTotal};
+}
+
+function openPrintCostModal(){
+  if(!patients.length){alert('لا يوجد مرضي محفوظون');return;}
+  $('pc-dept').innerHTML='<option value="">— كل الأقسام —</option>'+depts.map(x=>`<option>${x}</option>`).join('');
+  $('pc-stype').value='';
+  $('pc-tamin').value='';
+  $('pc-tamin-wrap').style.display='none';
+  const now=new Date();
+  $('pc-month').value = now.toISOString().slice(0,7);
+  $('print-cost-modal').style.display='flex';
+}
+function closePrintCostModal(){ $('print-cost-modal').style.display='none'; }
+function onPcStypeChange(){
+  $('pc-tamin-wrap').style.display = (Vv('pc-stype')==='تأمين صحي') ? '' : 'none';
+  if(Vv('pc-stype')!=='تأمين صحي') $('pc-tamin').value='';
+}
+
+function printCostSummary(){
+  const monthVal = Vv('pc-month'); // format YYYY-MM
+  if(!monthVal){ alert('⚠️ يرجى اختيار الشهر'); return; }
+  const deptVal  = Vv('pc-dept');
+  const stypeVal = Vv('pc-stype');
+  const taminVal = Vv('pc-tamin');
+
+  function parsePD(str){
+    if(!str) return null;
+    if(str.includes('/')){
+      const [d,m,y]=str.split('/');
+      return new Date(`${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}T00:00:00`);
+    }
+    return new Date(str+'T00:00:00');
+  }
+
+  const [yy,mm] = monthVal.split('-').map(Number);
+
+  let filtered = patients.filter(pt=>{
+    const exitD = parsePD(pt.exit||pt.exitRaw);
+    if(!exitD || isNaN(exitD)) return false;
+    if(exitD.getFullYear()!==yy || (exitD.getMonth()+1)!==mm) return false;
+    if(deptVal && pt.dept!==deptVal) return false;
+    if(stypeVal && pt.stype!==stypeVal) return false;
+    if(stypeVal==='تأمين صحي' && taminVal && pt.taminType!==taminVal) return false;
+    return true;
+  });
+
+  if(!filtered.length){ alert('لا يوجد مرضي مطابقون لهذه المعايير'); return; }
+
+  const {hdr, rows, tot, drugsTotal, suppliesTotal, invoiceTotal} = buildCostSummaryRows(filtered);
+
+  // === معادلة إجمالي المطالبة (أربع خطوات) ===
+  const total1 = invoiceTotal + drugsTotal*0.07 + suppliesTotal*0.07;   // الاجمالي الاول
+  const total2 = total1 - (drugsTotal + suppliesTotal);                 // الاجمالي الثاني
+  const total3 = total2 * 0.10;                                        // الاجمالي الثالث
+  const total4 = total1 - total3;                                      // الاجمالي النهائي (المطالبة)
+
+  const drugsPlus7    = drugsTotal * 1.07;
+  const suppliesPlus7 = suppliesTotal * 1.07;
+
+  const MONTHS_AR=['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
+  const monthLabel = MONTHS_AR[mm-1]+' '+yy;
+
+  // === إخفاء عمودي رقم التذكرة والملاحظات دائماً، وأي عمود كل قيمه فارغة/صفر ===
+  const hiddenCols = new Set([0, 29]); // رقم التذكرة، ملاحظات
+  hdr.forEach((_,i)=>{
+    if(hiddenCols.has(i)) return;
+    const allEmpty = rows.every(r=>{
+      const v = r[i];
+      if(typeof v === 'number') return v===0;
+      return !v || v==='—';
+    });
+    if(allEmpty) hiddenCols.add(i);
+  });
+  const visibleCols = hdr.map((_,i)=>i).filter(i=>!hiddenCols.has(i));
+
+  const theadHtml = '<tr>'+visibleCols.map(i=>`<th>${hdr[i]}</th>`).join('')+'</tr>';
+  const bodyHtml = rows.map(r=>'<tr>'+visibleCols.map(i=>{
+    const v=r[i];
+    return `<td${typeof v==='number'?' style="text-align:center"':''}>${typeof v==='number'?fmt(v):(v||'—')}</td>`;
+  }).join('')+'</tr>').join('');
+  const totHtml = '<tr class="pc-tot-row">'+visibleCols.map(i=>{
+    const v=tot[i];
+    return `<td>${typeof v==='number'?fmt(v):v}</td>`;
+  }).join('')+'</tr>';
+
+  // === عنوان الفاتورة في المنتصف: نوع الخدمة + الشهر + القسم + فئة التأمين ===
+  const stypeLabel = stypeVal || 'جميع أنواع الخدمة';
+  const deptLabel  = deptVal  || 'جميع الأقسام';
+  const taminSuffix = (stypeVal==='تأمين صحي' && taminVal) ? ` — فئة التأمين: ${taminVal}` : '';
+  const claimTitle = `فاتورة مطالبة ${stypeLabel} عن شهر ${monthLabel} لقسم ${deptLabel}${taminSuffix}`;
+
+  const dataEntryName = currentUser ? currentUser.name : '';
+
+  const html = `
+  <div class="inv-hdr">
+    <div style="font-size:9pt;font-weight:900">جمهورية مصر العربية — وزارة الصحة والسكان</div>
+    <div style="font-size:13pt;font-weight:900;margin:2px 0">مستشفى سوهاج العام</div>
+    <div style="font-size:9.6pt;font-weight:800">${claimTitle}</div>
+  </div>
+  <table class="pc-table">
+    <thead>${theadHtml}</thead>
+    <tbody>${bodyHtml}${totHtml}</tbody>
+  </table>
+  <div class="inv-summary-block">
+  <table class="pc-summary">
+    <thead><tr><th>إجمالي الأدوية مضاف لها 7%</th><th>إجمالي المستلزمات مضاف لها 7%</th><th>إجمالي المطالبة</th></tr></thead>
+    <tbody><tr>
+      <td>${fmt(drugsPlus7)} ج.م</td>
+      <td>${fmt(suppliesPlus7)} ج.م</td>
+      <td class="pc-grand">${fmt(total4)} ج.م</td>
+    </tr></tbody>
+  </table>
+  <div class="inv-sigs" style="grid-template-columns:1fr 1fr 1fr">
+    <div class="inv-sig">مدخل البيانات<br><br><span style="font-size:8pt;font-weight:400">الاسم: ${dataEntryName||'.....................'}</span></div>
+    <div class="inv-sig">المسؤول المالي<br><br><span style="font-size:8pt;font-weight:400">الاسم: .....................</span></div>
+    <div class="inv-sig">يعتمد<br><br><span style="font-size:8pt;font-weight:400">الاسم: .....................</span></div>
+  </div>
+  <div style="text-align:center;font-size:8pt;color:#555;margin-top:10px;border-top:1px solid #999;padding-top:5px">مستشفى سوهاج العام — تاريخ الطباعة: ${new Date().toLocaleDateString('ar-EG')}</div>
+  </div>`;
+
+  const w=window.open('','_blank','width=1100,height=800');
+  if(!w){alert('يرجى السماح بالنوافذ المنبثقة في المتصفح');return;}
+  w.document.write(`<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Kufi+Arabic:wght@400;700;900&display=swap" rel="stylesheet">
+<style>
+  @page{size:A4 landscape;margin:10mm 8mm 12mm 8mm}
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{width:100%;min-height:100%;background:#fff;font-family:'Noto Kufi Arabic',sans-serif}
+  body{background:#e0e0e0;padding:12px}
+  #doc-shell{width:297mm;min-height:210mm;margin:0 auto;background:#fff;box-shadow:0 4px 20px rgba(0,0,0,.18)}
+  #doc-body{padding:10mm 8mm 14mm 8mm;background:#fff}
+  @media print{
+    html,body{background:#fff!important}
+    body{padding:0!important;margin:0!important}
+    #doc-shell{width:auto!important;min-height:auto!important;box-shadow:none!important;margin:0!important}
+    #doc-body{padding:0 0 10mm 0!important}
+    #print-toolbar{display:none!important}
+    .pc-table{page-break-inside:auto}
+    .pc-table tr{page-break-inside:avoid}
+    .inv-summary-block{page-break-inside:avoid}
+  }
+  #print-toolbar{position:fixed;top:0;left:0;right:0;background:#0f2d5e;padding:8px 16px;display:flex;gap:10px;justify-content:center;z-index:999;box-shadow:0 2px 8px rgba(0,0,0,.3)}
+  .tb-btn{border:none;border-radius:7px;font-family:'Noto Kufi Arabic',sans-serif;font-weight:700;cursor:pointer;padding:7px 18px;font-size:.85rem}
+  .tb-print{background:#c8973a;color:#fff}
+  .tb-close{background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.3)}
+  /* رأس الصفحة — نفس تصميم فاتورة المريض */
+  .inv-hdr{text-align:center;border-bottom:2px solid #000;padding-bottom:6px;margin-bottom:10px;direction:rtl;font-family:'Noto Kufi Arabic',sans-serif;color:#000}
+  .pc-table{width:100%;border-collapse:collapse;direction:rtl;font-size:7.6pt}
+  .pc-table th{background:#fff;border:1px solid #000;padding:3px 2px;font-weight:900;white-space:nowrap}
+  .pc-table td{border:1px solid #000;padding:3px 2px;text-align:center;background:#fff}
+  .pc-tot-row td{font-weight:900;background:#f5f5f5!important}
+  .pc-summary{width:100%;border-collapse:collapse;direction:rtl;margin-top:14px}
+  .pc-summary th{border:1.5px solid #000;padding:6px 8px;font-weight:900;font-size:9pt;background:#fff}
+  .pc-summary td{border:1.5px solid #000;padding:8px;text-align:center;font-weight:800;font-size:9.5pt;background:#fff}
+  .pc-grand{background:#fff!important;font-size:12pt!important;border:2px solid #000!important}
+  /* الإمضاءات — نفس تصميم فاتورة المريض */
+  .inv-sigs{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-top:16px;page-break-inside:avoid}
+  .inv-sig{text-align:center;border-top:1.5px solid #000;padding-top:6px;font-size:8.6pt;font-weight:900;color:#000}
+</style>
+</head>
+<body>
+<div id="print-toolbar">
+  <button class="tb-btn tb-print" onclick="window.print()">🖨 طباعة</button>
+  <button class="tb-btn tb-close" onclick="window.close()">✕ إغلاق</button>
+</div>
+<div style="margin-top:45px">
+  <div id="doc-shell">
+    <div id="doc-body">
+      ${html}
+    </div>
+  </div>
+</div>
+</body></html>`);
+  w.document.close();
+  closePrintCostModal();
+}
+
 /* ========== SETTINGS MODAL ========== */
 function openSettings(){
   const role = currentUser ? currentUser.role : 'admin';
@@ -2534,7 +2757,7 @@ function applyRoleUI(){
     // Hide everything
     $('main-content').style.display='none';
     $('pharm-section').style.display='none';
-    ['btn-admin','btn-users','btn-excel-all','btn-new-patient','btn-pharm-settings','btn-data-settings','current-user-badge'].forEach(id=>{
+    ['btn-admin','btn-users','btn-excel-all','btn-print-cost','btn-new-patient','btn-pharm-settings','btn-data-settings','current-user-badge'].forEach(id=>{
       const el=$(id); if(el) el.style.display='none';
     });
     return;
@@ -2554,6 +2777,7 @@ function applyRoleUI(){
       $('btn-users').style.display='';
     }
     $('btn-excel-all').style.display='';
+    $('btn-print-cost').style.display='';
     $('btn-new-patient').style.display='';
     // Data entry sees all patients، ويمكنه تعديل أسعار قائمته الخاصة عبر زر منفصل
     if(role==='data'){
@@ -2571,6 +2795,7 @@ function applyRoleUI(){
     $('btn-admin').style.display='none';
     $('btn-users').style.display='none';
     $('btn-excel-all').style.display='none';
+    $('btn-print-cost').style.display='none';
     $('btn-new-patient').style.display='none';
     $('btn-data-settings').style.display='none';
     $('btn-pharm-settings').style.display='';
@@ -2981,6 +3206,49 @@ window.onload = init;
       <button onclick="closeExcelModal()" class="btn btn-o">إلغاء</button>
       <button onclick="exportDetailedExcel()" class="btn btn-a" title="شيت تفصيلي بالتحاليل والأشعة وبنك الدم">📋 تفصيلي</button>
       <button onclick="exportAllExcel()" class="btn btn-p">📥 ملخص</button>
+    </div>
+  </div>
+</div>
+
+<!-- PRINT COST SUMMARY MODAL -->
+<div id="print-cost-modal" class="modal" onclick="if(event.target===this)closePrintCostModal()" style="display:none">
+  <div class="modal-box" style="max-width:460px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;border-bottom:2px solid var(--b);padding-bottom:12px">
+      <h2 style="font-weight:900;font-size:.95rem;color:var(--p)">🖨 طباعة تكلفة الفواتير الإجمالية</h2>
+      <button onclick="closePrintCostModal()" style="background:none;border:none;cursor:pointer;font-size:1.4rem;color:var(--tm)">✕</button>
+    </div>
+    <div style="margin-bottom:14px">
+      <label class="lbl">الشهر (حسب تاريخ خروج المريض)</label>
+      <input type="month" id="pc-month" class="inp">
+    </div>
+    <div class="g2" style="margin-bottom:14px">
+      <div>
+        <label class="lbl">القسم الطبي</label>
+        <select id="pc-dept" class="inp"><option value="">— كل الأقسام —</option></select>
+      </div>
+      <div>
+        <label class="lbl">نوع الخدمة</label>
+        <select id="pc-stype" class="inp" onchange="onPcStypeChange()">
+          <option value="">— كل الأنواع —</option>
+          <option>اقتصادي</option><option>نفقة دولة</option><option>تأمين صحي</option><option>مجاني</option>
+        </select>
+      </div>
+    </div>
+    <div id="pc-tamin-wrap" style="display:none;margin-bottom:14px">
+      <label class="lbl" style="color:#1565c0;font-weight:900">🏥 فئة التأمين</label>
+      <select id="pc-tamin" class="inp" style="border-color:#1565c0">
+        <option value="">— كل الفئات —</option>
+        <option>أطفال</option>
+        <option>طلبة</option>
+        <option>منتفعين</option>
+      </select>
+    </div>
+    <div style="font-size:.78rem;color:var(--tm);margin-bottom:16px;background:#f0f4ff;padding:8px 12px;border-radius:8px">
+      💡 اختر الشهر إلزامياً، ويمكن ترك القسم/نوع الخدمة/فئة التأمين على "الكل" لتشمل الجميع.
+    </div>
+    <div style="display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap">
+      <button onclick="closePrintCostModal()" class="btn btn-o">إلغاء</button>
+      <button onclick="printCostSummary()" class="btn btn-p">🖨 معاينة وطباعة</button>
     </div>
   </div>
 </div>
