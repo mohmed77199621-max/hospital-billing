@@ -749,6 +749,22 @@ const Vv=id=>$( id)?$(id).value:'';
 const fmt=n=>( parseFloat(n)||0).toFixed(2);
 const fmtDate=d=>{if(!d)return'';const p=d.split('-');return p[2]+'/'+p[1]+'/'+p[0];};
 
+// تحويل تاريخ نصي (DD/MM/YYYY أو YYYY-MM-DD) إلى رقم تسلسلي إكسل صحيح (بدون أي خطأ بسبب فارق التوقيت المحلي)
+// ملاحظة: الحساب هنا بالكامل بتوقيت UTC الثابت لتفادي إزاحة يوم كامل في بعض المناطق الزمنية (وهو الخطأ الذي كان يغيّر تاريخ الخروج في شيت الإكسل)
+function dateToExcelSerial(str){
+  if(!str) return '';
+  let y,m,d;
+  if(str.includes('/')){
+    const p=str.split('/'); d=+p[0]; m=+p[1]; y=+p[2];
+  } else if(str.includes('-')){
+    const p=str.split('-'); y=+p[0]; m=+p[1]; d=+p[2];
+  } else return '';
+  if(!y||!m||!d) return '';
+  const utcMs = Date.UTC(y, m-1, d);
+  if(isNaN(utcMs)) return '';
+  return Math.round((utcMs - Date.UTC(1899,11,30)) / 86400000);
+}
+
 /* ========== STATUS ========== */
 function setStatus(state){
   const el=$('cloud-status'); if(!el)return;
@@ -1944,14 +1960,14 @@ function exportDetailedExcel(){
     const items = (pt.items||[]).filter(i=>DETAIL_CATS.includes(i.cat) && i.qty>0);
     if(!items.length) return;
     items.forEach(i=>{
-      const entryDate = parseD(pt.entry||pt.entryRaw);
-      const exitDate  = parseD(pt.exit||pt.exitRaw);
+      const entryDate = pt.entry||pt.entryRaw;
+      const exitDate  = pt.exit ||pt.exitRaw;
       rows.push([
         pt.name||'',
         pt.dept||'',
         pt.stype||'',
-        entryDate ? (entryDate-new Date(Date.UTC(1899,11,30)))/86400000 : '',
-        exitDate  ? (exitDate -new Date(Date.UTC(1899,11,30)))/86400000 : '',
+        dateToExcelSerial(entryDate),
+        dateToExcelSerial(exitDate),
         i.name, i.cat, i.qty, i.price,
         parseFloat((i.qty*i.price).toFixed(2))
       ]);
@@ -2003,10 +2019,7 @@ function exportAllExcel(){
 
   // تحويل Date إلى رقم Excel (serial date) لكي يُعرض كتاريخ حقيقي في Excel
   function toExcelDate(str){
-    const d = parsePatientDate(str);
-    if(!d || isNaN(d)) return '';
-    // Excel serial: الأيام منذ 1900-01-00 (مع تصحيح خطأ Excel الشهير بيوم 60)
-    return (d - new Date(Date.UTC(1899,11,30))) / 86400000;
+    return dateToExcelSerial(str);
   }
 
   let filtered = patients;
@@ -2207,8 +2220,12 @@ function printCostSummary(){
 
   // أوزان تقريبية لعرض كل عمود (نفس نسب أعمدة شيت الإكسل) لتوزيع عرض الجدول بما يضمن بقاءه داخل عرض الورقة
   const COL_W = [14,22,16,14,12,14,18,12,12,12,12,12,12,12,12,14,16,14,12,12,14,14,18,18,12,20,14,14,14,24];
-  const totalW = visibleCols.reduce((a,i)=>a+(COL_W[i]||14),0);
-  const colgroupHtml = '<colgroup>'+visibleCols.map(i=>`<col style="width:${((COL_W[i]||14)/totalW*100).toFixed(3)}%">`).join('')+'</colgroup>';
+  const SERIAL_W = 6; // عمود المسلسل (م)
+  const totalW = visibleCols.reduce((a,i)=>a+(COL_W[i]||14),0) + SERIAL_W;
+  const colgroupHtml = '<colgroup>'
+    + `<col style="width:${(SERIAL_W/totalW*100).toFixed(3)}%">`
+    + visibleCols.map(i=>`<col style="width:${((COL_W[i]||14)/totalW*100).toFixed(3)}%">`).join('')
+    + '</colgroup>';
 
   const STAY_COL = 9; // "مدة الإقامة (يوم)" — تظهر كرقم صحيح بدون كسور
   const fmtCell = (v,i)=>{
@@ -2216,14 +2233,13 @@ function printCostSummary(){
     return (i===STAY_COL) ? String(Math.round(v)) : fmt(v);
   };
 
-  const theadHtml = '<tr>'+visibleCols.map(i=>`<th>${hdr[i]}</th>`).join('')+'</tr>';
-  const bodyHtml = rows.map(r=>'<tr>'+visibleCols.map(i=>{
+  const theadHtml = '<tr><th>م</th>'+visibleCols.map(i=>`<th>${hdr[i]}</th>`).join('')+'</tr>';
+  const bodyHtml = rows.map((r,ri)=>'<tr><td>'+(ri+1)+'</td>'+visibleCols.map(i=>{
     const v=r[i];
     return `<td${typeof v==='number'?' style="text-align:center"':''}>${fmtCell(v,i)}</td>`;
   }).join('')+'</tr>').join('');
-  const totHtml = '<tr class="pc-tot-row">'+visibleCols.map((i,idx)=>{
-    let v=tot[i];
-    if(idx===0 && (v==='' || v===undefined)) v='الإجمالي الكلي';
+  const totHtml = '<tr class="pc-tot-row"><td colspan="2">الإجمالي الكلي</td>'+visibleCols.slice(1).map(i=>{
+    const v=tot[i];
     return `<td>${fmtCell(v,i)}</td>`;
   }).join('')+'</tr>';
 
