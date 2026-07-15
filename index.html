@@ -747,6 +747,12 @@ const PAGE_SIZE = 2000;
 const $=id=>document.getElementById(id);
 const Vv=id=>$( id)?$(id).value:'';
 const fmt=n=>( parseFloat(n)||0).toFixed(2);
+// نفس القيمة كاملة بدون تقريب لأقرب قرش (تُستخدم في صفوف الإجماليات فقط)
+const fmtExact=n=>{
+  n=parseFloat(n)||0;
+  let s=n.toFixed(6).replace(/0+$/,'').replace(/\.$/,'');
+  return s;
+};
 const fmtDate=d=>{if(!d)return'';const p=d.split('-');return p[2]+'/'+p[1]+'/'+p[0];};
 
 // تحويل تاريخ نصي (DD/MM/YYYY أو YYYY-MM-DD) إلى رقم تسلسلي إكسل صحيح (بدون أي خطأ بسبب فارق التوقيت المحلي)
@@ -2131,12 +2137,14 @@ function buildCostSummaryRows(list){
       pt.notes||''
     ];
   });
-  const TEXT_COLS=new Set([0,1,2,3,4,5,6,7,8,17,29]);
+  const TEXT_COLS=new Set([0,1,2,3,4,5,6,7,8,29]); // نصوص لا تُجمع (رسم القلب رقم17 بقى يُجمع الآن)
+  const DASH_TOTAL_COLS=new Set([9]); // مدة الإقامة: لا يُعرض لها إجمالي، توضع شرطة بدلاً منه
   const tot=hdr.map((_,i)=>{
     if(i===0) return 'الإجمالي الكلي';
+    if(DASH_TOTAL_COLS.has(i)) return '—';
     if(TEXT_COLS.has(i)) return '';
-    const val=rows.reduce((a,r)=>a+(typeof r[i]==='number'?r[i]:0),0);
-    return parseFloat(fmt(val));
+    // بدون تقريب لأقرب قرش — القيمة الكاملة كما هي
+    return rows.reduce((a,r)=>a+(typeof r[i]==='number'?r[i]:0),0);
   });
   const drugsTotal    = rows.reduce((a,r)=>a+(r[20]||0),0);
   const suppliesTotal = rows.reduce((a,r)=>a+(r[21]||0),0);
@@ -2146,7 +2154,10 @@ function buildCostSummaryRows(list){
 
 function openPrintCostModal(){
   if(!patients.length){alert('لا يوجد مرضي محفوظون');return;}
-  $('pc-dept').innerHTML='<option value="">— كل الأقسام —</option>'+depts.map(x=>`<option>${x}</option>`).join('');
+  $('pc-dept-list').innerHTML = depts.map((x,i)=>`
+    <label style="display:flex;align-items:center;gap:6px;font-size:.82rem;cursor:pointer">
+      <input type="checkbox" class="pc-dept-cb" value="${x}">${x}
+    </label>`).join('');
   $('pc-stype').value='';
   $('pc-tamin').value='';
   $('pc-tamin-wrap').style.display='none';
@@ -2163,7 +2174,7 @@ function onPcStypeChange(){
 function printCostSummary(){
   const monthVal = Vv('pc-month'); // format YYYY-MM
   if(!monthVal){ alert('⚠️ يرجى اختيار الشهر'); return; }
-  const deptVal  = Vv('pc-dept');
+  const deptVals = Array.from(document.querySelectorAll('.pc-dept-cb:checked')).map(cb=>cb.value);
   const stypeVal = Vv('pc-stype');
   const taminVal = Vv('pc-tamin');
 
@@ -2182,7 +2193,7 @@ function printCostSummary(){
     const exitD = parsePD(pt.exit||pt.exitRaw);
     if(!exitD || isNaN(exitD)) return false;
     if(exitD.getFullYear()!==yy || (exitD.getMonth()+1)!==mm) return false;
-    if(deptVal && pt.dept!==deptVal) return false;
+    if(deptVals.length && !deptVals.includes(pt.dept)) return false;
     if(stypeVal && pt.stype!==stypeVal) return false;
     if(stypeVal==='تأمين صحي' && taminVal && pt.taminType!==taminVal) return false;
     return true;
@@ -2204,9 +2215,10 @@ function printCostSummary(){
   const MONTHS_AR=['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
   const monthLabel = MONTHS_AR[mm-1]+' '+yy;
 
-  // === إخفاء عمودي رقم التذكرة والملاحظات دائماً، والقسم/نوع الخدمة/فئة التأمين لأنها مذكورة في العنوان،
-  //     وأي عمود كل قيمه فارغة/صفر ===
-  const hiddenCols = new Set([0, 2, 3, 4, 29]); // رقم التذكرة، القسم الطبي، نوع الخدمة، فئة التأمين، ملاحظات
+  // === إخفاء عمودي رقم التذكرة والملاحظات دائماً، ونوع الخدمة/فئة التأمين لأنها مذكورة في العنوان،
+  //     والقسم الطبي فقط إذا كان قسم واحد محدد (لأنه هيبقى مذكور في العنوان)، وأي عمود كل قيمه فارغة/صفر ===
+  const hiddenCols = new Set([0, 3, 4, 29]); // رقم التذكرة، نوع الخدمة، فئة التأمين، ملاحظات
+  if(deptVals.length===1) hiddenCols.add(2); // القسم الطبي يُخفى فقط عند اختيار قسم واحد بالتحديد
   hdr.forEach((_,i)=>{
     if(hiddenCols.has(i)) return;
     const allEmpty = rows.every(r=>{
@@ -2232,6 +2244,12 @@ function printCostSummary(){
     if(typeof v!=='number') return v||'—';
     return (i===STAY_COL) ? String(Math.round(v)) : fmt(v);
   };
+  // خلايا صف الإجمالي: بدون تقريب لأقرب قرش — القيمة كاملة كما هي
+  const fmtTotCell = (v,i)=>{
+    if(v==='—') return '—';
+    if(typeof v!=='number') return v||'—';
+    return fmtExact(v);
+  };
 
   const theadHtml = '<tr><th>م</th>'+visibleCols.map(i=>`<th>${hdr[i]}</th>`).join('')+'</tr>';
   const bodyHtml = rows.map((r,ri)=>'<tr><td>'+(ri+1)+'</td>'+visibleCols.map(i=>{
@@ -2240,14 +2258,19 @@ function printCostSummary(){
   }).join('')+'</tr>').join('');
   const totHtml = '<tr class="pc-tot-row"><td colspan="2">الإجمالي الكلي</td>'+visibleCols.slice(1).map(i=>{
     const v=tot[i];
-    return `<td>${fmtCell(v,i)}</td>`;
+    return `<td>${fmtTotCell(v,i)}</td>`;
   }).join('')+'</tr>';
+  // صف إضافي بعد الإجمالي: المجموع الكلي بعد إضافة 7% الأدوية و7% المستلزمات
+  const grandRowHtml = `<tr class="pc-grand-row"><td colspan="${visibleCols.length}">المجموع الكلي بالإضافة إلى 7% الخاصة بالأدوية والمستلزمات</td><td>${fmtExact(total1)}</td></tr>`;
 
   // === عنوان الفاتورة في المنتصف: نوع الخدمة + الشهر + القسم + فئة التأمين ===
   const stypeLabel = stypeVal || 'جميع أنواع الخدمة';
-  const deptLabel  = deptVal  || 'جميع الأقسام';
+  let deptPhrase;
+  if(deptVals.length===0) deptPhrase = 'لجميع الأقسام';
+  else if(deptVals.length===1) deptPhrase = `لقسم ${deptVals[0]}`;
+  else deptPhrase = `لأقسام: ${deptVals.join('، ')}`;
   const taminSuffix = (stypeVal==='تأمين صحي' && taminVal) ? ` — فئة التأمين: ${taminVal}` : '';
-  const claimTitle = `فاتورة مطالبة ${stypeLabel} عن شهر ${monthLabel} لقسم ${deptLabel}${taminSuffix}`;
+  const claimTitle = `فاتورة مطالبة ${stypeLabel} عن شهر ${monthLabel} ${deptPhrase}${taminSuffix}`;
 
   const dataEntryName = currentUser ? currentUser.name : '';
 
@@ -2260,15 +2283,15 @@ function printCostSummary(){
   <table class="pc-table">
     ${colgroupHtml}
     <thead>${theadHtml}</thead>
-    <tbody>${bodyHtml}${totHtml}</tbody>
+    <tbody>${bodyHtml}${totHtml}${grandRowHtml}</tbody>
   </table>
   <div class="inv-summary-block">
   <table class="pc-summary">
     <thead><tr><th>إجمالي الأدوية مضاف لها 7%</th><th>إجمالي المستلزمات مضاف لها 7%</th><th>إجمالي المطالبة</th></tr></thead>
     <tbody><tr>
-      <td>${fmt(drugsPlus7)} ج.م</td>
-      <td>${fmt(suppliesPlus7)} ج.م</td>
-      <td class="pc-grand">${fmt(total4)} ج.م</td>
+      <td>${fmtExact(drugsPlus7)} ج.م</td>
+      <td>${fmtExact(suppliesPlus7)} ج.م</td>
+      <td class="pc-grand">${fmtExact(total4)} ج.م</td>
     </tr></tbody>
   </table>
   <div class="inv-sigs" style="grid-template-columns:1fr 1fr 1fr">
@@ -2313,6 +2336,8 @@ function printCostSummary(){
   .pc-table th{background:#fff;border:1px solid #000;padding:3px 2px;font-weight:900;white-space:normal;overflow-wrap:break-word;line-height:1.2}
   .pc-table td{border:1px solid #000;padding:3px 2px;text-align:center;background:#fff;white-space:normal;overflow-wrap:break-word;line-height:1.2}
   .pc-tot-row td{font-weight:900;background:#f5f5f5!important}
+  .pc-grand-row td{font-weight:900;background:#eef2f8!important;font-size:8pt}
+  .pc-grand-row td:last-child{text-align:center}
   .pc-summary{width:100%;border-collapse:collapse;direction:rtl;margin-top:14px}
   .pc-summary th{border:1.5px solid #000;padding:6px 8px;font-weight:900;font-size:9pt;background:#fff}
   .pc-summary td{border:1.5px solid #000;padding:8px;text-align:center;font-weight:800;font-size:9.5pt;background:#fff}
@@ -3251,11 +3276,11 @@ window.onload = init;
       <label class="lbl">الشهر (حسب تاريخ خروج المريض)</label>
       <input type="month" id="pc-month" class="inp">
     </div>
+    <div style="margin-bottom:14px">
+      <label class="lbl">الأقسام الطبية <span style="font-weight:400;color:var(--tm)">(يمكن اختيار أكثر من قسم معاً)</span></label>
+      <div id="pc-dept-list" style="max-height:150px;overflow-y:auto;border:1.5px solid var(--b);border-radius:8px;padding:8px 10px;display:flex;flex-direction:column;gap:5px"></div>
+    </div>
     <div class="g2" style="margin-bottom:14px">
-      <div>
-        <label class="lbl">القسم الطبي</label>
-        <select id="pc-dept" class="inp"><option value="">— كل الأقسام —</option></select>
-      </div>
       <div>
         <label class="lbl">نوع الخدمة</label>
         <select id="pc-stype" class="inp" onchange="onPcStypeChange()">
@@ -3263,18 +3288,18 @@ window.onload = init;
           <option>اقتصادي</option><option>نفقة دولة</option><option>تأمين صحي</option><option>مجاني</option>
         </select>
       </div>
-    </div>
-    <div id="pc-tamin-wrap" style="display:none;margin-bottom:14px">
-      <label class="lbl" style="color:#1565c0;font-weight:900">🏥 فئة التأمين</label>
-      <select id="pc-tamin" class="inp" style="border-color:#1565c0">
-        <option value="">— كل الفئات —</option>
-        <option>أطفال</option>
-        <option>طلبة</option>
-        <option>منتفعين</option>
-      </select>
+      <div id="pc-tamin-wrap" style="display:none">
+        <label class="lbl" style="color:#1565c0;font-weight:900">🏥 فئة التأمين</label>
+        <select id="pc-tamin" class="inp" style="border-color:#1565c0">
+          <option value="">— كل الفئات —</option>
+          <option>أطفال</option>
+          <option>طلبة</option>
+          <option>منتفعين</option>
+        </select>
+      </div>
     </div>
     <div style="font-size:.78rem;color:var(--tm);margin-bottom:16px;background:#f0f4ff;padding:8px 12px;border-radius:8px">
-      💡 اختر الشهر إلزامياً، ويمكن ترك القسم/نوع الخدمة/فئة التأمين على "الكل" لتشمل الجميع.
+      💡 اختر الشهر إلزامياً. اترك كل الأقسام غير محددة ليشمل التقرير كل الأقسام، أو اختر قسماً واحداً أو أكثر. عند اختيار أكثر من قسم يظهر عمود "القسم" أمام كل مريض.
     </div>
     <div style="display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap">
       <button onclick="closePrintCostModal()" class="btn btn-o">إلغاء</button>
