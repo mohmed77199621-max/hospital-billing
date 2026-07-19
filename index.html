@@ -2164,7 +2164,7 @@ function buildCostSummaryRows(list){
   const drugsTotal      = parseFloat(fmt(_drugsRaw));
   const suppliesRawTotal= parseFloat(fmt(_suppliesRaw));      // كما يظهر في عمود المستلزمات بالجدول
   const screwsTotal     = parseFloat(fmt(_screwsRaw));
-  const suppliesTotal   = parseFloat(fmt(_suppliesRaw + _screwsRaw)); // مستلزمات + شرائح ومسامير مجمّعين — للاستخدام في معادلات 7%/10%/المطالبة فقط
+  const suppliesTotal   = suppliesRawTotal; // المستلزمات وحدها بدون أي دمج مع الشرائح والمسامير — تُستخدم كما هي في كل المعادلات
   const PRECISE_TOTAL_COLS={20:drugsTotal, 21:suppliesRawTotal, 22:screwsTotal}; // نفس القيم المعروضة في الجدول أعلاه لكل عمود
   const tot=hdr.map((_,i)=>{
     if(i===0) return 'الإجمالي الكلي';
@@ -2231,7 +2231,7 @@ function printCostSummary(){
 
   // === معادلة إجمالي المطالبة (أربع خطوات) ===
   const total1 = invoiceTotal + drugsTotal*0.07 + suppliesTotal*0.07;   // الاجمالي الاول
-  const total2 = total1 - (drugsTotal + suppliesTotal);                 // الاجمالي الثاني
+  const total2 = total1 - (drugsTotal + suppliesTotal + screwsTotal);   // الاجمالي الثاني
   const pct10  = total2 * 0.10;                                         // نسبة 10%
   const total4 = total1 - pct10;                                        // إجمالي المطالبة
 
