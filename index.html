@@ -2137,13 +2137,14 @@ function buildCostSummaryRows(list){
     'إجمالي التحاليل','إجمالي بنك الدم','إجمالي الأجهزة','إجمالي خدمات أخري',
     'إجمالي الفاتورة','ملاحظات'
   ];
+  let _drugsRaw=0, _suppliesRaw=0, _screwsRaw=0;
   const rows=list.map(pt=>{
     const c={'أدوية':0,'مستلزمات':0,'شرائح ومسامير':0,'أشعة':0,'تحاليل':0,'بنك الدم':0,'أجهزة':0,'خدمات أخري':0};
     (pt.items||[]).forEach(i=>{if(i.cat in c)c[i.cat]+=i.total;});
     const screwsVal = c['شرائح ومسامير'];
-    // الشرائح والمسامير تعتبر ضمن المستلزمات — تُضاف قيمتها للمستلزمات قبل أي عملية حسابية (7%، الإجمالي، المطالبة)
-    // مع الإبقاء على عمود شرائح ومسامير كما هو للعرض فقط (يظهر تلقائياً لو موجود ويختفي لو فاضي)
-    c['مستلزمات'] += screwsVal;
+    _drugsRaw    += c['أدوية'];
+    _suppliesRaw += c['مستلزمات']; // المستلزمات الأصلية فقط (تُعرض كما هي في الجدول، بدون دمج الشرائح والمسامير)
+    _screwsRaw   += screwsVal;
     const stay=parseFloat(fmt(pt.fStay||0));
     return [
       pt.ticket||'', pt.name||'', pt.dept||'', pt.stype||'', pt.taminType||'', pt.group||'', pt.letter||'',
@@ -2160,16 +2161,19 @@ function buildCostSummaryRows(list){
   });
   const TEXT_COLS=new Set([0,1,2,3,4,5,6,7,8,29]); // نصوص لا تُجمع (رسم القلب رقم17 بقى يُجمع الآن)
   const DASH_TOTAL_COLS=new Set([9]); // مدة الإقامة: لا يُعرض لها إجمالي، توضع شرطة بدلاً منه
+  const drugsTotal      = parseFloat(fmt(_drugsRaw));
+  const suppliesRawTotal= parseFloat(fmt(_suppliesRaw));      // كما يظهر في عمود المستلزمات بالجدول
+  const screwsTotal     = parseFloat(fmt(_screwsRaw));
+  const suppliesTotal   = parseFloat(fmt(_suppliesRaw + _screwsRaw)); // مستلزمات + شرائح ومسامير مجمّعين — للاستخدام في معادلات 7%/10%/المطالبة فقط
+  const PRECISE_TOTAL_COLS={20:drugsTotal, 21:suppliesRawTotal, 22:screwsTotal}; // نفس القيم المعروضة في الجدول أعلاه لكل عمود
   const tot=hdr.map((_,i)=>{
     if(i===0) return 'الإجمالي الكلي';
     if(DASH_TOTAL_COLS.has(i)) return '—';
     if(TEXT_COLS.has(i)) return '';
+    if(i in PRECISE_TOTAL_COLS) return PRECISE_TOTAL_COLS[i];
     // بدون تقريب لأقرب قرش — القيمة الكاملة كما هي
     return rows.reduce((a,r)=>a+(typeof r[i]==='number'?r[i]:0),0);
   });
-  const drugsTotal    = rows.reduce((a,r)=>a+(r[20]||0),0);
-  const suppliesTotal = rows.reduce((a,r)=>a+(r[21]||0),0);
-  const screwsTotal   = rows.reduce((a,r)=>a+(r[22]||0),0);
   const invoiceTotal  = rows.reduce((a,r)=>a+(r[28]||0),0);
   return {hdr, rows, tot, drugsTotal, suppliesTotal, screwsTotal, invoiceTotal};
 }
@@ -2322,7 +2326,7 @@ function printCostSummary(){
     <div class="inv-sig">المسؤول المالي<br><br><span style="font-size:8pt;font-weight:400">الاسم: .....................</span></div>
     <div class="inv-sig">يعتمد<br><br><span style="font-size:8pt;font-weight:400">الاسم: .....................</span></div>
   </div>
-  ${screwsTotal>0?`<div style="margin-top:10px;padding:6px 10px;border:1.5px solid #000;font-size:8.6pt;font-weight:700">ملحوظة: الشرائح والمسامير تعتبر ضمن المستلزمات، لذلك تم إضافة قيمتها على المستلزمات.</div>`:''}
+  
   <div style="text-align:center;font-size:8pt;color:#555;margin-top:10px;border-top:1px solid #999;padding-top:5px">مستشفى سوهاج العام — تاريخ الطباعة: ${new Date().toLocaleDateString('ar-EG')}</div>
   </div>`;
 
