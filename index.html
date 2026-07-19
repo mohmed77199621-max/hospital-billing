@@ -2227,8 +2227,8 @@ function printCostSummary(){
 
   // === معادلة إجمالي المطالبة (أربع خطوات) ===
   const total1 = invoiceTotal + drugsTotal*0.07 + suppliesTotal*0.07;   // الاجمالي الاول
-  const total2 = total1 - (drugsTotal + suppliesTotal);                 // الاجمالي الثاني = نسبة 10%
-  const pct10  = total2;                                                // نسبة 10%
+  const total2 = total1 - (drugsTotal + suppliesTotal);                 // الاجمالي الثاني
+  const pct10  = total2 * 0.10;                                         // نسبة 10%
   const total4 = total1 - pct10;                                        // إجمالي المطالبة
 
   const drugsPlus7    = drugsTotal * 1.07;
