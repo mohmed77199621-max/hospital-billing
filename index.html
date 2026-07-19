@@ -2227,9 +2227,9 @@ function printCostSummary(){
 
   // === معادلة إجمالي المطالبة (أربع خطوات) ===
   const total1 = invoiceTotal + drugsTotal*0.07 + suppliesTotal*0.07;   // الاجمالي الاول
-  const total2 = total1 - (drugsTotal + suppliesTotal);                 // الاجمالي الثاني
-  const total3 = total2 * 0.10;                                        // الاجمالي الثالث
-  const total4 = total1 - total3;                                      // الاجمالي النهائي (المطالبة)
+  const total2 = total1 - (drugsTotal + suppliesTotal);                 // الاجمالي الثاني = نسبة 10%
+  const pct10  = total2;                                                // نسبة 10%
+  const total4 = total1 - pct10;                                        // إجمالي المطالبة
 
   const drugsPlus7    = drugsTotal * 1.07;
   const suppliesPlus7 = suppliesTotal * 1.07;
@@ -2284,6 +2284,7 @@ function printCostSummary(){
   }).join('')+'</tr>';
   // صف إضافي بعد الإجمالي: المجموع الكلي بعد إضافة 7% الأدوية و7% المستلزمات
   const grandRowHtml = `<tr class="pc-grand-row"><td colspan="${visibleCols.length}">المجموع الكلي بالإضافة إلى 7% الخاصة بالأدوية والمستلزمات</td><td>${fmtExact(total1)}</td></tr>`;
+  const pct10RowHtml = `<tr class="pc-grand-row"><td colspan="${visibleCols.length}">نسبة 10%</td><td>${fmtExact(pct10)}</td></tr>`;
 
   // === عنوان الفاتورة في المنتصف: نوع الخدمة + الشهر + القسم + فئة التأمين ===
   const stypeLabel = stypeVal || 'جميع أنواع الخدمة';
@@ -2305,7 +2306,7 @@ function printCostSummary(){
   <table class="pc-table">
     ${colgroupHtml}
     <thead>${theadHtml}</thead>
-    <tbody>${bodyHtml}${totHtml}${grandRowHtml}</tbody>
+    <tbody>${bodyHtml}${totHtml}${grandRowHtml}${pct10RowHtml}</tbody>
   </table>
   <div class="inv-summary-block">
   <table class="pc-summary">
