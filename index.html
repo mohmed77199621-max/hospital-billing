@@ -739,7 +739,7 @@ let depts = [
   "عناية متوسطة حروق","عناية مخ واعصاب","عناية القلب","عناية متوسطة اطفال",
   "مبتسرين","داخلي كلي"
 ];
-let billItems = [], patients = [], editId = null, selItem = null;
+let billItems = [], patients = [], editId = null, selItem = null, editOpenedPharmSavedAt = null;
 let lastDoc = null, allLoaded = false, loadingMore = false;
 const PAGE_SIZE = 2000;
 
@@ -1696,19 +1696,22 @@ async function savePatient(){
 
   const pt={...getFormData(), savedAt:firebase.firestore.FieldValue.serverTimestamp(), savedBy: currentUser?currentUser.name:'', savedByRole: currentUser?currentUser.role:''};
   setStatus('save');
-  const PHARM_OWNED_CATS=['أدوية','مستلزمات','شرائح ومسامير'];
   let savedTotal = pt.total;
   try{
     if(editId){
       const ref = db.collection('patients').doc(editId);
+      const PHARM_OWNED_CATS=['أدوية','مستلزمات','شرائح ومسامير'];
       savedTotal = await db.runTransaction(async (tx)=>{
         const freshSnap = await tx.get(ref);
         const fresh = freshSnap.exists ? freshSnap.data() : {};
-        // حافظ على أصناف الأدوية/المستلزمات/الشرائح والمسامير كما هي محدثة على السيرفر الآن
-        // (لو الصيدلي صرف أو عدّل حاجة بعد ما فتحنا شاشة التعديل دي، مايتمسحش)
+        const myItems       = pt.items||[];               // كل الأصناف الظاهرة في شاشتك الآن (شاملة أصناف الصيدلي القديمة + أي حاجة أضفتها أنت)
+        const myPharmItems  = myItems.filter(i=>PHARM_OWNED_CATS.includes(i.cat));
+        const myOtherItems  = myItems.filter(i=>!PHARM_OWNED_CATS.includes(i.cat));
+        const myPharmKeys   = new Set(myPharmItems.map(i=>i.cat+'|'+i.name));
+        // أي صنف أضافه الصيدلي على السيرفر بعد ما فتحت شاشة التعديل ولسه مش ظاهر عندك (بنفس الاسم والفئة) — يُضاف تلقائياً بدون ما يعطلك
         const freshPharmItems = (fresh.items||[]).filter(i=>PHARM_OWNED_CATS.includes(i.cat));
-        const myOtherItems = (pt.items||[]).filter(i=>!PHARM_OWNED_CATS.includes(i.cat));
-        const mergedItems = [...freshPharmItems, ...myOtherItems];
+        const newlyAddedByPharmacist = freshPharmItems.filter(i=>!myPharmKeys.has(i.cat+'|'+i.name));
+        const mergedItems = [...myOtherItems, ...myPharmItems, ...newlyAddedByPharmacist];
         const itemsSum = mergedItems.reduce((a,x)=>a+(x.total||0),0);
         const finalPt = {...pt, items:mergedItems, itemsSum, total: pt.feesSum+itemsSum};
         tx.set(ref, finalPt);
@@ -1726,6 +1729,7 @@ async function savePatient(){
 function editPatient(fid){
   const pt=patients.find(p=>p.firestoreId===fid);if(!pt)return;
   editId=fid;
+  editOpenedPharmSavedAt = pt.pharmSavedAt || null;
   $('p_name').value=pt.name||'';   $('p_ticket').value=pt.ticket||'';
   $('p_letter').value=pt.letter||''; $('p_optype').value=pt.optype||'';
   $('p_notes').value=pt.notes||'';
