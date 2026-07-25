@@ -1697,11 +1697,12 @@ async function savePatient(){
   const pt={...getFormData(), savedAt:firebase.firestore.FieldValue.serverTimestamp(), savedBy: currentUser?currentUser.name:'', savedByRole: currentUser?currentUser.role:''};
   setStatus('save');
   let savedTotal = pt.total;
+  let savedDoc = null; // النسخة النهائية اللي فعلاً اتحفظت، هنستخدمها لتحديث القائمة محليًا بدل إعادة تحميل كل المرضى من السيرفر
   try{
     if(editId){
       const ref = db.collection('patients').doc(editId);
       const PHARM_OWNED_CATS=['أدوية','مستلزمات','شرائح ومسامير'];
-      savedTotal = await db.runTransaction(async (tx)=>{
+      const finalPt = await db.runTransaction(async (tx)=>{
         const freshSnap = await tx.get(ref);
         const fresh = freshSnap.exists ? freshSnap.data() : {};
         const myItems       = pt.items||[];               // كل الأصناف الظاهرة في شاشتك الآن (شاملة أصناف الصيدلي القديمة + أي حاجة أضفتها أنت)
@@ -1713,15 +1714,23 @@ async function savePatient(){
         const newlyAddedByPharmacist = freshPharmItems.filter(i=>!myPharmKeys.has(i.cat+'|'+i.name));
         const mergedItems = [...myOtherItems, ...myPharmItems, ...newlyAddedByPharmacist];
         const itemsSum = mergedItems.reduce((a,x)=>a+(x.total||0),0);
-        const finalPt = {...pt, items:mergedItems, itemsSum, total: pt.feesSum+itemsSum};
-        tx.set(ref, finalPt);
-        return finalPt.total;
+        const merged = {...pt, items:mergedItems, itemsSum, total: pt.feesSum+itemsSum};
+        tx.set(ref, merged);
+        return merged;
       });
+      savedTotal = finalPt.total;
+      savedDoc = {...finalPt, firestoreId: editId, savedAt: new Date()}; // serverTimestamp() sentinel لا يصلح للعرض المحلي، فبنستخدم وقت الجهاز مؤقتًا لحد ما يوصل التحديث الحقيقي من المستمع الحي
     }
-    else{await db.collection('patients').add(pt);}
+    else{
+      const ref = await db.collection('patients').add(pt);
+      savedDoc = {...pt, firestoreId: ref.id, savedAt: new Date()};
+    }
     editId=null; clearForm();
     alert('✅ تم حفظ بيانات المريض:\n'+name+'\nالإجمالي: '+fmt(savedTotal)+' ج.م');
-    await loadPatients(true);
+    const idx = patients.findIndex(p=>p.firestoreId===savedDoc.firestoreId);
+    if(idx>=0) patients[idx]=savedDoc; else patients.unshift(savedDoc);
+    renderPatients();
+    setStatus('ok');
     loadPendingPharmCount();
   }catch(e){alert('❌ خطأ في الحفظ:\n'+e.message);setStatus('err');}
 }
@@ -1763,7 +1772,8 @@ async function deletePatient(fid){
   try{
     setStatus('save');
     await db.collection('patients').doc(fid).delete();
-    await loadPatients(true);
+    patients = patients.filter(p=>p.firestoreId!==fid);
+    renderPatients();
     setStatus('ok');
   }
   catch(e){alert('❌ خطأ في الحذف:\n'+e.message);setStatus('err');}
@@ -3087,7 +3097,8 @@ async function saveNewPharmPatient(){
   try{
     const ref = await db.collection('patients').add(newPt);
     closeNewPharmPatientModal();
-    await loadPharmPatients();
+    pharmPatients.unshift({...newPt, firestoreId: ref.id, savedAt: new Date()});
+    renderPharmPatients();
     openPharmModal(ref.id);
   }catch(e){ errEl.textContent='❌ خطأ في الحفظ: '+e.message; errEl.style.display='block'; }
 }
@@ -3252,7 +3263,6 @@ async function savePharmItems(){
     db.collection('auditLog').add({action:'pharm_save', patient:pharmCurrentPatient.name, items:finalItems.length, user:currentUser.name, role:currentUser.role, at:firebase.firestore.FieldValue.serverTimestamp()}).catch(()=>{});
     alert('✅ تم حفظ الصرف للمريض: ' + pharmCurrentPatient.name);
     closePharmModal();
-    await loadPharmPatients();
   }catch(e){ alert('❌ خطأ في الحفظ: '+e.message); }
 }
 
