@@ -2976,32 +2976,61 @@ let pharmPatients = []; // patients loaded specifically for the pharmacy view (o
 /* خريطة نوع الخدمة <-> دور الصيدلي */
 const STYPE_FOR_ROLE = { nafaqa: 'نفقة دولة', tamin: 'تأمين صحي' };
 
-let _pharmPatientsUnsub = null;
-function loadPharmPatients(){
+let _pharmPatientsUnsub = null; // مستمع خفيف (وثيقة واحدة بس) لإشعار "فيه تحديثات جديدة"، مش تحميل القائمة كلها
+let _pharmLastKnownSavedAt = null;
+async function loadPharmPatients(){
   const role = currentUser ? currentUser.role : '';
   const myStype = STYPE_FOR_ROLE[role];
   if(!myStype){ pharmPatients=[]; renderPharmPatients(); return; }
   $('pharm-patients-list').innerHTML = `<div style="text-align:center;padding:24px;color:var(--tm)">⏳ جاري التحميل...</div>`;
+  const banner = $('pharm-live-update-banner'); if(banner) banner.remove();
 
-  // أوقف المستمع القديم لو موجود
+  try{
+    // تحميل لمرة واحدة بس (مش متابعة لحظية مستمرة) — بيوفر قراءات كتير جدًا على مدار الوردية
+    const snap = await db.collection('patients')
+      .where('stype','==', myStype)
+      .where('finalized','==', false)
+      .get();
+    pharmPatients = snap.docs.map(d=>({...d.data(), firestoreId:d.id}));
+    pharmPatients.sort((a,b)=>{
+      const ta = a.savedAt && a.savedAt.toMillis ? a.savedAt.toMillis() : 0;
+      const tb = b.savedAt && b.savedAt.toMillis ? b.savedAt.toMillis() : 0;
+      return tb - ta;
+    });
+    renderPharmPatients();
+    _startPharmLiveNotifier(myStype);
+  }catch(e){
+    console.error('loadPharmPatients:', e);
+    pharmPatients = [];
+    renderPharmPatients();
+  }
+}
+
+/* إشعار خفيف جدًا (وثيقة واحدة بس) لما يظهر مريض جديد في قائمة الصيدلية، بدل تحميل القائمة كلها تاني تلقائيًا */
+function _startPharmLiveNotifier(myStype){
   if(_pharmPatientsUnsub){ _pharmPatientsUnsub(); _pharmPatientsUnsub=null; }
-
   _pharmPatientsUnsub = db.collection('patients')
     .where('stype','==', myStype)
     .where('finalized','==', false)
+    .orderBy('savedAt','desc').limit(1)
     .onSnapshot(snap=>{
-      pharmPatients = snap.docs.map(d=>({...d.data(), firestoreId:d.id}));
-      pharmPatients.sort((a,b)=>{
-        const ta = a.savedAt && a.savedAt.toMillis ? a.savedAt.toMillis() : 0;
-        const tb = b.savedAt && b.savedAt.toMillis ? b.savedAt.toMillis() : 0;
-        return tb - ta;
-      });
-      renderPharmPatients();
-    }, e=>{
-      console.error('loadPharmPatients:', e);
-      pharmPatients = [];
-      renderPharmPatients();
-    });
+      if(snap.empty) return;
+      const ts = snap.docs[0].data().savedAt;
+      const tsKey = ts ? (ts.seconds||ts) : snap.docs[0].id;
+      if(_pharmLastKnownSavedAt === null){ _pharmLastKnownSavedAt = tsKey; return; }
+      if(tsKey !== _pharmLastKnownSavedAt){
+        _pharmLastKnownSavedAt = tsKey;
+        let b = $('pharm-live-update-banner');
+        if(!b){
+          b = document.createElement('div');
+          b.id = 'pharm-live-update-banner';
+          b.style.cssText = 'position:fixed;top:14px;left:50%;transform:translateX(-50%);z-index:9999;background:#0c5460;color:#fff;padding:10px 20px;border-radius:30px;font-size:.8rem;font-weight:800;box-shadow:0 6px 20px rgba(0,0,0,.25);cursor:pointer;display:flex;align-items:center;gap:8px;animation:fadeInDown .3s ease';
+          b.innerHTML = '🔄 يوجد مريض جديد — اضغط للتحديث';
+          b.onclick = ()=>{ b.remove(); loadPharmPatients(); };
+          document.body.appendChild(b);
+        }
+      }
+    }, e=>console.error('pharm live notifier:', e));
 }
 
 function renderPharmPatients(){
@@ -3240,7 +3269,7 @@ async function savePharmItems(){
   const fid = pharmCurrentPatient.firestoreId;
   const ref = db.collection('patients').doc(fid);
   try{
-    await db.runTransaction(async (tx)=>{
+    const updated = await db.runTransaction(async (tx)=>{
       const freshSnap = await tx.get(ref);
       if(!freshSnap.exists) throw new Error('المريض غير موجود، ربما تم حذفه');
       const fresh = freshSnap.data();
@@ -3250,18 +3279,23 @@ async function savePharmItems(){
       const merged = [...existingOther, ...finalItems];
       const fees = (fresh.fStay||0)+(fresh.fMed||0)+(fresh.fNur||0)+(fresh.fDoc||0)+
                    (fresh.fAnes||0)+(fresh.fOr||0)+(fresh.fEcg||0)+(fresh.fPhysio||0)+(fresh.fOxy||0);
-      const updated = {
+      const merged2 = {
         ...fresh,
         items: merged,
         pharmSavedBy: currentUser.name,
         pharmSavedAt: firebase.firestore.FieldValue.serverTimestamp(),
         total: fees + merged.reduce((s,i)=>s+(i.total||0),0),
       };
-      tx.set(ref, updated);
+      tx.set(ref, merged2);
+      return merged2;
     });
 
     db.collection('auditLog').add({action:'pharm_save', patient:pharmCurrentPatient.name, items:finalItems.length, user:currentUser.name, role:currentUser.role, at:firebase.firestore.FieldValue.serverTimestamp()}).catch(()=>{});
     alert('✅ تم حفظ الصرف للمريض: ' + pharmCurrentPatient.name);
+    const idx = pharmPatients.findIndex(p=>p.firestoreId===fid);
+    const localDoc = {...updated, firestoreId: fid, savedAt: pharmPatients[idx]?pharmPatients[idx].savedAt:new Date(), pharmSavedAt:new Date()};
+    if(idx>=0) pharmPatients[idx]=localDoc; else pharmPatients.unshift(localDoc);
+    renderPharmPatients();
     closePharmModal();
   }catch(e){ alert('❌ خطأ في الحفظ: '+e.message); }
 }
