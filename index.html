@@ -744,7 +744,7 @@ let depts = [
   "عناية متوسطة حروق","عناية مخ واعصاب","عناية القلب","عناية متوسطة اطفال",
   "مبتسرين","داخلي كلي"
 ];
-let billItems = [], patients = [], editId = null, selItem = null, editOpenedPharmSavedAt = null;
+let billItems = [], patients = [], editId = null, selItem = null;
 let lastDoc = null, allLoaded = false, loadingMore = false;
 const PAGE_SIZE = 2000;
 
@@ -1705,26 +1705,10 @@ async function savePatient(){
   let savedDoc = null; // النسخة النهائية اللي فعلاً اتحفظت، هنستخدمها لتحديث القائمة محليًا بدل إعادة تحميل كل المرضى من السيرفر
   try{
     if(editId){
-      const ref = db.collection('patients').doc(editId);
-      const PHARM_OWNED_CATS=['أدوية','مستلزمات','شرائح ومسامير'];
-      const finalPt = await db.runTransaction(async (tx)=>{
-        const freshSnap = await tx.get(ref);
-        const fresh = freshSnap.exists ? freshSnap.data() : {};
-        const myItems       = pt.items||[];               // كل الأصناف الظاهرة في شاشتك الآن (شاملة أصناف الصيدلي القديمة + أي حاجة أضفتها أنت)
-        const myPharmItems  = myItems.filter(i=>PHARM_OWNED_CATS.includes(i.cat));
-        const myOtherItems  = myItems.filter(i=>!PHARM_OWNED_CATS.includes(i.cat));
-        const myPharmKeys   = new Set(myPharmItems.map(i=>i.cat+'|'+i.name));
-        // أي صنف أضافه الصيدلي على السيرفر بعد ما فتحت شاشة التعديل ولسه مش ظاهر عندك (بنفس الاسم والفئة) — يُضاف تلقائياً بدون ما يعطلك
-        const freshPharmItems = (fresh.items||[]).filter(i=>PHARM_OWNED_CATS.includes(i.cat));
-        const newlyAddedByPharmacist = freshPharmItems.filter(i=>!myPharmKeys.has(i.cat+'|'+i.name));
-        const mergedItems = [...myOtherItems, ...myPharmItems, ...newlyAddedByPharmacist];
-        const itemsSum = mergedItems.reduce((a,x)=>a+(x.total||0),0);
-        const merged = {...pt, items:mergedItems, itemsSum, total: pt.feesSum+itemsSum};
-        tx.set(ref, merged);
-        return merged;
-      });
-      savedTotal = finalPt.total;
-      savedDoc = {...finalPt, firestoreId: editId, savedAt: new Date()}; // serverTimestamp() sentinel لا يصلح للعرض المحلي، فبنستخدم وقت الجهاز مؤقتًا لحد ما يوصل التحديث الحقيقي من المستمع الحي
+      // بيانات مدخل البيانات/المدير هي الأساسية والأخيرة — تُحفظ كما هي على الشاشة بالضبط، بدون أي دمج أو تخمين
+      await db.collection('patients').doc(editId).set(pt);
+      savedTotal = pt.total;
+      savedDoc = {...pt, firestoreId: editId, savedAt: new Date()}; // serverTimestamp() sentinel لا يصلح للعرض المحلي، فبنستخدم وقت الجهاز مؤقتًا لحد ما يوصل التحديث الحقيقي من المستمع الحي
     }
     else{
       const ref = await db.collection('patients').add(pt);
@@ -1743,7 +1727,6 @@ async function savePatient(){
 function editPatient(fid){
   const pt=patients.find(p=>p.firestoreId===fid);if(!pt)return;
   editId=fid;
-  editOpenedPharmSavedAt = pt.pharmSavedAt || null;
   $('p_name').value=pt.name||'';   $('p_ticket').value=pt.ticket||'';
   $('p_letter').value=pt.letter||''; $('p_optype').value=pt.optype||'';
   $('p_notes').value=pt.notes||'';
@@ -1765,7 +1748,7 @@ function editPatient(fid){
   $('p_entry').value=pt.entryRaw||''; $('p_exit').value=pt.exitRaw||''; $('stay_days').value=pt.days||0; calcTotal();
   const fm={fStay:'f_stay',fMed:'f_med',fNur:'f_nur',fDoc:'f_doc',fAnes:'f_anes',fOr:'f_or',fEcg:'f_ecg',fPhysio:'f_physio',fOxy:'f_oxy'};
   Object.entries(fm).forEach(([k,id])=>$(id).value=pt[k]||0);
-  billItems=JSON.parse(JSON.stringify(pt.items||[]));
+  billItems=JSON.parse(JSON.stringify(pt.items||[])).map(it=>({...it, id: it.id!=null ? it.id : (Date.now()+Math.random())}));
   // أضف الأصناف الافتراضية الغير موجودة (بكمية 0)
   setTimeout(()=>loadDefaultBillItems(pt.stype), 50);
   renderBill(); window.scrollTo({top:0,behavior:'smooth'});
@@ -3212,7 +3195,7 @@ function addPharmItem(){
   const existing = pharmBillItems.find(x=>x.name===name && x.cat===cat);
   if(existing){ existing.qty+=qty; existing.total=parseFloat((existing.qty*existing.price).toFixed(2)); }
   else {
-    pharmBillItems.push({cat, name, qty, price:item.price, total:parseFloat((qty*item.price).toFixed(2)), returned:0, addedBy:currentUser?currentUser.name:''});
+    pharmBillItems.push({id: Date.now()+Math.random(), cat, name, qty, price:item.price, total:parseFloat((qty*item.price).toFixed(2)), returned:0, addedBy:currentUser?currentUser.name:''});
   }
   renderPharmBill();
   $('ph_q').value=''; $('ph_qty').value=1;
