@@ -2743,6 +2743,15 @@ function simpleHash(str){
   return (h>>>0).toString(16);
 }
 
+// Firebase Auth يرفض أي كلمة سر أقل من 6 حروف (auth/weak-password).
+// بعض الحسابات القديمة (زي حساب المدير الافتراضي "1996") كلمة سرها أقصر من كده،
+// فبنكمّلها بشكل ثابت (نفس النتيجة كل مرة) عشان تتقبل من Firebase مع الحفاظ على
+// نفس كلمة السر القديمة اللي المستخدم بيكتبها فعلاً.
+function fbPass(raw){
+  raw = String(raw||'');
+  return raw.length >= 6 ? raw : raw.padEnd(6, '#pad#');
+}
+
 async function loadUsers(){
   try{
     const snap = await db.collection('users').get();
@@ -2750,19 +2759,28 @@ async function loadUsers(){
   }catch(e){ console.error('loadUsers:', e); allUsers=[]; }
 }
 
-/* إنشاء حساب المدير الافتراضي تلقائياً إذا لم يكن هناك أي مستخدمين بعد */
+/* إنشاء الحسابات الافتراضية الثلاثة تلقائياً في Firestore إذا لم تكن موجودة بعد.
+   بيتحقق من كل مستخدم على حدة بالاسم (مش بس هل المجموعة فاضية) عشان يظبط أي حساب
+   ناقص حتى لو باقي الحسابات موجودة بالفعل. */
 async function ensureAdminSeed(){
+  const DEFAULT_USERS = [
+    { name: 'محمد',               password: '1996', role: 'admin' }, // مدير
+    { name: 'محمد أحمد السيد',     password: '1998', role: 'data'  }, // مدخل بيانات
+    { name: 'محمد خالد الوليد',    password: '2027', role: 'tamin' }  // صيدلي تأمين صحي
+  ];
   try{
-    const snap = await db.collection('users').limit(1).get();
-    if(snap.empty){
+    const snap = await db.collection('users').get();
+    const existingNames = new Set(snap.docs.map(d=>d.data().name));
+    for(const u of DEFAULT_USERS){
+      if(existingNames.has(u.name)) continue;
       await db.collection('users').add({
-        name: 'محمد',
-        passHash: simpleHash('1996'),
-        role: 'admin',
+        name: u.name,
+        passHash: simpleHash(u.password),
+        role: u.role,
         createdAt: firebase.firestore.FieldValue.serverTimestamp(),
         createdBy: 'النظام (تلقائي)'
       });
-      console.log('تم إنشاء حساب المدير الافتراضي: محمد');
+      console.log('تم إنشاء حساب افتراضي: ' + u.name);
     }
   }catch(e){ console.error('ensureAdminSeed:', e); }
 }
@@ -2799,7 +2817,7 @@ async function doSelfRegister(){
   const seed = 'u'+Date.now().toString(36)+Math.random().toString(36).slice(2,8);
   const authEmail = authEmailFor(seed);
   try{
-    const cred = await auth.createUserWithEmailAndPassword(authEmail, pass);
+    const cred = await auth.createUserWithEmailAndPassword(authEmail, fbPass(pass));
     await db.collection('users').doc(cred.user.uid).set({
       name, role, authEmail,
       createdAt: firebase.firestore.FieldValue.serverTimestamp(), createdBy: 'تسجيل ذاتي'
@@ -2842,18 +2860,18 @@ async function doLogin(){
   const authEmail = found.authEmail || authEmailFor(found.uid); // authEmail: مسجّل مسبقاً للحسابات المرحّلة، أو لسه محتاج ترحيل
 
   try{
-    const cred = await auth.signInWithEmailAndPassword(authEmail, password);
+    const cred = await auth.signInWithEmailAndPassword(authEmail, fbPass(password));
     await ensureRoleDoc(cred.user.uid, found.name, found.role, authEmail);
     currentUser = {name: found.name, role: found.role, uid: cred.user.uid};
     finishLogin();
   }catch(authErr){
     console.error('login error:', authErr.code, authErr.message);
-    if(authErr.code === 'auth/user-not-found'){
+    if(authErr.code === 'auth/user-not-found' || authErr.code === 'auth/invalid-login-credentials'){
       // أول تسجيل دخول للمستخدم ده بعد تفعيل نظام الدخول الجديد — تحقق من كلمة السر القديمة،
       // ولو صح، رحّله تلقائياً لنفس اسم المستخدم وكلمة المرور بس بنظام حماية حقيقي
       if(simpleHash(password) === found.passHash){
         try{
-          const cred2 = await auth.createUserWithEmailAndPassword(authEmail, password);
+          const cred2 = await auth.createUserWithEmailAndPassword(authEmail, fbPass(password));
           await ensureRoleDoc(cred2.user.uid, found.name, found.role, authEmail);
           currentUser = {name: found.name, role: found.role, uid: cred2.user.uid};
           finishLogin();
@@ -2988,7 +3006,7 @@ async function addUser(){
   const seed = 'u'+Date.now().toString(36)+Math.random().toString(36).slice(2,8);
   const authEmail = authEmailFor(seed);
   try{
-    const cred = await secondaryAuth.createUserWithEmailAndPassword(authEmail, pass);
+    const cred = await secondaryAuth.createUserWithEmailAndPassword(authEmail, fbPass(pass));
     await db.collection('users').doc(cred.user.uid).set({
       name, role, authEmail,
       createdAt: firebase.firestore.FieldValue.serverTimestamp(), createdBy: currentUser.name
