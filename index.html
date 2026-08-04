@@ -2847,6 +2847,7 @@ async function doLogin(){
     currentUser = {name: found.name, role: found.role, uid: cred.user.uid};
     finishLogin();
   }catch(authErr){
+    console.error('login error:', authErr.code, authErr.message);
     if(authErr.code === 'auth/user-not-found'){
       // أول تسجيل دخول للمستخدم ده بعد تفعيل نظام الدخول الجديد — تحقق من كلمة السر القديمة،
       // ولو صح، رحّله تلقائياً لنفس اسم المستخدم وكلمة المرور بس بنظام حماية حقيقي
@@ -2862,8 +2863,13 @@ async function doLogin(){
         }
         return;
       }
+      $('login-err').textContent='❌ اسم المستخدم أو كلمة المرور غير صحيحة';
+    } else if(authErr.code === 'auth/wrong-password' || authErr.code === 'auth/invalid-credential'){
+      $('login-err').textContent='❌ اسم المستخدم أو كلمة المرور غير صحيحة';
+    } else {
+      // خطأ تقني (مش مجرد كلمة سر غلط) — نعرضه صريح عشان يبان سبب المشكلة الحقيقي
+      $('login-err').textContent='❌ خطأ تقني ('+authErr.code+'): '+authErr.message;
     }
-    $('login-err').textContent='❌ اسم المستخدم أو كلمة المرور غير صحيحة';
     $('login-err').style.display='block';
   }
 }
