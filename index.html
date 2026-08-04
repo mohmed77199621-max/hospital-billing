@@ -669,6 +669,7 @@ input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
 
 <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
 <script>
 /* ========== FIREBASE INIT ========== */
 const firebaseConfig = {
@@ -682,6 +683,17 @@ const firebaseConfig = {
 };
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
+const auth = firebase.auth();
+// تطبيق ثانوي منفصل، يُستخدم بس لما المدير ينشئ مستخدم جديد — عشان إنشاء حساب Firebase Auth
+// لمستخدم تاني ميطلعش المدير من جلسته هو نفسه (سلوك افتراضي في مكتبة Firebase)
+const secondaryApp = firebase.initializeApp(firebaseConfig, 'Secondary');
+const secondaryAuth = secondaryApp.auth();
+// نطاق بريد إلكتروني وهمي داخلي بس، مش بيتبعت له أي رسائل ولا بيشوفه المستخدم أبداً —
+// Firebase Authentication محتاج شكل بريد إلكتروني صحيح حتى لو النظام بيتعامل بأسماء مستخدمين عادية
+const AUTH_EMAIL_DOMAIN = 'sohag-hospital.local';
+function authEmailFor(seed){
+  return 'u_' + String(seed).replace(/[^a-zA-Z0-9_-]/g,'') + '@' + AUTH_EMAIL_DOMAIN;
+}
 // مزامنة بين التابات: لو المستخدم فاتح أكتر من تاب لنفس الموقع على نفس المتصفح والجهاز،
 // التابات هتشارك نفس الكاش المحلي وتتجنب تكرار نفس القراءات/المتابعات اللحظية لكل تاب لوحده
 db.enablePersistence({synchronizeTabs:true}).catch(e=>{
@@ -2783,16 +2795,31 @@ async function doSelfRegister(){
 
   await loadUsers();
   if(allUsers.find(u=>u.name===name)){ errEl.textContent='⚠️ هذا الاسم مستخدم بالفعل، اختر اسماً مختلفاً'; errEl.style.display='block'; return; }
-  const ph = simpleHash(pass);
-  if(allUsers.find(u=>u.passHash===ph)){ errEl.textContent='⚠️ كلمة المرور هذه مستخدمة بالفعل، اختر كلمة مرور مختلفة'; errEl.style.display='block'; return; }
 
+  const seed = 'u'+Date.now().toString(36)+Math.random().toString(36).slice(2,8);
+  const authEmail = authEmailFor(seed);
   try{
-    await db.collection('users').add({name, passHash: ph, role, createdAt: firebase.firestore.FieldValue.serverTimestamp(), createdBy: 'تسجيل ذاتي'});
+    const cred = await auth.createUserWithEmailAndPassword(authEmail, pass);
+    await db.collection('users').doc(cred.user.uid).set({
+      name, role, authEmail,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp(), createdBy: 'تسجيل ذاتي'
+    });
+    await auth.signOut(); // يرجعك لشاشة الدخول العادية بدل ما يدخلك تلقائي على طول
     alert('✅ تم إنشاء حسابك بنجاح، يمكنك تسجيل الدخول الآن');
     $('r_name').value=''; $('r_pass').value=''; $('r_pass2').value='';
     showLoginScreen();
     $('l_user').value = name;
-  }catch(e){ errEl.textContent='❌ خطأ: '+e.message; errEl.style.display='block'; }
+  }catch(e){
+    const msg = e.code==='auth/email-already-in-use' ? 'حاول تاني بعد لحظة' : e.message;
+    errEl.textContent='❌ خطأ: '+msg; errEl.style.display='block';
+  }
+}
+
+async function ensureRoleDoc(fbUid, name, role, authEmail){
+  await db.collection('users').doc(fbUid).set({
+    name, role, authEmail,
+    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+  }, {merge:true});
 }
 
 async function doLogin(){
@@ -2805,20 +2832,45 @@ async function doLogin(){
     $('login-err').style.display='block'; return;
   }
 
-  // Check against Firestore users
   await loadUsers();
-  const ph = simpleHash(password);
-  const found = allUsers.find(u => u.name === username && u.passHash === ph);
-
+  const found = allUsers.find(u => u.name === username);
   if(!found){
     $('login-err').textContent='❌ اسم المستخدم أو كلمة المرور غير صحيحة';
     $('login-err').style.display='block'; return;
   }
 
-  currentUser = found;
+  const authEmail = found.authEmail || authEmailFor(found.uid); // authEmail: مسجّل مسبقاً للحسابات المرحّلة، أو لسه محتاج ترحيل
+
+  try{
+    const cred = await auth.signInWithEmailAndPassword(authEmail, password);
+    await ensureRoleDoc(cred.user.uid, found.name, found.role, authEmail);
+    currentUser = {name: found.name, role: found.role, uid: cred.user.uid};
+    finishLogin();
+  }catch(authErr){
+    if(authErr.code === 'auth/user-not-found'){
+      // أول تسجيل دخول للمستخدم ده بعد تفعيل نظام الدخول الجديد — تحقق من كلمة السر القديمة،
+      // ولو صح، رحّله تلقائياً لنفس اسم المستخدم وكلمة المرور بس بنظام حماية حقيقي
+      if(simpleHash(password) === found.passHash){
+        try{
+          const cred2 = await auth.createUserWithEmailAndPassword(authEmail, password);
+          await ensureRoleDoc(cred2.user.uid, found.name, found.role, authEmail);
+          currentUser = {name: found.name, role: found.role, uid: cred2.user.uid};
+          finishLogin();
+        }catch(createErr){
+          $('login-err').textContent='❌ خطأ أثناء ترقية الحساب: '+createErr.message;
+          $('login-err').style.display='block';
+        }
+        return;
+      }
+    }
+    $('login-err').textContent='❌ اسم المستخدم أو كلمة المرور غير صحيحة';
+    $('login-err').style.display='block';
+  }
+}
+
+function finishLogin(){
   $('login-screen').style.display='none';
   applyRoleUI();
-  // Log login event
   db.collection('auditLog').add({action:'login', user:currentUser.name, role:currentUser.role, at: firebase.firestore.FieldValue.serverTimestamp()}).catch(()=>{});
 }
 
@@ -2829,6 +2881,7 @@ function doLogout(){
   // إيقاف جميع المستمعات الفورية
   if(_pharmPatientsUnsub){ _pharmPatientsUnsub(); _pharmPatientsUnsub=null; }
   if(_patientsUnsub){ _patientsUnsub(); _patientsUnsub=null; }
+  auth.signOut().catch(()=>{});
   currentUser = null;
   pharmPatients = []; patients = [];
   $('login-screen').style.display='flex';
@@ -2925,37 +2978,36 @@ async function addUser(){
   await loadUsers();
   // Check duplicate name
   if(allUsers.find(u=>u.name===name)){ errEl.textContent='⚠️ هذا الاسم مستخدم بالفعل'; errEl.style.display='block'; return; }
-  // Check duplicate password
-  const ph = simpleHash(pass);
-  if(allUsers.find(u=>u.passHash===ph)){ errEl.textContent='⚠️ كلمة المرور هذه مستخدمة بالفعل، اختر كلمة مرور مختلفة'; errEl.style.display='block'; return; }
 
+  const seed = 'u'+Date.now().toString(36)+Math.random().toString(36).slice(2,8);
+  const authEmail = authEmailFor(seed);
   try{
-    await db.collection('users').add({name, passHash: ph, role, createdAt: firebase.firestore.FieldValue.serverTimestamp(), createdBy: currentUser.name});
+    const cred = await secondaryAuth.createUserWithEmailAndPassword(authEmail, pass);
+    await db.collection('users').doc(cred.user.uid).set({
+      name, role, authEmail,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp(), createdBy: currentUser.name
+    });
+    await secondaryAuth.signOut();
     $('nu_name').value=''; $('nu_pass').value='';
     await loadUsers();
     renderUMList();
     alert('✅ تم إضافة المستخدم: ' + name);
-  }catch(e){ errEl.textContent='❌ خطأ: '+e.message; errEl.style.display='block'; }
+  }catch(e){
+    const msg = e.code==='auth/email-already-in-use' ? 'حاول تاني بعد لحظة' : e.message;
+    errEl.textContent='❌ خطأ: '+msg; errEl.style.display='block';
+  }
 }
 
 async function deleteUser(uid, name){
-  if(!confirm('حذف المستخدم: '+name+'؟')) return;
+  if(!confirm('حذف المستخدم: '+name+'؟\n\nده هيلغي وصوله للبيانات فوراً، لكن لو عايز تمسح حساب الدخول بتاعه نهائياً من Firebase كمان، لازم تعمل ده يدوياً من Firebase Console ← Authentication ← Users.')) return;
   try{
     await db.collection('users').doc(uid).delete();
     await loadUsers(); renderUMList();
   }catch(e){ alert('❌ خطأ: '+e.message); }
 }
 
-async function resetUserPass(uid, name){
-  const np = prompt('كلمة المرور الجديدة للمستخدم '+name+':');
-  if(!np || np.trim().length < 4){ alert('كلمة المرور يجب أن تكون 4 أحرف على الأقل'); return; }
-  await loadUsers();
-  const ph = simpleHash(np.trim());
-  if(allUsers.find(u=>u.passHash===ph && u.uid!==uid)){ alert('⚠️ كلمة المرور مستخدمة بالفعل'); return; }
-  try{
-    await db.collection('users').doc(uid).update({passHash: ph});
-    alert('✅ تم تغيير كلمة المرور');
-  }catch(e){ alert('❌ خطأ: '+e.message); }
+function resetUserPass(uid, name){
+  alert('🔒 لتغيير كلمة مرور "'+name+'" بأمان، افتح Firebase Console:\nAuthentication ← Users ← ابحث عن المستخدم ← Reset password\n\nده مقصود عشان محدش (حتى من جوه التطبيق نفسه) يقدر يغيّر كلمة مرور حد تاني إلا من لوحة تحكم Firebase الرسمية.');
 }
 
 /* ========== PHARMACY VIEW ========== */
