@@ -1843,11 +1843,21 @@ const DEFAULT_BILL_ITEMS = [
 function loadDefaultBillItems(stype){
   // لا تضيف أصناف افتراضية إذا لم يُحدد نوع الخدمة بعد
   if(!stype) return;
+  const isNafaqa = stype === 'نفقة دولة';
+  const isTamin  = stype === 'تأمين صحي';
+  // اقتصادي ومجاني → نفس منطق filterDD: يستخدمون قائمة التأمين
   DEFAULT_BILL_ITEMS.forEach(def=>{
     const alreadyExists = billItems.some(b=>b.name===def.name && b.cat===def.cat);
     if(alreadyExists) return;
-    // ابحث على السعر في itemDB حسب نوع الخدمة
-    const catItems = itemDB[def.cat] || [];
+    // ابحث على السعر في itemDB حسب نوع الخدمة — فلترة حسب القائمة (نفقة/تأمين/الجميع) أولاً
+    const allCatItems = itemDB[def.cat] || [];
+    const catItems = allCatItems.filter(x=>{
+      const lt = x.list || 'all';
+      if(lt === 'all') return true;
+      if(isNafaqa) return lt === 'nafaqa';
+      if(isTamin)  return lt === 'tamin';
+      return lt === 'tamin'; // اقتصادي ومجاني → تأمين
+    });
     const normalize = s => s.replace(/\s+/g,' ').trim().replace(/[أإآا]/g,'ا').replace(/[ىي]/g,'ي').replace(/ة/g,'ه');
     const defN = normalize(def.name);
     let found = catItems.find(x=>x.name===def.name);
