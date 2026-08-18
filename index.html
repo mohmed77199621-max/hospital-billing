@@ -1992,7 +1992,7 @@ function exportDetailedExcel(){
     'اسم الصنف','الفئة','الكمية','السعر','الإجمالي'
   ];
 
-  const DETAIL_CATS = ['أشعة','تحاليل','بنك الدم'];
+  const DETAIL_CATS = ['أشعة','تحاليل','بنك الدم','شرائح ومسامير','أجهزة'];
   const rows = [];
 
   filtered.forEach(pt=>{
@@ -2013,7 +2013,7 @@ function exportDetailedExcel(){
     });
   });
 
-  if(!rows.length){alert('لا توجد بيانات تفصيلية (أشعة/تحاليل/بنك دم) في الفترة المحددة');return;}
+  if(!rows.length){alert('لا توجد بيانات تفصيلية (أشعة/تحاليل/بنك دم/شرائح ومسامير/أجهزة) في الفترة المحددة');return;}
 
   const ws = XLSX.utils.aoa_to_sheet([hdr,...rows]);
 
@@ -2028,11 +2028,11 @@ function exportDetailedExcel(){
   ws['!cols']=[{wch:22},{wch:18},{wch:14},{wch:13},{wch:13},{wch:30},{wch:12},{wch:8},{wch:10},{wch:12}];
 
   const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'تفصيلي أشعة وتحاليل وبنك دم');
+  XLSX.utils.book_append_sheet(wb, ws, 'بيانات تفصيلية');
 
   const today = new Date().toISOString().slice(0,10);
   const rangeLabel = (fromVal||toVal)?`_${fromVal||'البداية'}_الي_${toVal||'النهاية'}`:'_الكل';
-  XLSX.writeFile(wb, 'تفصيلي_أشعة_تحاليل_بنك_دم'+rangeLabel+'_'+today+'.xlsx');
+  XLSX.writeFile(wb, 'تفصيلي_أشعة_تحاليل_بنك_دم_شرائح_أجهزة'+rangeLabel+'_'+today+'.xlsx');
 }
 /* ========================================= */
 
@@ -3406,7 +3406,7 @@ window.onload = init;
     </div>
     <div style="display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap">
       <button onclick="closeExcelModal()" class="btn btn-o">إلغاء</button>
-      <button onclick="exportDetailedExcel()" class="btn btn-a" title="شيت تفصيلي بالتحاليل والأشعة وبنك الدم">📋 تفصيلي</button>
+      <button onclick="exportDetailedExcel()" class="btn btn-a" title="شيت تفصيلي بالتحاليل والأشعة وبنك الدم والشرائح والمسامير والأجهزة">📋 تفصيلي</button>
       <button onclick="exportAllExcel()" class="btn btn-p">📥 ملخص</button>
     </div>
   </div>
