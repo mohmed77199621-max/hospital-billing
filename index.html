@@ -293,6 +293,11 @@ input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
               <option>م3أ</option><option>م3ب</option>
             </select>
           </div>
+          <!-- حقل الاقامة بالاكسجين — يظهر فقط عند اختيار قسم مبتسرين -->
+          <div id="oxy-days-wrap" style="display:none">
+            <label class="lbl" style="color:#0277bd;font-weight:900">🫁 الاقامة بالاكسجين</label>
+            <input type="number" id="p_oxy_days" class="inp" style="border-color:#0277bd" min="0" step="1" inputmode="numeric" oninput="applyAutoRates()">
+          </div>
           <div><label class="lbl">نوع الخدمة</label>
             <select id="p_stype" class="inp" onchange="onStypeChange()">
               <option value="">— اختر نوع الخدمة —</option>
@@ -1149,10 +1154,13 @@ function onDeptChange(){
   const tag   = getDeptTag(dept);
   const isObs = tag === 'obs';
   const isBone= tag === 'bone';
+  const isNicu= tag === 'nicu';
   $('obs-wrap').style.display   = isObs  ? '' : 'none';
   $('group-wrap').style.display = isBone ? '' : 'none';
+  $('oxy-days-wrap').style.display = isNicu ? '' : 'none';
   if(!isObs)  $('p_obs').value   = '';
   if(!isBone) $('p_group').value = '';
+  if(!isNicu) $('p_oxy_days').value = '';
   $('p_optype').value = '';
   ['f_doc','f_anes','f_or','f_med','f_nur'].forEach(id => $(id).value = 0);
   applyAutoRates();
@@ -1183,7 +1191,12 @@ function applyAutoRates(){
   const icuRates = Object.entries(ICU_DEPTS).find(([k])=>getDeptTag(k)===getDeptTag(dept) && getDeptTag(dept));
   if(icuRates){
     const r = icuRates[1];
-    $('f_stay').value = days * r.stayRate;
+    if(getDeptTag(dept)==='nicu'){
+      const oxyDays = parseFloat(Vv('p_oxy_days'))||0;
+      $('f_stay').value = oxyDays*400 + Math.max(days-oxyDays,0)*150;
+    } else {
+      $('f_stay').value = days * r.stayRate;
+    }
     $('f_med').value  = days * r.med;
     $('f_nur').value  = days * r.nur;
     $('f_doc').value  = 0;
@@ -1427,8 +1440,16 @@ function renderBill(){
 /* ========== TOTALS ========== */
 function getFixed(){
   const days=parseFloat($('stay_days').value)||0;
-  return [
+  const isNicu = getDeptTag(Vv('p_dept'))==='nicu';
+  const oxyDays = isNicu ? (parseFloat(Vv('p_oxy_days'))||0) : 0;
+  const stayItems = isNicu ? [
+    {label:"اقامة باكسجين",val:oxyDays*400,                          key:"stay_oxy"},
+    {label:"اقامة"        ,val:Math.max(days-oxyDays,0)*150,          key:"stay"},
+  ] : [
     {label:"إقامة",val:parseFloat(Vv("f_stay"))||0,key:"stay"},
+  ];
+  return [
+    ...stayItems,
     {label:'إشراف طبي'        ,val:parseFloat(Vv('f_med'))||0,   key:'med'},
     {label:'إشراف تمريض'      ,val:parseFloat(Vv('f_nur'))||0,   key:'nur'},
     {label:'أجر الطبيب'       ,val:parseFloat(Vv('f_doc'))||0,   key:'doc'},
@@ -1643,6 +1664,7 @@ function getFormData(){
     dept:Vv('p_dept'),        stype:Vv('p_stype'),
     letter:Vv('p_letter').trim(), optype:Vv('p_optype'),
     taminType:Vv('p_tamin_type'), group:Vv('p_group').trim(),
+    oxyDays: getDeptTag(Vv('p_dept'))==='nicu' ? (parseFloat(Vv('p_oxy_days'))||0) : null,
     obs:Vv('p_obs'),
     notes:Vv('p_notes').trim(),
     entry:fmtDate(Vv('p_entry')), exit:fmtDate(Vv('p_exit')),
@@ -1671,6 +1693,7 @@ async function savePatient(){
   const entry  = Vv('p_entry');
   const exit   = Vv('p_exit');
   const group  = Vv('p_group').trim();
+  const oxyDaysRaw = Vv('p_oxy_days').trim();
 
   if(!name)  { alert('⚠️ يرجى إدخال اسم المريض');            return; }
   if(!ticket){ alert('⚠️ يرجى إدخال رقم التذكرة');           return; }
@@ -1688,6 +1711,9 @@ async function savePatient(){
   }
   if(getDeptTag(dept)==='bone' && !group){
     alert('⚠️ يرجى إدخال المجموعة لقسم العظام'); return;
+  }
+  if(getDeptTag(dept)==='nicu' && oxyDaysRaw===''){
+    alert('⚠️ يرجى إدخال عدد أيام الاقامة بالاكسجين لقسم مبتسرين (يمكن إدخال صفر)'); return;
   }
 
   // منع تكرار رقم التذكرة في نفس القسم (يُسمح بنفس الرقم في قسم مختلف)
@@ -1754,6 +1780,10 @@ function editPatient(fid){
   if(getDeptTag(pt.dept)==='bone' && pt.group){
     $('group-wrap').style.display='';
     if($('p_group')) $('p_group').value=pt.group||'';
+  }
+  if(getDeptTag(pt.dept)==='nicu'){
+    $('oxy-days-wrap').style.display='';
+    if($('p_oxy_days')) $('p_oxy_days').value = (pt.oxyDays!=null ? pt.oxyDays : '');
   }
   if(getDeptTag(pt.dept)==='obs'){
     $('obs-wrap').style.display='';
@@ -1885,6 +1915,7 @@ function clearForm(){
   $('p_obs').value=''; $('obs-wrap').style.display='none';
   $('p_tamin_type').value=''; $('tamin-wrap').style.display='none';
   $('p_group').value=''; $('group-wrap').style.display='none';
+  $('p_oxy_days').value=''; $('oxy-days-wrap').style.display='none';
   ['f_stay','f_med','f_nur','f_doc','f_anes','f_or','f_ecg','f_physio','f_oxy'].forEach(id=>$(id).value=0);
   billItems=[];
   // تحميل الأصناف الافتراضية بكمية 0
