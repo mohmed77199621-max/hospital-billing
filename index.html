@@ -1443,7 +1443,7 @@ function getFixed(){
   const isNicu = getDeptTag(Vv('p_dept'))==='nicu';
   const oxyDays = isNicu ? (parseFloat(Vv('p_oxy_days'))||0) : 0;
   const stayItems = isNicu ? [
-    {label:"اقامة باكسجين",val:oxyDays*400,                          key:"stay_oxy"},
+    {label:"اقامة تحت جهاز تنفس",val:oxyDays*400,                          key:"stay_oxy"},
     {label:"اقامة"        ,val:Math.max(days-oxyDays,0)*150,          key:"stay"},
   ] : [
     {label:"إقامة",val:parseFloat(Vv("f_stay"))||0,key:"stay"},
