@@ -1750,11 +1750,10 @@ async function markPatientPrinted(fid){
 
 function printCurrentInvoice(pt){
   const patientName = ((pt&&pt.name)?pt.name:Vv('p_name').trim()) || '—';
+  const fid = (pt && pt.firestoreId) ? pt.firestoreId : '';
   const html=buildInvoice(pt||null);
   const w=window.open('','_blank','width=1000,height=800');
   if(!w){alert('يرجى السماح بالنوافذ المنبثقة في المتصفح');return;}
-  // سجّل أن الفاتورة طُبعت (للمرضى المحفوظين فقط)
-  if(pt && pt.firestoreId){ markPatientPrinted(pt.firestoreId); }
   w.document.write(`<!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
@@ -1823,7 +1822,7 @@ function printCurrentInvoice(pt){
 </head>
 <body>
 <div id="print-toolbar">
-  <button class="tb-btn tb-print" onclick="window.print()">🖨 طباعة</button>
+  <button class="tb-btn tb-print" onclick="doPrint()">🖨 طباعة</button>
   <button class="tb-btn tb-close" onclick="window.close()">✕ إغلاق</button>
 </div>
 <div style="margin-top:45px">
@@ -1838,7 +1837,17 @@ function printCurrentInvoice(pt){
     </div>
   </div>
 </div>
-
+<script>
+// يسجَّل أن الفاتورة "تمت طباعتها" فقط عند الضغط الفعلي على زر الطباعة في هذه الشاشة
+function doPrint(){
+  try{
+    if('${fid}' && window.opener && !window.opener.closed && typeof window.opener.markPatientPrinted==='function'){
+      window.opener.markPatientPrinted('${fid}');
+    }
+  }catch(e){ console.error(e); }
+  window.print();
+}
+<\/script>
 </body></html>`);
   w.document.close();
   closePrev();
