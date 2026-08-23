@@ -1447,18 +1447,24 @@ function applyAutoLinkedItems(_reason){
     changed = _removeAutoByKey('link-xray-mobile') || changed;
   }
 
-  // (12) عند اختيار أقسام العناية المحددة → مونتور بعدد أيام الإقامة (يتغير مع الأيام)
-  if(_isIcuDeptLike(dept)){
-    changed = _ensureItem('أجهزة','مونتور', days, {lockedQty:true, lockDelete:true, autoKey:'link-monitor-days'}) || changed;
-  } else {
-    changed = _removeAutoByKey('link-monitor-days') || changed;
+  // (12) عند اختيار أقسام العناية المحددة → مونتور بعدد أيام الإقامة (يتغير مباشرة مع تغيير الأيام أو القسم)
+  // البند أصبح قابلاً للحذف والتعديل يدويًا؛ لا تتم إعادة مزامنته إلا عند تغيّر القسم أو عدد الأيام فعليًا
+  if(['dept','days'].includes(_reason)){
+    if(_isIcuDeptLike(dept)){
+      changed = _ensureItem('أجهزة','مونتور', days, {lockedQty:false, lockDelete:false, autoKey:'link-monitor-days'}) || changed;
+    } else {
+      changed = _removeAutoByKey('link-monitor-days') || changed;
+    }
   }
 
-  // (14) عند اختيار نوع العملية → مونتور عملية (1 فقط، لا يقبل الزيادة ولا الحذف)
-  if(optype){
-    changed = _ensureItem('أجهزة','مونتور عملية', 1, {lockedQty:true, lockDelete:true, autoKey:'link-monitor-op'}) || changed;
-  } else {
-    changed = _removeAutoByKey('link-monitor-op') || changed;
+  // (14) عند اختيار نوع العملية → مونتور عملية (يبدأ بـ1 ثم قابل للحذف والتعديل يدويًا)
+  // لا تتم إعادة المزامنة إلا عند تغيّر نوع العملية نفسه، أو تغيّر القسم (لأنه يصفّر نوع العملية تلقائياً)
+  if(['optype','dept'].includes(_reason)){
+    if(optype){
+      changed = _ensureItem('أجهزة','مونتور عملية', 1, {lockedQty:false, lockDelete:false, autoKey:'link-monitor-op'}) || changed;
+    } else {
+      changed = _removeAutoByKey('link-monitor-op') || changed;
+    }
   }
 
   return changed;
