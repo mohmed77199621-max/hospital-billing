@@ -329,7 +329,7 @@ input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
         </div>
         <div class="days-badge">
           <span style="font-size:.72rem;font-weight:700;color:var(--tm)">عدد أيام الإقامة</span>
-          <input type="number" id="stay_days" value="0" min="0" step="0.5" oninput="applyEconRates();if(Vv('p_obs'))fillObsFees();calcTotal()" style="font-size:1.4rem;font-weight:900;color:var(--p);width:80px;border:1.5px solid var(--b);border-radius:8px;text-align:center;background:#f0f4ff;padding:4px 8px;font-family:'Noto Kufi Arabic',sans-serif">
+          <input type="number" id="stay_days" value="0" min="0" step="0.5" oninput="applyEconRates();if(Vv('p_obs'))fillObsFees();applyAutoLinkedItems('days');calcTotal()" style="font-size:1.4rem;font-weight:900;color:var(--p);width:80px;border:1.5px solid var(--b);border-radius:8px;text-align:center;background:#f0f4ff;padding:4px 8px;font-family:'Noto Kufi Arabic',sans-serif">
         </div>
       </div>
     </div>
@@ -396,7 +396,7 @@ input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
         <div style="margin-top:14px;display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap" class="no-print">
           <button onclick="previewInvoice()" class="btn btn-o">🔍 معاينة الفاتورة</button>
           <button onclick="printCurrentInvoice(null)" class="btn btn-o">🖨 معاينة وطباعة</button>
-          <button onclick="savePatient()" class="btn btn-p">💾 حفظ المريض</button>
+          <button id="btn-save-patient" onclick="savePatient()" class="btn btn-p">💾 حفظ المريض</button>
         </div>
       </div>
     </div>
@@ -1164,6 +1164,7 @@ function onDeptChange(){
   $('p_optype').value = '';
   ['f_doc','f_anes','f_or','f_med','f_nur'].forEach(id => $(id).value = 0);
   applyAutoRates();
+  applyAutoLinkedItems('dept');
 }
 
 /* ===== عند تغيير نوع الخدمة ===== */
@@ -1175,6 +1176,7 @@ function onStypeChange(){
   // عند اختيار نوع الخدمة لأول مرة → أضف الأصناف الافتراضية
   if(stype) setTimeout(()=>loadDefaultBillItems(stype), 50);
   applyAutoRates();
+  applyAutoLinkedItems('stype');
   calcTotal();
 }
 
@@ -1261,6 +1263,7 @@ function applyAutoRates(){
 /* ===== عند تغيير نوع العملية ===== */
 function fillOpFees(){
   applyAutoRates();
+  applyAutoLinkedItems('optype');
 }
 
 /* ===== عند تغيير نوع الولادة ===== */
@@ -1318,6 +1321,149 @@ function pickItem(el){
 function resetSel(){$('i_q').value='';selItem=null;}
 
 /* ========== BILL ========== */
+// ================================================================
+// ربط تلقائي بين بعض البنود حسب متطلبات العمل (تأمين/عناية/... إلخ)
+// ================================================================
+function _normName(s){
+  return String(s||'')
+    .replace(/\s+/g,' ').trim()
+    .replace(/[أإآا]/g,'ا')
+    .replace(/[ىي]/g,'ي')
+    .replace(/ة/g,'ه')
+    .replace(/^ال/g,''); // لتسهيل مطابقة "عناية القلب" و"عناية قلب"
+}
+function _sameName(a,b){ return _normName(a) === _normName(b); }
+function _findByName(name, cat){
+  const n = _normName(name);
+  return billItems.find(x => (!cat || x.cat===cat) && _normName(x.name)===n) || null;
+}
+function _sumQtyByNames(names, cat){
+  const set = new Set(names.map(_normName));
+  return billItems
+    .filter(x => (!cat || x.cat===cat) && set.has(_normName(x.name)))
+    .reduce((a,x)=>a+(parseFloat(x.qty)||0), 0);
+}
+function _getPriceFromDB(cat, name){
+  const stype = Vv('p_stype')||'';
+  const isNafaqa = stype==='نفقة دولة';
+  const isTamin  = stype==='تأمين صحي';
+  const all = (itemDB[cat]||[]);
+  const filtered = all.filter(x=>{
+    const lt = x.list || 'all';
+    if(lt === 'all') return true;
+    if(isNafaqa) return lt === 'nafaqa';
+    if(isTamin)  return lt === 'tamin';
+    return lt === 'tamin'; // اقتصادي ومجاني → تأمين
+  });
+  const n = _normName(name);
+  let found = filtered.find(x=>_normName(x.name)===n);
+  if(!found) found = filtered.find(x=>_normName(x.name).includes(n) || n.includes(_normName(x.name)));
+  return found ? (parseFloat(found.price)||0) : 0;
+}
+function _ensureItem(cat, name, qty, opts={}){
+  const {
+    lockedQty=false,
+    lockDelete=false,
+    autoKey=null,
+  } = opts||{};
+  const q = Math.max(0, parseFloat(qty)||0);
+  let it = _findByName(name, cat);
+  if(q<=0){
+    if(it){
+      billItems = billItems.filter(x=>x!==it);
+      return true;
+    }
+    return false;
+  }
+  const price = _getPriceFromDB(cat, name);
+  if(!it){
+    it = {
+      id: Date.now()+Math.random(),
+      name, cat,
+      price, origPrice: price,
+      qty: q,
+      total: parseFloat((price*q).toFixed(4)),
+      isAuto: true,
+      autoKey,
+      lockedQty,
+      lockDelete,
+    };
+    billItems.push(it);
+    return true;
+  }
+  let changed = false;
+  if(lockedQty) it.lockedQty = true;
+  if(lockDelete) it.lockDelete = true;
+  if(autoKey) it.autoKey = autoKey;
+  if(it.qty !== q){
+    it.qty = q;
+    it.total = parseFloat((it.price * q).toFixed(4));
+    changed = true;
+  }
+  return changed;
+}
+function _removeAutoByKey(key){
+  const before = billItems.length;
+  billItems = billItems.filter(x => x.autoKey !== key);
+  return billItems.length !== before;
+}
+function _isIcuDeptLike(dept){
+  const list = [
+    // حسب المطلوب + الموجود في ICU_DEPTS
+    'مركزة اطفال','مركزة باطنة','مركزة ICU','مركزة HUB',
+    'عناية مركزة HUB','عناية مركزة حروق','عناية متوسطة حروق',
+    'عناية مخ واعصاب','عناية قلب','عناية القلب','مبتسرين'
+  ].map(_normName);
+  return list.includes(_normName(dept));
+}
+
+// الدالة الوحيدة المسؤولة عن تطبيق الروابط التلقائية (تنفّذ بعد الإضافة/تعديل الكمية/تغيير القسم/الأيام/نوع العملية)
+function applyAutoLinkedItems(_reason){
+  let changed = false;
+
+  const dept = Vv('p_dept')||'';
+  const days = parseFloat($('stay_days').value)||0;
+  const optype = Vv('p_optype')||'';
+
+  // (2) جهاز تنفس صناعي عناية يوم → أضف/اربط أكسجين جهاز التنفس الصناعي (خدمات أخري)
+  const ventQty = _sumQtyByNames(['جهاز تنفس صناعي عناية يوم']);
+  changed = _ensureItem('خدمات أخري','اكسجين جهاز التنفس الصناعي', ventQty, {lockedQty:true, lockDelete:true, autoKey:'link-vent-oxy'}) || changed;
+
+  // (6) قسطرة CVP (أطفال/كبار) → رسوم تركيب CVP (خدمات أخري)
+  const cvpQty = _sumQtyByNames(['قسطرة cvpاطفال','قسطرة cvp اطفال','قسطرة cvp كبار','قسطرة cvpكبار']);
+  changed = _ensureItem('خدمات أخري','رسوم تركيب cvp', cvpQty, {lockedQty:true, lockDelete:true, autoKey:'link-cvp-fee'}) || changed;
+
+  // (6) بنك الدم: كيس دم/وحدة بلازما → توافق بنك دم (بعدد الأكياس) + فصيلة بنك دم (مرة واحدة) + جهاز نقل دم (مستلزمات)
+  const bloodQty = _sumQtyByNames(['كيس دم','وحدة بلازما']);
+  changed = _ensureItem('بنك الدم','توافق بنك دم', bloodQty, {lockedQty:true, lockDelete:true, autoKey:'link-blood-compat'}) || changed;
+  changed = _ensureItem('بنك الدم','فصيلة بنك دم', bloodQty>0 ? 1 : 0, {lockedQty:true, lockDelete:true, autoKey:'link-blood-type'}) || changed;
+  changed = _ensureItem('مستلزمات','جهاز نقل دم', bloodQty, {lockedQty:true, lockDelete:true, autoKey:'link-blood-set'}) || changed;
+
+  // (4) أشعة عادية + أقسام عناية محددة → رسوم جهاز متنقل أشعة (خدمات أخري)
+  const xrayQty = _sumQtyByNames(['اشعة عادية','أشعة عادية']);
+  if(_isIcuDeptLike(dept)){
+    changed = _ensureItem('خدمات أخري','رسوم جهاز متنقل اشعة', xrayQty, {lockedQty:true, lockDelete:true, autoKey:'link-xray-mobile'}) || changed;
+  } else {
+    changed = _removeAutoByKey('link-xray-mobile') || changed;
+  }
+
+  // (12) عند اختيار أقسام العناية المحددة → مونتور بعدد أيام الإقامة (يتغير مع الأيام)
+  if(_isIcuDeptLike(dept)){
+    changed = _ensureItem('أجهزة','مونتور', days, {lockedQty:true, lockDelete:true, autoKey:'link-monitor-days'}) || changed;
+  } else {
+    changed = _removeAutoByKey('link-monitor-days') || changed;
+  }
+
+  // (14) عند اختيار نوع العملية → مونتور عملية (1 فقط، لا يقبل الزيادة ولا الحذف)
+  if(optype){
+    changed = _ensureItem('أجهزة','مونتور عملية', 1, {lockedQty:true, lockDelete:true, autoKey:'link-monitor-op'}) || changed;
+  } else {
+    changed = _removeAutoByKey('link-monitor-op') || changed;
+  }
+
+  return changed;
+}
+
 function addItem(){
   const _stype = Vv('p_stype')||'';
   const _cat   = Vv('i_cat')||'';
@@ -1337,9 +1483,19 @@ function addItem(){
     billItems.push({id:Date.now(),name:selItem.name,cat,price:selItem.price,origPrice:selItem.price,qty,total:selItem.price*qty});
     markFormDirty();
   }
+  applyAutoLinkedItems('add');
   renderBill(); resetSel(); $('i_qty').value=1;
 }
-function delItem(id){billItems=billItems.filter(x=>x.id!==id);renderBill();}
+function delItem(id){
+  const it = billItems.find(x=>x.id===id);
+  if(it && it.lockDelete){
+    alert('⚠️ هذا البند مُضاف تلقائياً ولا يمكن حذفه (يتحكم به النظام).');
+    return;
+  }
+  billItems=billItems.filter(x=>x.id!==id);
+  applyAutoLinkedItems('delete');
+  renderBill();
+}
 
 /* ========== فحص تكرار رقم التذكرة ========== */
 function checkTicketDuplicate(){
@@ -1372,10 +1528,16 @@ function checkTicketDuplicate(){
 function updateItemQty(id, val){ markFormDirty();
   const item = billItems.find(x=>x.id===id);
   if(!item) return;
+  if(item.lockedQty){
+    // بند مرتبط تلقائياً — لا يسمح بتعديل الكمية يدويًا
+    renderBill();
+    return;
+  }
   const qty = parseFloat(val);
   // لو الكمية صفر أو أقل → احذف الصنف فوراً
   if(!qty || qty <= 0){
     billItems = billItems.filter(x=>x.id!==id);
+    applyAutoLinkedItems('qty');
     renderBill(); calcTotal();
     return;
   }
@@ -1391,6 +1553,8 @@ function updateItemQty(id, val){ markFormDirty();
     if(qty > 0){ row.classList.add('bill-card-added'); }
     else { row.classList.add('bill-card-default','zero-qty-row'); }
   }
+  const depChanged = applyAutoLinkedItems('qty');
+  if(depChanged) renderBill();
   calcTotal();
 }
 function updateItemPrice(id, val){ markFormDirty();
@@ -1416,7 +1580,7 @@ function renderBill(){
     <td style="font-weight:700">${i.name}</td>
     <td style="text-align:center"><span class="badge bp">${i.cat}</span></td>
     <td style="text-align:center">
-      <input type="number" value="${i.qty}" min="0.01" step="0.01"
+      <input type="number" value="${i.qty}" min="0.01" step="0.01" ${i.lockedQty?'disabled':''}
         onchange="updateItemQty(${i.id},this.value)"
         style="width:60px;text-align:center;border:1px solid var(--b);border-radius:6px;padding:2px 4px;font-family:inherit;font-size:.82rem;background:#f8f9ff"
         class="no-print">
@@ -1432,7 +1596,7 @@ function renderBill(){
     </td>
     <td style="text-align:left;font-weight:800;color:var(--p)" data-total-id="${i.id}">${fmt(i.total)}</td>
     <td class="no-print" style="text-align:center">
-      <button onclick="delItem(${i.id})" style="background:none;border:none;cursor:pointer;color:#e57373;font-size:1rem">🗑</button>
+      ${i.lockDelete?'<span title="بند تلقائي" style="font-size:.95rem;color:#6b7fa3;cursor:help">🔒</span>':`<button onclick="delItem(${i.id})" style="background:none;border:none;cursor:pointer;color:#e57373;font-size:1rem">🗑</button>`}
     </td></tr>`).join('');
   calcTotal();
 }
@@ -1484,6 +1648,8 @@ function buildInvoice(pt){
   const days  =live?(parseFloat($('stay_days').value)||0):pt.days;
   const fixed =live?getFixed():pt.fixed;
   const items =live?billItems:pt.items;
+  const printCount = live ? 0 : (pt.printCount||0);
+  const insuranceInvNo = (!live && stype==='تأمين صحي') ? (pt.insuranceInvoiceNo||'') : '';
   // اسم مدخل البيانات الذي سجّل/يسجّل المريض — يُكتب تلقائياً في الفاتورة المطبوعة
   const dataEntryName = live ? (currentUser?currentUser.name:'') : (pt.savedBy||'');
   const feesSum=fixed.reduce((a,x)=>a+x.val,0);
@@ -1524,6 +1690,7 @@ function buildInvoice(pt){
     <table>
       <tr><td class="lh">اسم المريض</td><td style="font-weight:900;font-size:10pt">${name||'—'}</td><td class="lh">رقم التذكرة</td><td style="font-weight:900">${ticket||'—'}</td></tr>
       <tr><td class="lh">القسم الطبي</td><td style="font-weight:800">${dept||'—'}</td><td class="lh">نوع الخدمة</td><td style="font-weight:800">${stype||'—'}</td></tr>
+      <tr><td class="lh">رقم الفاتورة</td><td style="font-weight:900">${insuranceInvNo||'—'}</td><td class="lh">عدد مرات الطباعة</td><td style="font-weight:900">${printCount}</td></tr>
       <tr><td class="lh">فئة التأمين</td><td style="font-weight:800">${taminType||'—'}</td><td class="lh">نوع العملية</td><td>${optype||'—'}</td></tr>
       <tr><td class="lh">رقم الخطاب / القرار</td><td colspan="3">${letter||'—'}</td></tr>
       <tr><td class="lh">تاريخ الدخول</td><td style="font-weight:800">${entry||'—'}</td><td class="lh">تاريخ الخروج</td><td style="font-weight:800">${exitD||'—'}</td></tr>
@@ -1558,11 +1725,31 @@ function buildInvoice(pt){
 /* ========== PREVIEW & PRINT ========== */
 function previewInvoice(){$('prev-content').innerHTML=buildInvoice(null);$('prev-modal').style.display='flex';}
 function closePrev(){$('prev-modal').style.display='none';}
+async function markPatientPrinted(fid){
+  if(!fid) return;
+  try{
+    await db.collection('patients').doc(fid).set({
+      printCount: firebase.firestore.FieldValue.increment(1),
+      lastPrintedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    }, {merge:true});
+    const p = patients.find(x=>x.firestoreId===fid);
+    if(p){
+      p.printCount = (p.printCount||0)+1;
+      p.lastPrintedAt = new Date();
+      renderPatients();
+    }
+  }catch(e){
+    console.error('markPatientPrinted:', e);
+  }
+}
+
 function printCurrentInvoice(pt){
   const patientName = ((pt&&pt.name)?pt.name:Vv('p_name').trim()) || '—';
   const html=buildInvoice(pt||null);
   const w=window.open('','_blank','width=1000,height=800');
   if(!w){alert('يرجى السماح بالنوافذ المنبثقة في المتصفح');return;}
+  // سجّل أن الفاتورة طُبعت (للمرضى المحفوظين فقط)
+  if(pt && pt.firestoreId){ markPatientPrinted(pt.firestoreId); }
   w.document.write(`<!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
@@ -1659,6 +1846,7 @@ function getFormData(){
   const fixed=getFixed();
   const feesSum=fixed.reduce((a,x)=>a+x.val,0);
   const itemsSum=billItems.reduce((a,x)=>a+x.total,0);
+  const old = editId ? patients.find(p=>p.firestoreId===editId) : null;
   return {
     name:Vv('p_name').trim(), ticket:Vv('p_ticket').trim(),
     dept:Vv('p_dept'),        stype:Vv('p_stype'),
@@ -1678,90 +1866,106 @@ function getFormData(){
     fEcg:parseFloat(Vv('f_ecg'))||0,    fPhysio:parseFloat(Vv('f_physio'))||0,
     fOxy:parseFloat(Vv('f_oxy'))||0,
     finalized: true, // مدخل بيانات/مدير أكمل بيانات المريض بالكامل من هذه الشاشة
+    // حقول لا يجب أن تضيع عند التعديل
+    printCount: old ? (old.printCount||0) : 0,
+    lastPrintedAt: old ? (old.lastPrintedAt||null) : null,
+    insuranceInvoiceNo: old ? (old.insuranceInvoiceNo||null) : null,
+    insuranceInvoiceBatchKey: old ? (old.insuranceInvoiceBatchKey||null) : null,
   };
 }
 
+// منع الحفظ المكرر (تكرار النقر أو تجمّد الصفحة)
+let _savingPatient = false;
 async function savePatient(){
-  const name   = Vv('p_name').trim();
-  const ticket = Vv('p_ticket').trim();
-  const dept   = Vv('p_dept');
-  const stype  = Vv('p_stype');
-  const letter = Vv('p_letter').trim();
-  const days   = parseFloat($('stay_days').value) || 0;
-  const taminType = Vv('p_tamin_type');
-
-  const entry  = Vv('p_entry');
-  const exit   = Vv('p_exit');
-  const group  = Vv('p_group').trim();
-  const oxyDaysRaw = Vv('p_oxy_days').trim();
-
-  if(!name)  { alert('⚠️ يرجى إدخال اسم المريض');            return; }
-  if(!ticket){ alert('⚠️ يرجى إدخال رقم التذكرة');           return; }
-  if(!dept)  { alert('⚠️ يرجى اختيار القسم الطبي');          return; }
-  if(!stype) { alert('⚠️ يرجى اختيار نوع الخدمة');           return; }
-  if(!entry) { alert('⚠️ يرجى إدخال تاريخ الدخول');          return; }
-  if(!exit)  { alert('⚠️ يرجى إدخال تاريخ الخروج');          return; }
-  if(days<=0){ alert('⚠️ يرجى إدخال عدد أيام الإقامة (أكبر من صفر)'); return; }
-  if(entry && exit && exit < entry){ alert('⚠️ تاريخ الخروج لا يمكن أن يكون قبل تاريخ الدخول'); return; }
-  if((stype==='تأمين صحي'||stype==='نفقة دولة') && !letter){
-    alert('⚠️ يرجى إدخال رقم الخطاب / القرار للتأمين الصحي أو نفقة الدولة'); return;
-  }
-  if(stype==='تأمين صحي' && !taminType){
-    alert('⚠️ يرجى اختيار فئة التأمين (أطفال / طلبة / منتفعين)'); return;
-  }
-  if(getDeptTag(dept)==='bone' && !group){
-    alert('⚠️ يرجى إدخال المجموعة لقسم العظام'); return;
-  }
-  if(getDeptTag(dept)==='nicu' && oxyDaysRaw===''){
-    alert('⚠️ يرجى إدخال عدد أيام الاقامة بالاكسجين لقسم مبتسرين (يمكن إدخال صفر)'); return;
-  }
-
-  // منع تكرار رقم التذكرة في نفس القسم (يُسمح بنفس الرقم في قسم مختلف)
-  // عند التعديل (editId) نتجاهل سجل المريض نفسه من فحص التكرار
+  if(_savingPatient) return;
+  _savingPatient = true;
+  const btn = $('btn-save-patient');
+  if(btn){ btn.disabled=true; btn.style.opacity='.75'; btn.textContent='⏳ جاري الحفظ...'; }
   try{
-    const dupSnap = await db.collection('patients')
-      .where('ticket','==', ticket)
-      .where('dept','==', dept)
-      .get();
-    const dup = dupSnap.docs.find(d=>d.id !== editId);
-    if(dup){
-      const dd = dup.data();
-      alert('⚠️ تم تسجيل هذا المريض من قبل\nرقم التذكرة: '+ticket+'\nالقسم: '+dept+'\nالاسم: '+(dd.name||'—')+'\nتاريخ الدخول: '+(dd.entry||'—'));
+    const name   = Vv('p_name').trim();
+    const ticket = Vv('p_ticket').trim();
+    const dept   = Vv('p_dept');
+    const stype  = Vv('p_stype');
+    const letter = Vv('p_letter').trim();
+    const days   = parseFloat($('stay_days').value) || 0;
+    const taminType = Vv('p_tamin_type');
+
+    const entry  = Vv('p_entry');
+    const exit   = Vv('p_exit');
+    const group  = Vv('p_group').trim();
+    const oxyDaysRaw = Vv('p_oxy_days').trim();
+
+    if(!name)  { alert('⚠️ يرجى إدخال اسم المريض');            return; }
+    if(!ticket){ alert('⚠️ يرجى إدخال رقم التذكرة');           return; }
+    if(!dept)  { alert('⚠️ يرجى اختيار القسم الطبي');          return; }
+    if(!stype) { alert('⚠️ يرجى اختيار نوع الخدمة');           return; }
+    if(!entry) { alert('⚠️ يرجى إدخال تاريخ الدخول');          return; }
+    if(!exit)  { alert('⚠️ يرجى إدخال تاريخ الخروج');          return; }
+    if(days<=0){ alert('⚠️ يرجى إدخال عدد أيام الإقامة (أكبر من صفر)'); return; }
+    if(entry && exit && exit < entry){ alert('⚠️ تاريخ الخروج لا يمكن أن يكون قبل تاريخ الدخول'); return; }
+    if((stype==='تأمين صحي'||stype==='نفقة دولة') && !letter){
+      alert('⚠️ يرجى إدخال رقم الخطاب / القرار للتأمين الصحي أو نفقة الدولة'); return;
+    }
+    if(stype==='تأمين صحي' && !taminType){
+      alert('⚠️ يرجى اختيار فئة التأمين (أطفال / طلبة / منتفعين)'); return;
+    }
+    if(getDeptTag(dept)==='bone' && !group){
+      alert('⚠️ يرجى إدخال المجموعة لقسم العظام'); return;
+    }
+    if(getDeptTag(dept)==='nicu' && oxyDaysRaw===''){
+      alert('⚠️ يرجى إدخال عدد أيام الاقامة بالاكسجين لقسم مبتسرين (يمكن إدخال صفر)'); return;
+    }
+
+    // منع تكرار رقم التذكرة في نفس القسم (يُسمح بنفس الرقم في قسم مختلف)
+    // عند التعديل (editId) نتجاهل سجل المريض نفسه من فحص التكرار
+    try{
+      const dupSnap = await db.collection('patients')
+        .where('ticket','==', ticket)
+        .where('dept','==', dept)
+        .get();
+      const dup = dupSnap.docs.find(d=>d.id !== editId);
+      if(dup){
+        const dd = dup.data();
+        alert('⚠️ تم تسجيل هذا المريض من قبل\nرقم التذكرة: '+ticket+'\nالقسم: '+dept+'\nالاسم: '+(dd.name||'—')+'\nتاريخ الدخول: '+(dd.entry||'—'));
+        return;
+      }
+    }catch(e){
+      // لا نسمح بالحفظ إذا فشل التحقق من التكرار لأي سبب — هذا أهم من أي خطأ آخر
+      alert('❌ تعذر التحقق من تكرار رقم التذكرة، لم يتم الحفظ لحمايتك من التكرار.\nالسبب: '+e.message+'\nحاول مرة أخرى أو تأكد من اتصال الإنترنت.');
       return;
     }
-  }catch(e){
-    // لا نسمح بالحفظ إذا فشل التحقق من التكرار لأي سبب — هذا أهم من أي خطأ آخر
-    alert('❌ تعذر التحقق من تكرار رقم التذكرة، لم يتم الحفظ لحمايتك من التكرار.\nالسبب: '+e.message+'\nحاول مرة أخرى أو تأكد من اتصال الإنترنت.');
-    return;
+
+    // احذف الأصناف التي كميتها 0 قبل الحفظ
+    billItems = billItems.filter(x => x.qty > 0);
+    renderBill();
+
+    const pt={...getFormData(), savedAt:firebase.firestore.FieldValue.serverTimestamp(), savedBy: currentUser?currentUser.name:'', savedByRole: currentUser?currentUser.role:''};
+    setStatus('save');
+    let savedTotal = pt.total;
+    let savedDoc = null; // النسخة النهائية اللي فعلاً اتحفظت، هنستخدمها لتحديث القائمة محليًا بدل إعادة تحميل كل المرضى من السيرفر
+    try{
+      if(editId){
+        // بيانات مدخل البيانات/المدير هي الأساسية والأخيرة — تُحفظ كما هي على الشاشة بالضبط، بدون أي دمج أو تخمين
+        await db.collection('patients').doc(editId).set(pt);
+        savedTotal = pt.total;
+        savedDoc = {...pt, firestoreId: editId, savedAt: new Date()}; // serverTimestamp() sentinel لا يصلح للعرض المحلي، فبنستخدم وقت الجهاز مؤقتًا لحد ما يوصل التحديث الحقيقي من المستمع الحي
+      }
+      else{
+        const ref = await db.collection('patients').add(pt);
+        savedDoc = {...pt, firestoreId: ref.id, savedAt: new Date()};
+      }
+      editId=null; clearForm();
+      alert('✅ تم حفظ بيانات المريض:\n'+name+'\nالإجمالي: '+fmt(savedTotal)+' ج.م');
+      const idx = patients.findIndex(p=>p.firestoreId===savedDoc.firestoreId);
+      if(idx>=0) patients[idx]=savedDoc; else patients.unshift(savedDoc);
+      renderPatients();
+      setStatus('ok');
+      loadPendingPharmCount();
+    }catch(e){alert('❌ خطأ في الحفظ:\n'+e.message);setStatus('err');}
+  } finally {
+    _savingPatient = false;
+    if(btn){ btn.disabled=false; btn.style.opacity=''; btn.textContent='💾 حفظ المريض'; }
   }
-
-  // احذف الأصناف التي كميتها 0 قبل الحفظ
-  billItems = billItems.filter(x => x.qty > 0);
-  renderBill();
-
-  const pt={...getFormData(), savedAt:firebase.firestore.FieldValue.serverTimestamp(), savedBy: currentUser?currentUser.name:'', savedByRole: currentUser?currentUser.role:''};
-  setStatus('save');
-  let savedTotal = pt.total;
-  let savedDoc = null; // النسخة النهائية اللي فعلاً اتحفظت، هنستخدمها لتحديث القائمة محليًا بدل إعادة تحميل كل المرضى من السيرفر
-  try{
-    if(editId){
-      // بيانات مدخل البيانات/المدير هي الأساسية والأخيرة — تُحفظ كما هي على الشاشة بالضبط، بدون أي دمج أو تخمين
-      await db.collection('patients').doc(editId).set(pt);
-      savedTotal = pt.total;
-      savedDoc = {...pt, firestoreId: editId, savedAt: new Date()}; // serverTimestamp() sentinel لا يصلح للعرض المحلي، فبنستخدم وقت الجهاز مؤقتًا لحد ما يوصل التحديث الحقيقي من المستمع الحي
-    }
-    else{
-      const ref = await db.collection('patients').add(pt);
-      savedDoc = {...pt, firestoreId: ref.id, savedAt: new Date()};
-    }
-    editId=null; clearForm();
-    alert('✅ تم حفظ بيانات المريض:\n'+name+'\nالإجمالي: '+fmt(savedTotal)+' ج.م');
-    const idx = patients.findIndex(p=>p.firestoreId===savedDoc.firestoreId);
-    if(idx>=0) patients[idx]=savedDoc; else patients.unshift(savedDoc);
-    renderPatients();
-    setStatus('ok');
-    loadPendingPharmCount();
-  }catch(e){alert('❌ خطأ في الحفظ:\n'+e.message);setStatus('err');}
 }
 
 function editPatient(fid){
@@ -1940,6 +2144,7 @@ function renderPatients(){
           <span>📋 ${pt.dept||'—'}</span><span>🏷 ${pt.stype||'—'}</span>
           <span>📅 ${pt.entry||'—'} → ${pt.exit||'—'}</span>
           <span>🌙 ${pt.days||0} يوم</span>${pt.ticket?`<span>🎫 ${pt.ticket}</span>`:''}
+          ${(pt.printCount||0)>0?`<span class="badge" style="background:#eafaf1;color:#1d7a46;border:1px solid #bfe8cf">🖨 مطبوعة (${pt.printCount})</span>`:''}
         </div>
       </div>
       <div style="font-weight:900;font-size:.92rem;color:var(--p);white-space:nowrap;margin:0 10px">${(pt.total||0).toLocaleString('en-US',{minimumFractionDigits:2})} ج.م</div>
@@ -2033,7 +2238,7 @@ function exportDetailedExcel(){
     'اسم الصنف','الفئة','الكمية','السعر','الإجمالي'
   ];
 
-  const DETAIL_CATS = ['أشعة','تحاليل','بنك الدم','شرائح ومسامير','أجهزة'];
+  const DETAIL_CATS = ['أشعة','تحاليل','بنك الدم','شرائح ومسامير','أجهزة','خدمات أخري'];
   const rows = [];
 
   filtered.forEach(pt=>{
@@ -2054,7 +2259,7 @@ function exportDetailedExcel(){
     });
   });
 
-  if(!rows.length){alert('لا توجد بيانات تفصيلية (أشعة/تحاليل/بنك دم/شرائح ومسامير/أجهزة) في الفترة المحددة');return;}
+  if(!rows.length){alert('لا توجد بيانات تفصيلية (أشعة/تحاليل/بنك دم/شرائح ومسامير/أجهزة/خدمات أخري) في الفترة المحددة');return;}
 
   const ws = XLSX.utils.aoa_to_sheet([hdr,...rows]);
 
@@ -2073,7 +2278,7 @@ function exportDetailedExcel(){
 
   const today = new Date().toISOString().slice(0,10);
   const rangeLabel = (fromVal||toVal)?`_${fromVal||'البداية'}_الي_${toVal||'النهاية'}`:'_الكل';
-  XLSX.writeFile(wb, 'تفصيلي_أشعة_تحاليل_بنك_دم_شرائح_أجهزة'+rangeLabel+'_'+today+'.xlsx');
+  XLSX.writeFile(wb, 'تفصيلي_أشعة_تحاليل_بنك_دم_شرائح_أجهزة_خدمات_اخري'+rangeLabel+'_'+today+'.xlsx');
 }
 /* ========================================= */
 
@@ -2127,7 +2332,8 @@ function exportAllExcel(){
     'رسم القلب','علاج طبيعي','أكسجين / أجهزة',
     'إجمالي الأدوية','إجمالي المستلزمات','إجمالي شرائح ومسامير','إجمالي الأشعة',
     'إجمالي التحاليل','إجمالي بنك الدم','إجمالي الأجهزة','إجمالي خدمات أخري',
-    'إجمالي الفاتورة','ملاحظات'
+    'إجمالي الفاتورة','ملاحظات',
+    'تمت الطباعة','عدد مرات الطباعة'
   ];
   const rows=filtered.map(pt=>{
     const c={'أدوية':0,'مستلزمات':0,'شرائح ومسامير':0,'أشعة':0,'تحاليل':0,'بنك الدم':0,'أجهزة':0,'خدمات أخري':0};
@@ -2143,11 +2349,13 @@ function exportAllExcel(){
       parseFloat(fmt(c['أشعة'])), parseFloat(fmt(c['تحاليل'])),
       parseFloat(fmt(c['بنك الدم'])) + (pt.fBlood||0), parseFloat(fmt(c['أجهزة'])), parseFloat(fmt(c['خدمات أخري'])),
       parseFloat(fmt(pt.total)),
-      pt.notes||''
+      pt.notes||'',
+      (pt.printCount||0)>0 ? 'نعم' : 'لا',
+      (pt.printCount||0)
     ];
   });
   // صف الإجماليات — نبني خانة بخانة بالترتيب الصحيح
-  const TEXT_COLS = new Set([0,1,2,3,4,5,6,7,8,17,29]); // خانات نصية لا تُجمع
+  const TEXT_COLS = new Set([0,1,2,3,4,5,6,7,8,17,29,30,31]); // خانات نصية لا تُجمع
   const tot = hdr.map((_,i)=>{
     if(i===0) return 'الإجمالي الكلي';
     if(TEXT_COLS.has(i)) return '';
@@ -2170,7 +2378,7 @@ function exportAllExcel(){
     }
   });
 
-  ws['!cols']=hdr.map((_,i)=>({wch:[14,22,16,14,12,14,18,12,12,12,12,12,12,12,12,14,16,14,12,12,14,14,18,18,12,20,14,14,14,24][i]||14}));
+  ws['!cols']=hdr.map((_,i)=>({wch:[14,22,16,14,12,14,18,12,12,12,12,12,12,12,12,14,16,14,12,12,14,14,18,18,12,20,14,14,14,24,10,14][i]||14}));
   ws['!freeze']={xSplit:0,ySplit:1}; // تجميد صف الهيدر
 
   const wb=XLSX.utils.book_new();
@@ -2192,7 +2400,8 @@ function buildCostSummaryRows(list){
     'رسم القلب','علاج طبيعي','أكسجين / أجهزة',
     'إجمالي الأدوية','إجمالي المستلزمات','إجمالي شرائح ومسامير','إجمالي الأشعة',
     'إجمالي التحاليل','إجمالي بنك الدم','إجمالي الأجهزة','إجمالي خدمات أخري',
-    'إجمالي الفاتورة','ملاحظات'
+    'إجمالي الفاتورة','ملاحظات',
+    'تمت الطباعة','عدد مرات الطباعة'
   ];
   let _drugsRaw=0, _suppliesRaw=0, _screwsRaw=0;
   const rows=list.map(pt=>{
@@ -2213,10 +2422,12 @@ function buildCostSummaryRows(list){
       parseFloat(fmt(c['أشعة'])), parseFloat(fmt(c['تحاليل'])),
       parseFloat(fmt(c['بنك الدم'])) + (pt.fBlood||0), parseFloat(fmt(c['أجهزة'])), parseFloat(fmt(c['خدمات أخري'])),
       parseFloat(fmt(pt.total)),
-      pt.notes||''
+      pt.notes||'',
+      (pt.printCount||0)>0 ? 'نعم' : 'لا',
+      (pt.printCount||0)
     ];
   });
-  const TEXT_COLS=new Set([0,1,2,3,4,5,6,7,8,29]); // نصوص لا تُجمع (رسم القلب رقم17 بقى يُجمع الآن)
+  const TEXT_COLS=new Set([0,1,2,3,4,5,6,7,8,29,30,31]); // نصوص لا تُجمع (رسم القلب رقم17 بقى يُجمع الآن)
   const DASH_TOTAL_COLS=new Set([9]); // مدة الإقامة: لا يُعرض لها إجمالي، توضع شرطة بدلاً منه
   const drugsTotal      = parseFloat(fmt(_drugsRaw));
   const suppliesRawTotal= parseFloat(fmt(_suppliesRaw));      // كما يظهر في عمود المستلزمات بالجدول
@@ -2233,6 +2444,40 @@ function buildCostSummaryRows(list){
   });
   const invoiceTotal  = rows.reduce((a,r)=>a+(r[28]||0),0);
   return {hdr, rows, tot, drugsTotal, suppliesTotal, screwsTotal, invoiceTotal};
+}
+
+// (1) ترقيم فواتير التأمين الصحي حسب نفس ترتيب "طباعة تكلفة الفواتير" (يُحفظ داخل المريض ليظهر في الفاتورة)
+function _ticketNum(t){
+  const n = parseInt(String(t||'').replace(/[^\d]/g,''), 10);
+  return isNaN(n) ? 0 : n;
+}
+async function assignInsuranceInvoiceNumbers(sortedList, batchKey){
+  try{
+    const MAX_BATCH = 450; // هامش أمان أقل من 500
+    let batch = db.batch();
+    let inBatch = 0;
+    const commits = [];
+    sortedList.forEach((pt, idx)=>{
+      const fid = pt.firestoreId;
+      if(!fid) return;
+      const no = idx+1;
+      const ref = db.collection('patients').doc(fid);
+      batch.set(ref, {insuranceInvoiceNo:no, insuranceInvoiceBatchKey: batchKey}, {merge:true});
+      inBatch++;
+      // تحديث محلي سريع
+      const local = patients.find(p=>p.firestoreId===fid);
+      if(local){ local.insuranceInvoiceNo=no; local.insuranceInvoiceBatchKey=batchKey; }
+      if(inBatch >= MAX_BATCH){
+        commits.push(batch.commit());
+        batch = db.batch();
+        inBatch = 0;
+      }
+    });
+    if(inBatch>0) commits.push(batch.commit());
+    if(commits.length) await Promise.all(commits);
+  }catch(e){
+    console.error('assignInsuranceInvoiceNumbers:', e);
+  }
 }
 
 function openPrintCostModal(){
@@ -2254,7 +2499,7 @@ function onPcStypeChange(){
   if(Vv('pc-stype')!=='تأمين صحي') $('pc-tamin').value='';
 }
 
-function printCostSummary(){
+async function printCostSummary(){
   const monthVal = Vv('pc-month'); // format YYYY-MM
   if(!monthVal){ alert('⚠️ يرجى اختيار الشهر'); return; }
   const deptVals = Array.from(document.querySelectorAll('.pc-dept-cb:checked')).map(cb=>cb.value);
@@ -2284,6 +2529,14 @@ function printCostSummary(){
 
   if(!filtered.length){ alert('لا يوجد مرضي مطابقون لهذه المعايير'); return; }
 
+  // (1) ترقيم فواتير التأمين الصحي حسب رقم التذكرة داخل نفس الطباعة + فئة التأمين
+  if(stypeVal==='تأمين صحي'){
+    filtered = filtered.slice().sort((a,b)=>_ticketNum(a.ticket)-_ticketNum(b.ticket));
+    const deptKey = deptVals.slice().sort().join(',') || 'ALL';
+    const batchKey = `INS|${monthVal}|${deptKey}|${taminVal||'ALL'}`;
+    await assignInsuranceInvoiceNumbers(filtered, batchKey);
+  }
+
   const {hdr, rows, tot, drugsTotal, suppliesTotal, screwsTotal, invoiceTotal} = buildCostSummaryRows(filtered);
 
   // === معادلة إجمالي المطالبة (أربع خطوات) ===
@@ -2300,7 +2553,7 @@ function printCostSummary(){
 
   // === إخفاء عمودي رقم التذكرة والملاحظات دائماً، ونوع الخدمة/فئة التأمين لأنها مذكورة في العنوان،
   //     والقسم الطبي فقط إذا كان قسم واحد محدد (لأنه هيبقى مذكور في العنوان)، وأي عمود كل قيمه فارغة/صفر ===
-  const hiddenCols = new Set([0, 3, 4, 29]); // رقم التذكرة، نوع الخدمة، فئة التأمين، ملاحظات
+  const hiddenCols = new Set([0, 3, 4, 29, 30, 31]); // رقم التذكرة، نوع الخدمة، فئة التأمين، ملاحظات، الطباعة
   if(deptVals.length===1) hiddenCols.add(2); // القسم الطبي يُخفى فقط عند اختيار قسم واحد بالتحديد
   hdr.forEach((_,i)=>{
     if(hiddenCols.has(i)) return;
@@ -2314,7 +2567,7 @@ function printCostSummary(){
   const visibleCols = hdr.map((_,i)=>i).filter(i=>!hiddenCols.has(i));
 
   // أوزان تقريبية لعرض كل عمود (نفس نسب أعمدة شيت الإكسل) لتوزيع عرض الجدول بما يضمن بقاءه داخل عرض الورقة
-  const COL_W = [14,22,16,14,12,14,18,12,12,12,12,12,12,12,12,14,16,14,12,12,14,14,18,18,12,20,14,14,14,24];
+  const COL_W = [14,22,16,14,12,14,18,12,12,12,12,12,12,12,12,14,16,14,12,12,14,14,18,18,12,20,14,14,14,24,10,14];
   const SERIAL_W = 6; // عمود المسلسل (م)
   const totalW = visibleCols.reduce((a,i)=>a+(COL_W[i]||14),0) + SERIAL_W;
   const colgroupHtml = '<colgroup>'
