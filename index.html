@@ -1662,7 +1662,16 @@ function buildInvoice(pt){
   const days  =live?(parseFloat($('stay_days').value)||0):pt.days;
   const fixed =live?getFixed():pt.fixed;
   const items =live?billItems:pt.items;
-  const insuranceInvNo = (!live && stype==='تأمين صحي') ? (pt.insuranceInvoiceNo||'') : '';
+  let insuranceInvNo = '';
+  if(stype==='تأمين صحي'){
+    if(!live){
+      insuranceInvNo = pt.insuranceInvoiceNo || '';
+    } else if(editId){
+      // نطبع أثناء التعديل على مريض محفوظ بالفعل — رقم الفاتورة رقم ثابت لا يتغير، فنعرضه من بياناته المحفوظة
+      const existing = patients.find(p=>p.firestoreId===editId);
+      insuranceInvNo = (existing && existing.insuranceInvoiceNo) || '';
+    }
+  }
   // اسم مدخل البيانات الذي سجّل/يسجّل المريض — يُكتب تلقائياً في الفاتورة المطبوعة
   const dataEntryName = live ? (currentUser?currentUser.name:'') : (pt.savedBy||'');
   const feesSum=fixed.reduce((a,x)=>a+x.val,0);
@@ -1961,7 +1970,19 @@ async function savePatient(){
     billItems = billItems.filter(x => x.qty > 0);
     renderBill();
 
-    const pt={...getFormData(), savedAt:firebase.firestore.FieldValue.serverTimestamp(), savedBy: currentUser?currentUser.name:'', savedByRole: currentUser?currentUser.role:''};
+    // رقم فاتورة تأمين صحي دائم: يُولَّد تلقائياً عند أول حفظ فقط، ولا يتغير أبداً بعد ذلك
+    const oldPt = editId ? patients.find(p=>p.firestoreId===editId) : null;
+    let fixedInsuranceInvoiceNo = oldPt ? (oldPt.insuranceInvoiceNo||null) : null;
+    if(stype==='تأمين صحي' && !fixedInsuranceInvoiceNo){
+      try{
+        fixedInsuranceInvoiceNo = await getNextInsuranceInvoiceNo();
+      }catch(e){
+        alert('❌ تعذر توليد رقم الفاتورة التلقائي، لم يتم الحفظ.\nالسبب: '+e.message+'\nحاول مرة أخرى.');
+        return;
+      }
+    }
+
+    const pt={...getFormData(), insuranceInvoiceNo: fixedInsuranceInvoiceNo, savedAt:firebase.firestore.FieldValue.serverTimestamp(), savedBy: currentUser?currentUser.name:'', savedByRole: currentUser?currentUser.role:''};
     setStatus('save');
     let savedTotal = pt.total;
     let savedDoc = null; // النسخة النهائية اللي فعلاً اتحفظت، هنستخدمها لتحديث القائمة محليًا بدل إعادة تحميل كل المرضى من السيرفر
@@ -2473,30 +2494,30 @@ function _ticketNum(t){
   const n = parseInt(String(t||'').replace(/[^\d]/g,''), 10);
   return isNaN(n) ? 0 : n;
 }
+// رقم فاتورة تسلسلي دائم — يُعطى مرة واحدة فقط عند أول حفظ للمريض (تأمين صحي) ولا يتغير بعد ذلك أبداً
+async function getNextInsuranceInvoiceNo(){
+  const ref = db.collection('settings').doc('counters');
+  return await db.runTransaction(async tx=>{
+    const snap = await tx.get(ref);
+    const cur = (snap.exists && typeof snap.data().insuranceInvoiceNo==='number') ? snap.data().insuranceInvoiceNo : 0;
+    const next = cur + 1;
+    tx.set(ref, {insuranceInvoiceNo: next}, {merge:true});
+    return next;
+  });
+}
+// ملاحظة: أرقام الفواتير أصبحت تُولَّد تلقائياً وبشكل دائم عند حفظ المريض (savePatient).
+// هذه الدالة الآن تُستخدم فقط كإجراء احتياطي: تُعطي رقماً دائماً (من نفس العداد) لأي مريض قديم لم يحصل على رقم بعد،
+// ولا تُغيّر أبداً رقم مريض حصل على رقم بالفعل، ولا تُعيد ترتيب الأرقام الموجودة.
 async function assignInsuranceInvoiceNumbers(sortedList, batchKey){
   try{
-    const MAX_BATCH = 450; // هامش أمان أقل من 500
-    let batch = db.batch();
-    let inBatch = 0;
-    const commits = [];
-    sortedList.forEach((pt, idx)=>{
-      const fid = pt.firestoreId;
-      if(!fid) return;
-      const no = idx+1;
-      const ref = db.collection('patients').doc(fid);
-      batch.set(ref, {insuranceInvoiceNo:no, insuranceInvoiceBatchKey: batchKey}, {merge:true});
-      inBatch++;
-      // تحديث محلي سريع
-      const local = patients.find(p=>p.firestoreId===fid);
+    const missing = sortedList.filter(pt=>!pt.insuranceInvoiceNo && pt.firestoreId);
+    for(const pt of missing){
+      const no = await getNextInsuranceInvoiceNo();
+      await db.collection('patients').doc(pt.firestoreId).set({insuranceInvoiceNo:no, insuranceInvoiceBatchKey: batchKey}, {merge:true});
+      const local = patients.find(p=>p.firestoreId===pt.firestoreId);
       if(local){ local.insuranceInvoiceNo=no; local.insuranceInvoiceBatchKey=batchKey; }
-      if(inBatch >= MAX_BATCH){
-        commits.push(batch.commit());
-        batch = db.batch();
-        inBatch = 0;
-      }
-    });
-    if(inBatch>0) commits.push(batch.commit());
-    if(commits.length) await Promise.all(commits);
+      pt.insuranceInvoiceNo = no;
+    }
   }catch(e){
     console.error('assignInsuranceInvoiceNumbers:', e);
   }
