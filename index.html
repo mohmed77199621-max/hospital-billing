@@ -2605,6 +2605,10 @@ async function printCostSummary(){
   const deptVals = Array.from(document.querySelectorAll('.pc-dept-cb:checked')).map(cb=>cb.value);
   const stypeVal = Vv('pc-stype');
   const taminVal = Vv('pc-tamin');
+  if(stypeVal==='تأمين صحي' && !taminVal){
+    alert('⚠️ يرجى اختيار فئة تأمين محددة (أطفال / طلبة / منتفعين) لطباعة فواتير التأمين الصحي.\nرقم الفاتورة مرتبط بفئة التأمين، وطباعة كل الفئات مجمّعة معاً ستُظهر نفس الرقم مكرراً لأكثر من مريض من فئات مختلفة.');
+    return;
+  }
 
   function parsePD(str){
     if(!str) return null;
