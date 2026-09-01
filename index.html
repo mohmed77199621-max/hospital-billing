@@ -1766,7 +1766,7 @@ async function ensurePermanentInvoiceNo(pt){
   // رقم الفاتورة/المسلسل يتم حسابه ديناميكياً (1..N) حسب المرضى الظاهرين للشهر وفئة التأمين.
   return;
 }
-async async function previewInvoice(){
+async function previewInvoice(){
   if(editId){
     const existing = patients.find(p=>p.firestoreId===editId);
     await ensurePermanentInvoiceNo(existing);
