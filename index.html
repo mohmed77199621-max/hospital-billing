@@ -1746,8 +1746,8 @@ function buildInvoice(pt){
 }
 
 /* ========== PREVIEW & PRINT ========== */
-// يضمن أن أي مريض تأمين صحي محفوظ بالفعل ياخد رقم فاتورة دائم فوراً عند الطباعة/المعاينة
-// حتى لو كان مريضاً قديماً اتسجل قبل تفعيل الترقيم التلقائي، من غير ما يحتاج المستخدم يعمل "حفظ" له الأول
+// يضمن أن أي مريض تأمين صحي محفوظ بالفعل معاه رقم فاتورة صحيح ومطابق لشهر خروجه وفئة تأمينه الحاليين قبل الطباعة/المعاينة —
+// سواء كان مريضاً قديماً لسه مالوش رقم، أو مريضاً اتعدّل تاريخ خروجه/فئته بعد ما كان له رقم فأصبح رقمه القديم غير مطابق
 async function ensurePermanentInvoiceNo(pt){
   if(!pt || pt.stype!=='تأمين صحي' || !pt.firestoreId) return;
   const monthKey = _monthKeyOf(pt);
@@ -1998,10 +1998,10 @@ async function savePatient(){
     billItems = billItems.filter(x => x.qty > 0);
     renderBill();
 
-    // رقم فاتورة تأمين صحي دائم: يُولَّد تلقائياً عند أول حفظ، ولا يتغير طالما شهر الخروج وفئة التأمين لم يتغيّرا.
-    // لو المريض كان له رقم بالفعل لكن تم تعديل تاريخ الخروج (فانتقل لشهر مختلف) أو فئة التأمين بعد ذلك،
-    // فرقمه القديم يبقى تابعاً لتسلسل الشهر/الفئة القديمين وينتج عنه تكرار أو عدم بدء من 1 عند عرضه ضمن الشهر/الفئة الجديدين —
-    // لذلك في هذه الحالة فقط نُصدر له رقماً جديداً صحيحاً ضمن تسلسل شهره وفئته الحاليين.
+    // رقم فاتورة تأمين صحي دائم: يُولَّد تلقائياً عند أول حفظ ضمن تسلسل خاص بشهر خروج المريض وفئة تأمينه (يبدأ من 1 لكل شهر/فئة جديدة)،
+    // ويفضل ثابت طالما شهر الخروج وفئة التأمين لم يتغيّرا. لو المريض كان له رقم بالفعل لكن تم تعديل تاريخ الخروج (فانتقل لشهر مختلف)
+    // أو فئة التأمين بعد ذلك، فرقمه القديم يبقى تابعاً لتسلسل الشهر/الفئة القديمين وممكن يتكرر أو ما يبدأش من 1 عند عرضه ضمن
+    // الشهر/الفئة الجديدين — لذلك في هذه الحالة فقط نُصدر له رقماً جديداً صحيحاً ضمن تسلسل شهره وفئته الحاليين.
     const oldPt = editId ? patients.find(p=>p.firestoreId===editId) : null;
     let fixedInsuranceInvoiceNo = null;
     let fixedInsuranceInvoiceKey = null;
@@ -2551,9 +2551,8 @@ function _parseExitDate(pt){ return _parseDateStr(pt.exit || pt.exitRaw); }
 // مفتاح الشهر (YYYY-MM) من تاريخ خروج المريض — يُستخدم لتصفير الترقيم كل شهر
 function _monthKeyOfDate(d){ return d ? (d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')) : 'بدون-تاريخ'; }
 function _monthKeyOf(pt){ return _monthKeyOfDate(_parseExitDate(pt)); }
-// رقم فاتورة تسلسلي دائم — عداد منفصل لكل (شهر خروج المريض + فئة تأمين)، يبدأ من 1 لكل شهر جديد.
-// يُعطى مرة واحدة فقط عند أول حفظ للمريض ولا يتغير بعد ذلك أبداً، وهو نفس رقم المسلسل الذي سيظهر
-// في جدول "طباعة تكلفة الفواتير" عند اختيار نفس الشهر وفئة التأمين
+// رقم فاتورة تسلسلي — عداد منفصل لكل (شهر خروج المريض + فئة تأمين)، يبدأ من 1 لكل شهر/فئة جديدة، ونفس الرقم
+// الذي سيظهر في عمود "م" بجدول "طباعة تكلفة الفواتير" عند اختيار نفس الشهر وفئة التأمين
 async function getNextInsuranceInvoiceNo(taminType, monthKey){
   const key = `${monthKey||'بدون-تاريخ'}|${taminType || 'عام'}`;
   const ref = db.collection('settings').doc('counters');
@@ -2566,13 +2565,11 @@ async function getNextInsuranceInvoiceNo(taminType, monthKey){
     return next;
   });
 }
-// ملاحظة: أرقام الفواتير أصبحت تُولَّد تلقائياً وبشكل دائم عند حفظ المريض (savePatient).
-// هذه الدالة الآن تُستخدم فقط كإجراء احتياطي: تُعطي رقماً دائماً (من عداد شهر خروج المريض + فئة تأمينه) لأي مريض قديم لم يحصل على رقم بعد،
-// ولا تُغيّر أبداً رقم مريض حصل على رقم بالفعل، ولا تُعيد ترتيب الأرقام الموجودة — أي مريض جديد يُضاف دائماً بآخر رقم في تسلسل شهره وفئته.
+// تُعطي رقماً صحيحاً لأي مريض ليس له رقم أصلاً، وكذلك أي مريض رقمه الحالي لم يعد يطابق شهر خروجه/فئة تأمينه
+// الحاليين (بسبب تعديل تاريخ الخروج أو الفئة بعد أول ترقيم) — هذا هو سبب ظهور رقم مكرر أو عدم بدء الترقيم من 1.
+// أي مريض رقمه صحيح ومطابق بالفعل لا يتغير أبداً.
 async function assignInsuranceInvoiceNumbers(sortedList, batchKey){
   try{
-    // نعطي رقماً جديداً لأي مريض ليس له رقم أصلاً، وكذلك أي مريض رقمه الحالي لم يعد يطابق شهر خروجه/فئة تأمينه
-    // الحاليين (بسبب تعديل تاريخ الخروج أو الفئة بعد أول ترقيم) — هذا هو سبب ظهور رقم مكرر أو عدم بدء الترقيم من 1.
     const needsNo = sortedList.filter(pt=>{
       if(!pt.firestoreId) return false;
       const key = `${_monthKeyOf(pt)}|${pt.taminType || 'عام'}`;
@@ -2592,7 +2589,7 @@ async function assignInsuranceInvoiceNumbers(sortedList, batchKey){
     console.error('assignInsuranceInvoiceNumbers:', e);
   }
 }
-// يعطي رقم فاتورة دائم لكل مرضى التأمين الصحي (حتى القدامى جداً) دفعة واحدة، ويشمل حالتين:
+// يعطي رقم فاتورة صحيح لكل مرضى التأمين الصحي (حتى القدامى جداً) دفعة واحدة، ويشمل حالتين:
 // (أ) مرضى ليس لديهم رقم بعد، و(ب) مرضى لديهم رقم لكنه لم يعد يطابق شهر خروجهم/فئة تأمينهم الحاليين
 // (نتيجة تعديل تاريخ الخروج أو فئة التأمين بعد أول ترقيم) — وهذه هي الحالة (ب) اللي بتسبب رقم مكرر
 // أو عدم بدء الترقيم من 1 عند عرض الجدول. الترتيب بتاريخ الخروج ثم رقم التذكرة كمرجع منطقي فقط.
@@ -2672,8 +2669,9 @@ async function printCostSummary(){
 
   if(!filtered.length){ alert('لا يوجد مرضي مطابقون لهذه المعايير'); return; }
 
-  // (1) ترقيم فواتير التأمين الصحي: أي مريض قديم لم يحصل على رقم فاتورة دائم بعد يُعطى رقماً الآن (بترتيب رقم التذكرة كمرجع فقط لأول مرة)،
-  //     ثم يُعرض الجدول دائماً مرتباً حسب رقم الفاتورة الدائم نفسه — فأي فاتورة جديدة أو مُعدَّلة تُضاف تلقائياً كآخر صف، ولا تتغير أرقام باقي الفواتير أبداً
+  // (1) ترقيم فواتير التأمين الصحي: أي مريض قديم لم يحصل على رقم فاتورة صحيح بعد (أو رقمه لم يعد يطابق شهره/فئته الحاليين)
+  //     يُعطى رقماً صحيحاً الآن (بترتيب رقم التذكرة كمرجع فقط لأول مرة)، ثم يُعرض الجدول دائماً مرتباً حسب رقم الفاتورة نفسه —
+  //     فيبدأ من 1 دائماً ضمن مرضى هذا الشهر وهذه الفئة بالذات، ولا يتكرر، ولا تتغير أرقام باقي الفواتير الصحيحة أبداً
   if(stypeVal==='تأمين صحي'){
     const ticketSorted = filtered.slice().sort((a,b)=>_ticketNum(a.ticket)-_ticketNum(b.ticket));
     const deptKey = deptVals.slice().sort().join(',') || 'ALL';
@@ -2693,6 +2691,7 @@ async function printCostSummary(){
   }
 
   const {hdr, rows, tot, drugsTotal, suppliesTotal, screwsTotal, invoiceTotal} = buildCostSummaryRows(filtered);
+
 
   // === معادلة إجمالي المطالبة (أربع خطوات) ===
   const total1 = invoiceTotal + drugsTotal*0.07 + suppliesTotal*0.07;   // الاجمالي الاول
@@ -2735,11 +2734,11 @@ async function printCostSummary(){
     if(typeof v!=='number') return v||'—';
     return (i===STAY_COL) ? String(Math.round(v)) : fmt(v);
   };
-  // خلايا صف الإجمالي: مُقرَّبة لأقرب جزء من مائة (كسرين عشريين)
+  // خلايا صف الإجمالي: بدون تقريب لأقرب قرش — القيمة كاملة كما هي
   const fmtTotCell = (v,i)=>{
     if(v==='—') return '—';
     if(typeof v!=='number') return v||'—';
-    return fmt(v);
+    return fmtExact(v);
   };
 
   const theadHtml = '<tr><th>م</th>'+visibleCols.map(i=>`<th>${hdr[i]}</th>`).join('')+'</tr>';
@@ -2752,8 +2751,8 @@ async function printCostSummary(){
     return `<td>${fmtTotCell(v,i)}</td>`;
   }).join('')+'</tr>';
   // صف إضافي بعد الإجمالي: المجموع الكلي بعد إضافة 7% الأدوية و7% المستلزمات
-  const grandRowHtml = `<tr class="pc-grand-row"><td colspan="${visibleCols.length}">المجموع الكلي بالإضافة إلى 7% الخاصة بالأدوية والمستلزمات</td><td>${fmt(total1)}</td></tr>`;
-  const pct10RowHtml = `<tr class="pc-grand-row"><td colspan="${visibleCols.length}">نسبة 10%</td><td>${fmt(pct10)}</td></tr>`;
+  const grandRowHtml = `<tr class="pc-grand-row"><td colspan="${visibleCols.length}">المجموع الكلي بالإضافة إلى 7% الخاصة بالأدوية والمستلزمات</td><td>${fmtExact(total1)}</td></tr>`;
+  const pct10RowHtml = `<tr class="pc-grand-row"><td colspan="${visibleCols.length}">نسبة 10%</td><td>${fmtExact(pct10)}</td></tr>`;
 
   // === عنوان الفاتورة في المنتصف: نوع الخدمة + الشهر + القسم + فئة التأمين ===
   const stypeLabel = stypeVal || 'جميع أنواع الخدمة';
@@ -2781,9 +2780,9 @@ async function printCostSummary(){
   <table class="pc-summary">
     <thead><tr><th>إجمالي الأدوية مضاف لها 7%</th><th>إجمالي المستلزمات مضاف لها 7%</th><th>إجمالي المطالبة</th></tr></thead>
     <tbody><tr>
-      <td>${fmt(drugsPlus7)} ج.م</td>
-      <td>${fmt(suppliesPlus7)} ج.م</td>
-      <td class="pc-grand">${fmt(total4)} ج.م</td>
+      <td>${fmtExact(drugsPlus7)} ج.م</td>
+      <td>${fmtExact(suppliesPlus7)} ج.م</td>
+      <td class="pc-grand">${fmtExact(total4)} ج.م</td>
     </tr></tbody>
   </table>
   <div class="inv-sigs" style="grid-template-columns:1fr 1fr 1fr">
