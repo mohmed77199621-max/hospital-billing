@@ -1662,34 +1662,21 @@ function buildInvoice(pt){
   const days  =live?(parseFloat($('stay_days').value)||0):pt.days;
   const fixed =live?getFixed():pt.fixed;
   const items =live?billItems:pt.items;
-  // رقم الفاتورة للتأمين الصحي يجب أن يطابق رقم المسلسل (م) في تقرير "طباعة تكلفة الفواتير"
-  // لذلك نعرض رقم الفاتورة المحفوظ للمريض، وإن كان المريض جديداً (لم يُحفظ بعد) نعرض "رقماً متوقعاً" (آخر رقم + 1)
-  function estimateNextInsuranceInvoiceNo(tType, mKey){
-    const tt = tType || 'عام';
-    const mk = mKey || 'بدون-تاريخ';
-    let maxNo = 0;
-    (patients||[]).forEach(p=>{
-      if(!p || p.stype!=='تأمين صحي') return;
-      const sameMonth = (_monthKeyOf(p) === mk);
-      const sameType  = ((p.taminType||'عام') === tt);
-      if(!sameMonth || !sameType) return;
-      const n = (typeof p.insuranceInvoiceNo === 'number') ? p.insuranceInvoiceNo : parseInt(p.insuranceInvoiceNo,10);
-      if(!isNaN(n) && n > maxNo) maxNo = n;
-    });
-    return maxNo + 1;
-  }
   let insuranceInvNo = '';
   if(stype==='تأمين صحي'){
     if(!live){
-      insuranceInvNo = pt.insuranceInvoiceNo || '';
+      // رقم الفاتورة = رقم المسلسل (م) لنفس شهر الخروج + فئة التأمين (بدون فجوات)
+      insuranceInvNo = computeInsuranceSerialNoForPatient(pt) || '';
     } else if(editId){
       // نطبع أثناء التعديل على مريض محفوظ بالفعل — رقم الفاتورة رقم ثابت لا يتغير، فنعرضه من بياناته المحفوظة
       const existing = patients.find(p=>p.firestoreId===editId);
-      insuranceInvNo = (existing && existing.insuranceInvoiceNo) || '';
+      insuranceInvNo = existing ? (computeInsuranceSerialNoForPatient(existing) || '') : '';
     } else {
-      // مريض جديد قبل الحفظ: اعرض رقم متوقع حتى يطابق رقم (م) عند الطباعة لاحقاً لنفس الشهر وفئة التأمين
+      // مريض جديد قبل الحفظ: الرقم المتوقع = (عدد المرضى الحاليين لنفس شهر الخروج + فئة التأمين) + 1
       const mk = _monthKeyOfDate(_parseDateStr(Vv('p_exit')));
-      insuranceInvNo = estimateNextInsuranceInvoiceNo(taminType, mk);
+      const tt = taminType || 'عام';
+      const cnt = (patients||[]).filter(p=>p && p.stype==='تأمين صحي' && _monthKeyOf(p)===mk && ((p.taminType||'عام')===tt)).length;
+      insuranceInvNo = cnt + 1;
     }
   }
   // اسم مدخل البيانات الذي سجّل/يسجّل المريض — يُكتب تلقائياً في الفاتورة المطبوعة
@@ -1768,20 +1755,9 @@ function buildInvoice(pt){
 // يضمن أن أي مريض تأمين صحي محفوظ بالفعل معاه رقم فاتورة صحيح ومطابق لشهر خروجه وفئة تأمينه الحاليين قبل الطباعة/المعاينة —
 // سواء كان مريضاً قديماً لسه مالوش رقم، أو مريضاً اتعدّل تاريخ خروجه/فئته بعد ما كان له رقم فأصبح رقمه القديم غير مطابق
 async function ensurePermanentInvoiceNo(pt){
-  if(!pt || pt.stype!=='تأمين صحي' || !pt.firestoreId) return;
-  const monthKey = _monthKeyOf(pt);
-  const key = `${monthKey}|${pt.taminType || 'عام'}`;
-  if(pt.insuranceInvoiceNo && pt.insuranceInvoiceKey===key) return; // له رقم صحيح بالفعل يطابق شهره وفئته الحاليين
-  try{
-    const no = await getNextInsuranceInvoiceNo(pt.taminType, monthKey);
-    await db.collection('patients').doc(pt.firestoreId).set({insuranceInvoiceNo:no, insuranceInvoiceKey:key}, {merge:true});
-    pt.insuranceInvoiceNo = no;
-    pt.insuranceInvoiceKey = key;
-    const local = patients.find(p=>p.firestoreId===pt.firestoreId);
-    if(local){ local.insuranceInvoiceNo = no; local.insuranceInvoiceKey = key; }
-  }catch(e){
-    console.error('ensurePermanentInvoiceNo:', e);
-  }
+  // لم نعد نستخدم "عداد" دائم قد يسبب أرقام مفقودة.
+  // رقم الفاتورة/المسلسل يتم حسابه ديناميكياً (1..N) حسب المرضى الظاهرين للشهر وفئة التأمين.
+  return;
 }
 async function previewInvoice(){
   if(editId){
@@ -2017,32 +1993,9 @@ async function savePatient(){
     billItems = billItems.filter(x => x.qty > 0);
     renderBill();
 
-    // رقم فاتورة تأمين صحي دائم: يُولَّد تلقائياً عند أول حفظ ضمن تسلسل خاص بشهر خروج المريض وفئة تأمينه (يبدأ من 1 لكل شهر/فئة جديدة)،
-    // ويفضل ثابت طالما شهر الخروج وفئة التأمين لم يتغيّرا. لو المريض كان له رقم بالفعل لكن تم تعديل تاريخ الخروج (فانتقل لشهر مختلف)
-    // أو فئة التأمين بعد ذلك، فرقمه القديم يبقى تابعاً لتسلسل الشهر/الفئة القديمين وممكن يتكرر أو ما يبدأش من 1 عند عرضه ضمن
-    // الشهر/الفئة الجديدين — لذلك في هذه الحالة فقط نُصدر له رقماً جديداً صحيحاً ضمن تسلسل شهره وفئته الحاليين.
-    const oldPt = editId ? patients.find(p=>p.firestoreId===editId) : null;
-    let fixedInsuranceInvoiceNo = null;
-    let fixedInsuranceInvoiceKey = null;
-    if(stype==='تأمين صحي'){
-      const monthKey = _monthKeyOfDate(_parseDateStr(Vv('p_exit')));
-      const newKey = `${monthKey}|${taminType || 'عام'}`;
-      if(oldPt && oldPt.insuranceInvoiceNo && oldPt.insuranceInvoiceKey === newKey){
-        // نفس شهر الخروج ونفس فئة التأمين زي وقت آخر ترقيم — الرقم يفضل ثابت زي ما هو تماماً
-        fixedInsuranceInvoiceNo = oldPt.insuranceInvoiceNo;
-        fixedInsuranceInvoiceKey = oldPt.insuranceInvoiceKey;
-      } else {
-        try{
-          fixedInsuranceInvoiceNo = await getNextInsuranceInvoiceNo(taminType, monthKey);
-          fixedInsuranceInvoiceKey = newKey;
-        }catch(e){
-          alert('❌ تعذر توليد رقم الفاتورة التلقائي، لم يتم الحفظ.\nالسبب: '+e.message+'\nحاول مرة أخرى.');
-          return;
-        }
-      }
-    }
-
-    const pt={...getFormData(), insuranceInvoiceNo: fixedInsuranceInvoiceNo, insuranceInvoiceKey: fixedInsuranceInvoiceKey, savedAt:firebase.firestore.FieldValue.serverTimestamp(), savedBy: currentUser?currentUser.name:'', savedByRole: currentUser?currentUser.role:''};
+    // رقم الفاتورة/المسلسل للتأمين الصحي يُحسب ديناميكياً (1..N) في التقارير والطباعة
+    // لذلك لا نولّد عدادات دائمة عند الحفظ لتفادي وجود أرقام مفقودة.
+    const pt={...getFormData(), savedAt:firebase.firestore.FieldValue.serverTimestamp(), savedBy: currentUser?currentUser.name:'', savedByRole: currentUser?currentUser.role:''};
     setStatus('save');
     let savedTotal = pt.total;
     let savedDoc = null; // النسخة النهائية اللي فعلاً اتحفظت، هنستخدمها لتحديث القائمة محليًا بدل إعادة تحميل كل المرضى من السيرفر
@@ -2570,6 +2523,32 @@ function _parseExitDate(pt){ return _parseDateStr(pt.exit || pt.exitRaw); }
 // مفتاح الشهر (YYYY-MM) من تاريخ خروج المريض — يُستخدم لتصفير الترقيم كل شهر
 function _monthKeyOfDate(d){ return d ? (d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')) : 'بدون-تاريخ'; }
 function _monthKeyOf(pt){ return _monthKeyOfDate(_parseExitDate(pt)); }
+
+// وقت الحفظ كرقم (ms) لاستخدامه في ترتيب ثابت (الأقدم أولاً)
+function _savedAtMsAny(p){
+  const s = p ? p.savedAt : null;
+  if(!s) return 0;
+  if(typeof s === 'number') return s;
+  if(s instanceof Date) return s.getTime();
+  if(typeof s.toMillis === 'function') return s.toMillis(); // Firestore Timestamp
+  if(typeof s.seconds === 'number') return s.seconds * 1000; // شكل بديل للـ Timestamp
+  const t = new Date(s).getTime();
+  return isNaN(t) ? 0 : t;
+}
+
+// رقم مسلسل ديناميكي للتأمين الصحي داخل (شهر الخروج + فئة التأمين)
+// يبدأ من 1 ويكون بعدد المرضى الظاهرين (بدون فجوات) بناءً على ترتيب الحفظ (الأقدم أولاً)
+function computeInsuranceSerialNoForPatient(pt){
+  if(!pt || pt.stype!=='تأمين صحي' || !pt.firestoreId) return null;
+  const mk = _monthKeyOf(pt);
+  const tt = pt.taminType || 'عام';
+  const list = (patients||[])
+    .filter(p=>p && p.stype==='تأمين صحي' && _monthKeyOf(p)===mk && ((p.taminType||'عام')===tt) && p.firestoreId)
+    .slice()
+    .sort((a,b)=>_savedAtMsAny(a)-_savedAtMsAny(b) || _ticketNum(a.ticket)-_ticketNum(b.ticket));
+  const idx = list.findIndex(p=>p.firestoreId===pt.firestoreId);
+  return idx>=0 ? (idx+1) : null;
+}
 // رقم فاتورة تسلسلي — عداد منفصل لكل (شهر خروج المريض + فئة تأمين)، يبدأ من 1 لكل شهر/فئة جديدة، ونفس الرقم
 // الذي سيظهر في عمود "م" بجدول "طباعة تكلفة الفواتير" عند اختيار نفس الشهر وفئة التأمين
 async function getNextInsuranceInvoiceNo(taminType, monthKey){
@@ -2691,39 +2670,14 @@ async function printCostSummary(){
   // ترتيب ثابت للعرض في جدول "طباعة تكلفة الفواتير":
   // - الهدف: عند إضافة مريض جديد يظهر في آخر الجدول (الأحدث في النهاية).
   // - لذلك (لغير التأمين الصحي) نرتّب حسب وقت الحفظ تصاعدياً.
-  function _savedAtMs(p){
-    const s = p ? p.savedAt : null;
-    if(!s) return 0;
-    if(typeof s === 'number') return s;
-    if(s instanceof Date) return s.getTime();
-    if(typeof s.toMillis === 'function') return s.toMillis(); // Firestore Timestamp
-    if(typeof s.seconds === 'number') return s.seconds * 1000; // شكل بديل للـ Timestamp
-    const t = new Date(s).getTime();
-    return isNaN(t) ? 0 : t;
-  }
+  // (نستخدم _savedAtMsAny المعرفة بالأعلى)
 
-  // (1) ترقيم فواتير التأمين الصحي: أي مريض قديم لم يحصل على رقم فاتورة صحيح بعد (أو رقمه لم يعد يطابق شهره/فئته الحاليين)
-  //     يُعطى رقماً صحيحاً الآن (بترتيب رقم التذكرة كمرجع فقط لأول مرة)، ثم يُعرض الجدول دائماً مرتباً حسب رقم الفاتورة نفسه —
-  //     فيبدأ من 1 دائماً ضمن مرضى هذا الشهر وهذه الفئة بالذات، ولا يتكرر، ولا تتغير أرقام باقي الفواتير الصحيحة أبداً
   if(stypeVal==='تأمين صحي'){
-    const ticketSorted = filtered.slice().sort((a,b)=>_ticketNum(a.ticket)-_ticketNum(b.ticket));
-    const deptKey = deptVals.slice().sort().join(',') || 'ALL';
-    const batchKey = `INS|${monthVal}|${deptKey}|${taminVal||'ALL'}`;
-    await assignInsuranceInvoiceNumbers(ticketSorted, batchKey);
-    // تحقق إن كل مريض فعلاً معاه رقم صحيح مطابق لشهره وفئته بعد محاولة الترقيم — لو فشل تسجيل رقم لأي مريض (مثلاً بسبب مشكلة اتصال)
-    // نوقف الطباعة بدل ما نعرض رقم بديل ممكن يتشابه مع رقم مريض تاني فعلي
-    const stillBroken = filtered.filter(pt=>{
-      const key = `${_monthKeyOf(pt)}|${pt.taminType || 'عام'}`;
-      return !pt.insuranceInvoiceNo || pt.insuranceInvoiceKey !== key;
-    });
-    if(stillBroken.length){
-      alert('❌ تعذر التأكد من رقم الفاتورة لعدد '+stillBroken.length+' مريض (على الأغلب بسبب مشكلة في الاتصال). لم تتم الطباعة لتفادي ظهور رقم غير صحيح.\nحاول مرة أخرى.');
-      return;
-    }
-    filtered = filtered.slice().sort((a,b)=>(a.insuranceInvoiceNo||0)-(b.insuranceInvoiceNo||0));
+    // التأمين الصحي: نعرض تسلسلاً ديناميكياً يبدأ من 1 بدون فجوات حسب ترتيب الحفظ (الأقدم أولاً)
+    filtered = filtered.slice().sort((a,b)=>_savedAtMsAny(a)-_savedAtMsAny(b) || _ticketNum(a.ticket)-_ticketNum(b.ticket));
   } else {
     // أحدث مريض يُحفظ مؤخراً يظهر في النهاية
-    filtered = filtered.slice().sort((a,b)=>_savedAtMs(a)-_savedAtMs(b));
+    filtered = filtered.slice().sort((a,b)=>_savedAtMsAny(a)-_savedAtMsAny(b));
   }
 
   const {hdr, rows, tot, drugsTotal, suppliesTotal, screwsTotal, invoiceTotal} = buildCostSummaryRows(filtered);
@@ -2778,9 +2732,8 @@ async function printCostSummary(){
   };
 
   const theadHtml = '<tr><th>م</th>'+visibleCols.map(i=>`<th>${hdr[i]}</th>`).join('')+'</tr>';
-  // عمود "م": للتأمين الصحي نستخدم رقم الفاتورة التسلسلي الخاص بالشهر/الفئة (ليطابق رقم الفاتورة المطبوعة للمريض)
-  // ولغير التأمين الصحي يكون تسلسلاً عادياً 1..N حسب ترتيب الجدول بعد التصفية.
-  const bodyHtml = rows.map((r,ri)=>'<tr><td>'+(stypeVal==='تأمين صحي' ? (filtered[ri].insuranceInvoiceNo||(ri+1)) : (ri+1))+'</td>'+visibleCols.map(i=>{
+  // عمود "م": يبدأ من 1 ويزيد بمقدار 1 دائماً حسب الصفوف الظاهرة (بدون أي أرقام مفقودة)
+  const bodyHtml = rows.map((r,ri)=>'<tr><td>'+(ri+1)+'</td>'+visibleCols.map(i=>{
     const v=r[i];
     return `<td${typeof v==='number'?' style="text-align:center"':''}>${fmtCell(v,i)}</td>`;
   }).join('')+'</tr>').join('');
