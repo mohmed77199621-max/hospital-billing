@@ -166,6 +166,7 @@ input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
 .low-stock{background:#fdecea;color:#c0392b}
 
 </style>
+<base target="_blank">
 </head>
 <body>
 
@@ -1647,7 +1648,7 @@ function calcTotal(){
 }
 
 /* ========== INVOICE ========== */
-function buildInvoice(pt){
+async function buildInvoice(pt){
   const live=!pt;
   const name  =live?Vv('p_name') :pt.name;
   const ticket=live?Vv('p_ticket'):pt.ticket;
@@ -1663,23 +1664,29 @@ function buildInvoice(pt){
   const fixed =live?getFixed():pt.fixed;
   const items =live?billItems:pt.items;
   let insuranceInvNo = '';
+
   if(stype==='تأمين صحي'){
     if(!live){
-      // رقم الفاتورة = رقم المسلسل (م) لنفس شهر الخروج + فئة التأمين (بدون فجوات)
-      insuranceInvNo = computeInsuranceSerialNoForPatient(pt) || '';
+      insuranceInvNo = await computeInsuranceSerialNoForPatient(pt) || '';
     } else if(editId){
-      // نطبع أثناء التعديل على مريض محفوظ بالفعل — رقم الفاتورة رقم ثابت لا يتغير، فنعرضه من بياناته المحفوظة
       const existing = patients.find(p=>p.firestoreId===editId);
-      insuranceInvNo = existing ? (computeInsuranceSerialNoForPatient(existing) || '') : '';
+      insuranceInvNo = existing ? (await computeInsuranceSerialNoForPatient(existing) || '') : '';
     } else {
-      // مريض جديد قبل الحفظ: الرقم المتوقع = (عدد المرضى الحاليين لنفس شهر الخروج + فئة التأمين) + 1
       const mk = _monthKeyOfDate(_parseDateStr(Vv('p_exit')));
       const tt = taminType || 'عام';
-      const cnt = (patients||[]).filter(p=>p && p.stype==='تأمين صحي' && _monthKeyOf(p)===mk && ((p.taminType||'عام')===tt)).length;
-      insuranceInvNo = cnt + 1;
+      try {
+        const snap = await db.collection('patients')
+          .where('stype','==','تأمين صحي')
+          .where('taminType','==',tt)
+          .get();
+        const cnt = snap.docs.filter(d => _monthKeyOf({...d.data(), firestoreId: d.id}) === mk).length;
+        insuranceInvNo = cnt + 1;
+      } catch(e) {
+        const cnt = (patients||[]).filter(p=>p && p.stype==='تأمين صحي' && _monthKeyOf(p)===mk && ((p.taminType||'عام')===tt)).length;
+        insuranceInvNo = cnt + 1;
+      }
     }
   }
-  // اسم مدخل البيانات الذي سجّل/يسجّل المريض — يُكتب تلقائياً في الفاتورة المطبوعة
   const dataEntryName = live ? (currentUser?currentUser.name:'') : (pt.savedBy||'');
   const feesSum=fixed.reduce((a,x)=>a+x.val,0);
   const itemsSum=items.reduce((a,x)=>a+x.total,0);
@@ -1759,12 +1766,12 @@ async function ensurePermanentInvoiceNo(pt){
   // رقم الفاتورة/المسلسل يتم حسابه ديناميكياً (1..N) حسب المرضى الظاهرين للشهر وفئة التأمين.
   return;
 }
-async function previewInvoice(){
+async async function previewInvoice(){
   if(editId){
     const existing = patients.find(p=>p.firestoreId===editId);
     await ensurePermanentInvoiceNo(existing);
   }
-  $('prev-content').innerHTML=buildInvoice(null);
+  $('prev-content').innerHTML=await buildInvoice(null);
   $('prev-modal').style.display='flex';
 }
 function closePrev(){$('prev-modal').style.display='none';}
@@ -1786,11 +1793,11 @@ async function markPatientPrinted(fid){
   }
 }
 
-async function printCurrentInvoice(pt){
+async async function printCurrentInvoice(pt){
   await ensurePermanentInvoiceNo(pt);
   const patientName = ((pt&&pt.name)?pt.name:Vv('p_name').trim()) || '—';
   const fid = (pt && pt.firestoreId) ? pt.firestoreId : '';
-  const html=buildInvoice(pt||null);
+  const html=await buildInvoice(pt||null);
   const w=window.open('','_blank','width=1000,height=800');
   if(!w){alert('يرجى السماح بالنوافذ المنبثقة في المتصفح');return;}
   w.document.write(`<!DOCTYPE html>
@@ -2538,16 +2545,33 @@ function _savedAtMsAny(p){
 
 // رقم مسلسل ديناميكي للتأمين الصحي داخل (شهر الخروج + فئة التأمين)
 // يبدأ من 1 ويكون بعدد المرضى الظاهرين (بدون فجوات) بناءً على ترتيب الحفظ (الأقدم أولاً)
-function computeInsuranceSerialNoForPatient(pt){
+async function computeInsuranceSerialNoForPatient(pt){
   if(!pt || pt.stype!=='تأمين صحي' || !pt.firestoreId) return null;
   const mk = _monthKeyOf(pt);
   const tt = pt.taminType || 'عام';
-  const list = (patients||[])
-    .filter(p=>p && p.stype==='تأمين صحي' && _monthKeyOf(p)===mk && ((p.taminType||'عام')===tt) && p.firestoreId)
-    .slice()
-    .sort((a,b)=>_savedAtMsAny(a)-_savedAtMsAny(b) || _ticketNum(a.ticket)-_ticketNum(b.ticket));
-  const idx = list.findIndex(p=>p.firestoreId===pt.firestoreId);
-  return idx>=0 ? (idx+1) : null;
+
+  try {
+    const snap = await db.collection('patients')
+      .where('stype', '==', 'تأمين صحي')
+      .where('taminType', '==', tt)
+      .get();
+
+    const list = snap.docs
+      .map(d => ({...d.data(), firestoreId: d.id}))
+      .filter(p => _monthKeyOf(p) === mk && p.firestoreId)
+      .sort((a,b) => _savedAtMsAny(a) - _savedAtMsAny(b) || _ticketNum(a.ticket) - _ticketNum(b.ticket));
+
+    const idx = list.findIndex(p => p.firestoreId === pt.firestoreId);
+    return idx >= 0 ? (idx + 1) : null;
+  } catch(e) {
+    console.error('computeInsuranceSerialNoForPatient:', e);
+    const list = (patients||[])
+      .filter(p=>p && p.stype==='تأمين صحي' && _monthKeyOf(p)===mk && ((p.taminType||'عام')===tt) && p.firestoreId)
+      .slice()
+      .sort((a,b)=>_savedAtMsAny(a)-_savedAtMsAny(b) || _ticketNum(a.ticket)-_ticketNum(b.ticket));
+    const idx = list.findIndex(p=>p.firestoreId===pt.firestoreId);
+    return idx>=0 ? (idx+1) : null;
+  }
 }
 // رقم فاتورة تسلسلي — عداد منفصل لكل (شهر خروج المريض + فئة تأمين)، يبدأ من 1 لكل شهر/فئة جديدة، ونفس الرقم
 // الذي سيظهر في عمود "م" بجدول "طباعة تكلفة الفواتير" عند اختيار نفس الشهر وفئة التأمين
