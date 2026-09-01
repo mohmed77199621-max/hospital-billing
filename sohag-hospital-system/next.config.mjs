@@ -9,3 +9,8 @@ const nextConfig = {
 }
 
 export default nextConfig
+const nextConfig = {
+  output: 'export',
+  // ... باقي الإعدادات
+};
+export default nextConfig;
