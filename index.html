@@ -198,6 +198,7 @@ input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
     <button id="btn-users" class="btn btn-o" onclick="openUserMgmt()" style="display:none;color:#a8c4ff;border-color:rgba(255,255,255,.25);background:rgba(255,255,255,.08)">👥 المستخدمين</button>
     <button id="btn-excel-all" class="btn btn-a" onclick="openExcelExportModal()" style="display:none">📊 تصدير إكسل</button>
     <button id="btn-print-cost" class="btn btn-a" onclick="openPrintCostModal()" style="display:none">🖨 طباعة تكلفة الفواتير</button>
+    <button id="btn-backfill-invoice" class="btn btn-a" onclick="backfillAllInsuranceInvoiceNumbers()" style="display:none">🔢 ترقيم كل فواتير التأمين القديمة</button>
     <button id="btn-new-patient" class="btn btn-g" onclick="confirmNewPatient()" style="display:none">+ مريض جديد</button>
     <button class="btn btn-r btn-sm" onclick="doLogout()" style="background:rgba(184,50,50,.7);border:1px solid rgba(255,100,100,.3)">خروج</button>
   </div>
@@ -1745,7 +1746,28 @@ function buildInvoice(pt){
 }
 
 /* ========== PREVIEW & PRINT ========== */
-function previewInvoice(){$('prev-content').innerHTML=buildInvoice(null);$('prev-modal').style.display='flex';}
+// يضمن أن أي مريض تأمين صحي محفوظ بالفعل ياخد رقم فاتورة دائم فوراً عند الطباعة/المعاينة
+// حتى لو كان مريضاً قديماً اتسجل قبل تفعيل الترقيم التلقائي، من غير ما يحتاج المستخدم يعمل "حفظ" له الأول
+async function ensurePermanentInvoiceNo(pt){
+  if(!pt || pt.stype!=='تأمين صحي' || pt.insuranceInvoiceNo || !pt.firestoreId) return;
+  try{
+    const no = await getNextInsuranceInvoiceNo(pt.taminType);
+    await db.collection('patients').doc(pt.firestoreId).set({insuranceInvoiceNo:no}, {merge:true});
+    pt.insuranceInvoiceNo = no;
+    const local = patients.find(p=>p.firestoreId===pt.firestoreId);
+    if(local) local.insuranceInvoiceNo = no;
+  }catch(e){
+    console.error('ensurePermanentInvoiceNo:', e);
+  }
+}
+async function previewInvoice(){
+  if(editId){
+    const existing = patients.find(p=>p.firestoreId===editId);
+    await ensurePermanentInvoiceNo(existing);
+  }
+  $('prev-content').innerHTML=buildInvoice(null);
+  $('prev-modal').style.display='flex';
+}
 function closePrev(){$('prev-modal').style.display='none';}
 async function markPatientPrinted(fid){
   if(!fid) return;
@@ -1765,7 +1787,8 @@ async function markPatientPrinted(fid){
   }
 }
 
-function printCurrentInvoice(pt){
+async function printCurrentInvoice(pt){
+  await ensurePermanentInvoiceNo(pt);
   const patientName = ((pt&&pt.name)?pt.name:Vv('p_name').trim()) || '—';
   const fid = (pt && pt.firestoreId) ? pt.firestoreId : '';
   const html=buildInvoice(pt||null);
@@ -1975,7 +1998,7 @@ async function savePatient(){
     let fixedInsuranceInvoiceNo = oldPt ? (oldPt.insuranceInvoiceNo||null) : null;
     if(stype==='تأمين صحي' && !fixedInsuranceInvoiceNo){
       try{
-        fixedInsuranceInvoiceNo = await getNextInsuranceInvoiceNo();
+        fixedInsuranceInvoiceNo = await getNextInsuranceInvoiceNo(taminType);
       }catch(e){
         alert('❌ تعذر توليد رقم الفاتورة التلقائي، لم يتم الحفظ.\nالسبب: '+e.message+'\nحاول مرة أخرى.');
         return;
@@ -2494,25 +2517,42 @@ function _ticketNum(t){
   const n = parseInt(String(t||'').replace(/[^\d]/g,''), 10);
   return isNaN(n) ? 0 : n;
 }
-// رقم فاتورة تسلسلي دائم — يُعطى مرة واحدة فقط عند أول حفظ للمريض (تأمين صحي) ولا يتغير بعد ذلك أبداً
-async function getNextInsuranceInvoiceNo(){
+// تحويل تاريخ الخروج (بأي صيغة نصية مستخدمة في النظام) إلى Date صالحة للفرز الزمني
+function _parseExitDate(pt){
+  const str = pt.exit || pt.exitRaw;
+  if(!str) return null;
+  let d;
+  if(String(str).includes('/')){
+    const [dd,mm,yy]=String(str).split('/');
+    d = new Date(`${yy}-${String(mm).padStart(2,'0')}-${String(dd).padStart(2,'0')}T00:00:00`);
+  } else {
+    d = new Date(str+'T00:00:00');
+  }
+  return isNaN(d) ? null : d;
+}
+// رقم فاتورة تسلسلي دائم — عداد منفصل لكل "فئة تأمين" (أطفال / طلبة / منتفعين...)
+// يُعطى مرة واحدة فقط عند أول حفظ للمريض ولا يتغير بعد ذلك أبداً، وهو نفس رقم المسلسل الذي سيظهر
+// دائماً في جدول "طباعة تكلفة الفواتير" عند اختيار نفس فئة التأمين، أياً كان الشهر أو القسم المختار
+async function getNextInsuranceInvoiceNo(taminType){
+  const key = taminType || 'عام';
   const ref = db.collection('settings').doc('counters');
   return await db.runTransaction(async tx=>{
     const snap = await tx.get(ref);
-    const cur = (snap.exists && typeof snap.data().insuranceInvoiceNo==='number') ? snap.data().insuranceInvoiceNo : 0;
+    const counters = (snap.exists && snap.data().taminCounters) ? snap.data().taminCounters : {};
+    const cur = typeof counters[key]==='number' ? counters[key] : 0;
     const next = cur + 1;
-    tx.set(ref, {insuranceInvoiceNo: next}, {merge:true});
+    tx.set(ref, {taminCounters: {...counters, [key]: next}}, {merge:true});
     return next;
   });
 }
 // ملاحظة: أرقام الفواتير أصبحت تُولَّد تلقائياً وبشكل دائم عند حفظ المريض (savePatient).
-// هذه الدالة الآن تُستخدم فقط كإجراء احتياطي: تُعطي رقماً دائماً (من نفس العداد) لأي مريض قديم لم يحصل على رقم بعد،
-// ولا تُغيّر أبداً رقم مريض حصل على رقم بالفعل، ولا تُعيد ترتيب الأرقام الموجودة.
+// هذه الدالة الآن تُستخدم فقط كإجراء احتياطي: تُعطي رقماً دائماً (من عداد فئة التأمين الخاصة به) لأي مريض قديم لم يحصل على رقم بعد،
+// ولا تُغيّر أبداً رقم مريض حصل على رقم بالفعل، ولا تُعيد ترتيب الأرقام الموجودة — أي مريض جديد يُضاف دائماً بآخر رقم في تسلسل فئته.
 async function assignInsuranceInvoiceNumbers(sortedList, batchKey){
   try{
     const missing = sortedList.filter(pt=>!pt.insuranceInvoiceNo && pt.firestoreId);
     for(const pt of missing){
-      const no = await getNextInsuranceInvoiceNo();
+      const no = await getNextInsuranceInvoiceNo(pt.taminType);
       await db.collection('patients').doc(pt.firestoreId).set({insuranceInvoiceNo:no, insuranceInvoiceBatchKey: batchKey}, {merge:true});
       const local = patients.find(p=>p.firestoreId===pt.firestoreId);
       if(local){ local.insuranceInvoiceNo=no; local.insuranceInvoiceBatchKey=batchKey; }
@@ -2521,6 +2561,23 @@ async function assignInsuranceInvoiceNumbers(sortedList, batchKey){
   }catch(e){
     console.error('assignInsuranceInvoiceNumbers:', e);
   }
+}
+// يعطي رقم فاتورة دائم لكل مرضى التأمين الصحي (حتى القدامى جداً) الذين ليس لديهم رقم بعد، دفعة واحدة —
+// بترتيب تاريخ الخروج ثم رقم التذكرة كمرجع تاريخي منطقي لأول مرة فقط. لا يغيّر أبداً رقماً موجوداً بالفعل.
+async function backfillAllInsuranceInvoiceNumbers(){
+  const insPatients = patients.filter(p=>p.stype==='تأمين صحي' && !p.insuranceInvoiceNo);
+  if(!insPatients.length){ alert('كل مرضى التأمين الصحي عندهم رقم فاتورة بالفعل ✅'); return; }
+  if(!confirm(`سيتم إعطاء رقم فاتورة دائم لعدد ${insPatients.length} من مرضى التأمين الصحي الذين ليس لديهم رقم بعد (شامل القدامى). الأرقام الموجودة حالياً لن تتغير. هل تريد المتابعة؟`)) return;
+  const sorted = insPatients.slice().sort((a,b)=>{
+    const da=_parseExitDate(a), db_=_parseExitDate(b);
+    if(da && db_ && da.getTime()!==db_.getTime()) return da-db_;
+    if(da && !db_) return -1;
+    if(!da && db_) return 1;
+    return _ticketNum(a.ticket)-_ticketNum(b.ticket);
+  });
+  await assignInsuranceInvoiceNumbers(sorted, 'BULK_BACKFILL_'+Date.now());
+  renderPatients();
+  alert('✅ تم إعطاء أرقام فواتير دائمة لكل المرضى القدامى الذين كانوا بدون رقم.');
 }
 
 function openPrintCostModal(){
@@ -2572,12 +2629,14 @@ async function printCostSummary(){
 
   if(!filtered.length){ alert('لا يوجد مرضي مطابقون لهذه المعايير'); return; }
 
-  // (1) ترقيم فواتير التأمين الصحي حسب رقم التذكرة داخل نفس الطباعة + فئة التأمين
+  // (1) ترقيم فواتير التأمين الصحي: أي مريض قديم لم يحصل على رقم فاتورة دائم بعد يُعطى رقماً الآن (بترتيب رقم التذكرة كمرجع فقط لأول مرة)،
+  //     ثم يُعرض الجدول دائماً مرتباً حسب رقم الفاتورة الدائم نفسه — فأي فاتورة جديدة أو مُعدَّلة تُضاف تلقائياً كآخر صف، ولا تتغير أرقام باقي الفواتير أبداً
   if(stypeVal==='تأمين صحي'){
-    filtered = filtered.slice().sort((a,b)=>_ticketNum(a.ticket)-_ticketNum(b.ticket));
+    const ticketSorted = filtered.slice().sort((a,b)=>_ticketNum(a.ticket)-_ticketNum(b.ticket));
     const deptKey = deptVals.slice().sort().join(',') || 'ALL';
     const batchKey = `INS|${monthVal}|${deptKey}|${taminVal||'ALL'}`;
-    await assignInsuranceInvoiceNumbers(filtered, batchKey);
+    await assignInsuranceInvoiceNumbers(ticketSorted, batchKey);
+    filtered = filtered.slice().sort((a,b)=>(a.insuranceInvoiceNo||0)-(b.insuranceInvoiceNo||0));
   }
 
   const {hdr, rows, tot, drugsTotal, suppliesTotal, screwsTotal, invoiceTotal} = buildCostSummaryRows(filtered);
@@ -2623,15 +2682,15 @@ async function printCostSummary(){
     if(typeof v!=='number') return v||'—';
     return (i===STAY_COL) ? String(Math.round(v)) : fmt(v);
   };
-  // خلايا صف الإجمالي: بدون تقريب لأقرب قرش — القيمة كاملة كما هي
+  // خلايا صف الإجمالي: مُقرَّبة لأقرب جزء من مائة (كسرين عشريين)
   const fmtTotCell = (v,i)=>{
     if(v==='—') return '—';
     if(typeof v!=='number') return v||'—';
-    return fmtExact(v);
+    return fmt(v);
   };
 
   const theadHtml = '<tr><th>م</th>'+visibleCols.map(i=>`<th>${hdr[i]}</th>`).join('')+'</tr>';
-  const bodyHtml = rows.map((r,ri)=>'<tr><td>'+(ri+1)+'</td>'+visibleCols.map(i=>{
+  const bodyHtml = rows.map((r,ri)=>'<tr><td>'+(stypeVal==='تأمين صحي' ? (filtered[ri].insuranceInvoiceNo||(ri+1)) : (ri+1))+'</td>'+visibleCols.map(i=>{
     const v=r[i];
     return `<td${typeof v==='number'?' style="text-align:center"':''}>${fmtCell(v,i)}</td>`;
   }).join('')+'</tr>').join('');
@@ -2640,8 +2699,8 @@ async function printCostSummary(){
     return `<td>${fmtTotCell(v,i)}</td>`;
   }).join('')+'</tr>';
   // صف إضافي بعد الإجمالي: المجموع الكلي بعد إضافة 7% الأدوية و7% المستلزمات
-  const grandRowHtml = `<tr class="pc-grand-row"><td colspan="${visibleCols.length}">المجموع الكلي بالإضافة إلى 7% الخاصة بالأدوية والمستلزمات</td><td>${fmtExact(total1)}</td></tr>`;
-  const pct10RowHtml = `<tr class="pc-grand-row"><td colspan="${visibleCols.length}">نسبة 10%</td><td>${fmtExact(pct10)}</td></tr>`;
+  const grandRowHtml = `<tr class="pc-grand-row"><td colspan="${visibleCols.length}">المجموع الكلي بالإضافة إلى 7% الخاصة بالأدوية والمستلزمات</td><td>${fmt(total1)}</td></tr>`;
+  const pct10RowHtml = `<tr class="pc-grand-row"><td colspan="${visibleCols.length}">نسبة 10%</td><td>${fmt(pct10)}</td></tr>`;
 
   // === عنوان الفاتورة في المنتصف: نوع الخدمة + الشهر + القسم + فئة التأمين ===
   const stypeLabel = stypeVal || 'جميع أنواع الخدمة';
@@ -2669,9 +2728,9 @@ async function printCostSummary(){
   <table class="pc-summary">
     <thead><tr><th>إجمالي الأدوية مضاف لها 7%</th><th>إجمالي المستلزمات مضاف لها 7%</th><th>إجمالي المطالبة</th></tr></thead>
     <tbody><tr>
-      <td>${fmtExact(drugsPlus7)} ج.م</td>
-      <td>${fmtExact(suppliesPlus7)} ج.م</td>
-      <td class="pc-grand">${fmtExact(total4)} ج.م</td>
+      <td>${fmt(drugsPlus7)} ج.م</td>
+      <td>${fmt(suppliesPlus7)} ج.م</td>
+      <td class="pc-grand">${fmt(total4)} ج.م</td>
     </tr></tbody>
   </table>
   <div class="inv-sigs" style="grid-template-columns:1fr 1fr 1fr">
@@ -3257,7 +3316,7 @@ function applyRoleUI(){
     // Hide everything
     $('main-content').style.display='none';
     $('pharm-section').style.display='none';
-    ['btn-admin','btn-users','btn-excel-all','btn-print-cost','btn-new-patient','btn-pharm-settings','btn-data-settings','current-user-badge'].forEach(id=>{
+    ['btn-admin','btn-users','btn-excel-all','btn-print-cost','btn-backfill-invoice','btn-new-patient','btn-pharm-settings','btn-data-settings','current-user-badge'].forEach(id=>{
       const el=$(id); if(el) el.style.display='none';
     });
     return;
@@ -3278,6 +3337,7 @@ function applyRoleUI(){
     }
     $('btn-excel-all').style.display='';
     $('btn-print-cost').style.display='';
+    $('btn-backfill-invoice').style.display='';
     $('btn-new-patient').style.display='';
     // Data entry sees all patients، ويمكنه تعديل أسعار قائمته الخاصة عبر زر منفصل
     if(role==='data'){
@@ -3296,6 +3356,7 @@ function applyRoleUI(){
     $('btn-users').style.display='none';
     $('btn-excel-all').style.display='none';
     $('btn-print-cost').style.display='none';
+    $('btn-backfill-invoice').style.display='none';
     $('btn-new-patient').style.display='none';
     $('btn-data-settings').style.display='none';
     $('btn-pharm-settings').style.display='';
