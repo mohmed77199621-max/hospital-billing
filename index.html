@@ -1751,7 +1751,7 @@ function buildInvoice(pt){
 async function ensurePermanentInvoiceNo(pt){
   if(!pt || pt.stype!=='تأمين صحي' || pt.insuranceInvoiceNo || !pt.firestoreId) return;
   try{
-    const no = await getNextInsuranceInvoiceNo(pt.taminType);
+    const no = await getNextInsuranceInvoiceNo(pt.taminType, _monthKeyOf(pt));
     await db.collection('patients').doc(pt.firestoreId).set({insuranceInvoiceNo:no}, {merge:true});
     pt.insuranceInvoiceNo = no;
     const local = patients.find(p=>p.firestoreId===pt.firestoreId);
@@ -1998,7 +1998,8 @@ async function savePatient(){
     let fixedInsuranceInvoiceNo = oldPt ? (oldPt.insuranceInvoiceNo||null) : null;
     if(stype==='تأمين صحي' && !fixedInsuranceInvoiceNo){
       try{
-        fixedInsuranceInvoiceNo = await getNextInsuranceInvoiceNo(taminType);
+        const monthKey = _monthKeyOfDate(_parseDateStr(Vv('p_exit')));
+        fixedInsuranceInvoiceNo = await getNextInsuranceInvoiceNo(taminType, monthKey);
       }catch(e){
         alert('❌ تعذر توليد رقم الفاتورة التلقائي، لم يتم الحفظ.\nالسبب: '+e.message+'\nحاول مرة أخرى.');
         return;
@@ -2517,9 +2518,8 @@ function _ticketNum(t){
   const n = parseInt(String(t||'').replace(/[^\d]/g,''), 10);
   return isNaN(n) ? 0 : n;
 }
-// تحويل تاريخ الخروج (بأي صيغة نصية مستخدمة في النظام) إلى Date صالحة للفرز الزمني
-function _parseExitDate(pt){
-  const str = pt.exit || pt.exitRaw;
+// تحويل أي نص تاريخ (بأي صيغة نصية مستخدمة في النظام) إلى Date صالحة
+function _parseDateStr(str){
   if(!str) return null;
   let d;
   if(String(str).includes('/')){
@@ -2530,11 +2530,15 @@ function _parseExitDate(pt){
   }
   return isNaN(d) ? null : d;
 }
-// رقم فاتورة تسلسلي دائم — عداد منفصل لكل "فئة تأمين" (أطفال / طلبة / منتفعين...)
+function _parseExitDate(pt){ return _parseDateStr(pt.exit || pt.exitRaw); }
+// مفتاح الشهر (YYYY-MM) من تاريخ خروج المريض — يُستخدم لتصفير الترقيم كل شهر
+function _monthKeyOfDate(d){ return d ? (d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')) : 'بدون-تاريخ'; }
+function _monthKeyOf(pt){ return _monthKeyOfDate(_parseExitDate(pt)); }
+// رقم فاتورة تسلسلي دائم — عداد منفصل لكل (شهر خروج المريض + فئة تأمين)، يبدأ من 1 لكل شهر جديد.
 // يُعطى مرة واحدة فقط عند أول حفظ للمريض ولا يتغير بعد ذلك أبداً، وهو نفس رقم المسلسل الذي سيظهر
-// دائماً في جدول "طباعة تكلفة الفواتير" عند اختيار نفس فئة التأمين، أياً كان الشهر أو القسم المختار
-async function getNextInsuranceInvoiceNo(taminType){
-  const key = taminType || 'عام';
+// في جدول "طباعة تكلفة الفواتير" عند اختيار نفس الشهر وفئة التأمين
+async function getNextInsuranceInvoiceNo(taminType, monthKey){
+  const key = `${monthKey||'بدون-تاريخ'}|${taminType || 'عام'}`;
   const ref = db.collection('settings').doc('counters');
   return await db.runTransaction(async tx=>{
     const snap = await tx.get(ref);
@@ -2546,13 +2550,13 @@ async function getNextInsuranceInvoiceNo(taminType){
   });
 }
 // ملاحظة: أرقام الفواتير أصبحت تُولَّد تلقائياً وبشكل دائم عند حفظ المريض (savePatient).
-// هذه الدالة الآن تُستخدم فقط كإجراء احتياطي: تُعطي رقماً دائماً (من عداد فئة التأمين الخاصة به) لأي مريض قديم لم يحصل على رقم بعد،
-// ولا تُغيّر أبداً رقم مريض حصل على رقم بالفعل، ولا تُعيد ترتيب الأرقام الموجودة — أي مريض جديد يُضاف دائماً بآخر رقم في تسلسل فئته.
+// هذه الدالة الآن تُستخدم فقط كإجراء احتياطي: تُعطي رقماً دائماً (من عداد شهر خروج المريض + فئة تأمينه) لأي مريض قديم لم يحصل على رقم بعد،
+// ولا تُغيّر أبداً رقم مريض حصل على رقم بالفعل، ولا تُعيد ترتيب الأرقام الموجودة — أي مريض جديد يُضاف دائماً بآخر رقم في تسلسل شهره وفئته.
 async function assignInsuranceInvoiceNumbers(sortedList, batchKey){
   try{
     const missing = sortedList.filter(pt=>!pt.insuranceInvoiceNo && pt.firestoreId);
     for(const pt of missing){
-      const no = await getNextInsuranceInvoiceNo(pt.taminType);
+      const no = await getNextInsuranceInvoiceNo(pt.taminType, _monthKeyOf(pt));
       await db.collection('patients').doc(pt.firestoreId).set({insuranceInvoiceNo:no, insuranceInvoiceBatchKey: batchKey}, {merge:true});
       const local = patients.find(p=>p.firestoreId===pt.firestoreId);
       if(local){ local.insuranceInvoiceNo=no; local.insuranceInvoiceBatchKey=batchKey; }
