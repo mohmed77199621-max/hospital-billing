@@ -198,7 +198,6 @@ input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
     <button id="btn-users" class="btn btn-o" onclick="openUserMgmt()" style="display:none;color:#a8c4ff;border-color:rgba(255,255,255,.25);background:rgba(255,255,255,.08)">👥 المستخدمين</button>
     <button id="btn-excel-all" class="btn btn-a" onclick="openExcelExportModal()" style="display:none">📊 تصدير إكسل</button>
     <button id="btn-print-cost" class="btn btn-a" onclick="openPrintCostModal()" style="display:none">🖨 طباعة تكلفة الفواتير</button>
-    <button id="btn-backfill-invoice" class="btn btn-a" onclick="backfillAllInsuranceInvoiceNumbers()" style="display:none" title="يعطي رقماً للمرضى القدامى بدون رقم، ويصحح أي رقم مكرر أو غير متطابق بسبب تعديل تاريخ الخروج/فئة التأمين">🔢 ترقيم / تصحيح فواتير التأمين</button>
     <button id="btn-new-patient" class="btn btn-g" onclick="confirmNewPatient()" style="display:none">+ مريض جديد</button>
     <button class="btn btn-r btn-sm" onclick="doLogout()" style="background:rgba(184,50,50,.7);border:1px solid rgba(255,100,100,.3)">خروج</button>
   </div>
@@ -2573,22 +2572,6 @@ async function renumberInsuranceGroup(monthKey, taminType){
   }
   return {total: sorted.length, changed};
 }
-// يعيد ترقيم كل مجموعات (شهر خروج + فئة تأمين) الموجودة فعلياً في بيانات مرضى التأمين الصحي دفعة واحدة —
-// يشمل القدامى اللي مالهمش رقم، وكمان يصحح أي فجوة أو تكرار في أي مجموعة موجودة بالفعل.
-async function backfillAllInsuranceInvoiceNumbers(){
-  const insPatients = patients.filter(p=>p.stype==='تأمين صحي' && p.firestoreId);
-  if(!insPatients.length){ alert('لا يوجد مرضى تأمين صحي بعد'); return; }
-  const keys = [...new Set(insPatients.map(p=>`${_monthKeyOf(p)}|${p.taminType || 'عام'}`))];
-  if(!confirm(`سيتم فحص وإعادة ترقيم عدد ${keys.length} مجموعة (شهر + فئة تأمين) بحيث يكون تسلسل كل مجموعة صحيحاً بالكامل من 1 وبدون أي فجوة. أي رقم صحيح ومطابق بالفعل لن يتغير. هل تريد المتابعة؟`)) return;
-  let totalChanged = 0;
-  for(const key of keys){
-    const [monthKey, taminType] = key.split('|');
-    const {changed} = await renumberInsuranceGroup(monthKey, taminType==='عام' ? '' : taminType);
-    totalChanged += changed;
-  }
-  renderPatients();
-  alert(`✅ تم الفحص. تم تصحيح رقم ${totalChanged} فاتورة كانت غير صحيحة (ناقصة أو متكررة أو غير مطابقة).`);
-}
 
 function openPrintCostModal(){
   if(!patients.length){alert('لا يوجد مرضي محفوظون');return;}
@@ -3351,7 +3334,7 @@ function applyRoleUI(){
     // Hide everything
     $('main-content').style.display='none';
     $('pharm-section').style.display='none';
-    ['btn-admin','btn-users','btn-excel-all','btn-print-cost','btn-backfill-invoice','btn-new-patient','btn-pharm-settings','btn-data-settings','current-user-badge'].forEach(id=>{
+    ['btn-admin','btn-users','btn-excel-all','btn-print-cost','btn-new-patient','btn-pharm-settings','btn-data-settings','current-user-badge'].forEach(id=>{
       const el=$(id); if(el) el.style.display='none';
     });
     return;
@@ -3372,7 +3355,6 @@ function applyRoleUI(){
     }
     $('btn-excel-all').style.display='';
     $('btn-print-cost').style.display='';
-    $('btn-backfill-invoice').style.display='';
     $('btn-new-patient').style.display='';
     // Data entry sees all patients، ويمكنه تعديل أسعار قائمته الخاصة عبر زر منفصل
     if(role==='data'){
@@ -3391,7 +3373,6 @@ function applyRoleUI(){
     $('btn-users').style.display='none';
     $('btn-excel-all').style.display='none';
     $('btn-print-cost').style.display='none';
-    $('btn-backfill-invoice').style.display='none';
     $('btn-new-patient').style.display='none';
     $('btn-data-settings').style.display='none';
     $('btn-pharm-settings').style.display='';
