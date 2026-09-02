@@ -1662,16 +1662,6 @@ function buildInvoice(pt){
   const days  =live?(parseFloat($('stay_days').value)||0):pt.days;
   const fixed =live?getFixed():pt.fixed;
   const items =live?billItems:pt.items;
-  let insuranceInvNo = '';
-  if(stype==='تأمين صحي'){
-    if(!live){
-      insuranceInvNo = pt.insuranceInvoiceNo || '';
-    } else if(editId){
-      // نطبع أثناء التعديل على مريض محفوظ بالفعل — رقم الفاتورة رقم ثابت لا يتغير، فنعرضه من بياناته المحفوظة
-      const existing = patients.find(p=>p.firestoreId===editId);
-      insuranceInvNo = (existing && existing.insuranceInvoiceNo) || '';
-    }
-  }
   // اسم مدخل البيانات الذي سجّل/يسجّل المريض — يُكتب تلقائياً في الفاتورة المطبوعة
   const dataEntryName = live ? (currentUser?currentUser.name:'') : (pt.savedBy||'');
   const feesSum=fixed.reduce((a,x)=>a+x.val,0);
@@ -1712,7 +1702,6 @@ function buildInvoice(pt){
     <table>
       <tr><td class="lh">اسم المريض</td><td style="font-weight:900;font-size:10pt">${name||'—'}</td><td class="lh">رقم التذكرة</td><td style="font-weight:900">${ticket||'—'}</td></tr>
       <tr><td class="lh">القسم الطبي</td><td style="font-weight:800">${dept||'—'}</td><td class="lh">نوع الخدمة</td><td style="font-weight:800">${stype||'—'}</td></tr>
-      <tr><td class="lh">رقم الفاتورة</td><td colspan="3" style="font-weight:900">${insuranceInvNo||'—'}</td></tr>
       <tr><td class="lh">فئة التأمين</td><td style="font-weight:800">${taminType||'—'}</td><td class="lh">نوع العملية</td><td>${optype||'—'}</td></tr>
       <tr><td class="lh">رقم الخطاب / القرار</td><td colspan="3">${letter||'—'}</td></tr>
       <tr><td class="lh">تاريخ الدخول</td><td style="font-weight:800">${entry||'—'}</td><td class="lh">تاريخ الخروج</td><td style="font-weight:800">${exitD||'—'}</td></tr>
