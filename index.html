@@ -2588,15 +2588,8 @@ function openPrintCostModal(){
 }
 function closePrintCostModal(){ $('print-cost-modal').style.display='none'; }
 function onPcStypeChange(){
-  const isTamin = Vv('pc-stype')==='تأمين صحي';
-  $('pc-tamin-wrap').style.display = isTamin ? '' : 'none';
-  if(!isTamin) $('pc-tamin').value='';
-  document.querySelectorAll('.pc-dept-cb').forEach(cb=>{
-    if(isTamin) cb.checked=false;
-    cb.disabled = isTamin;
-  });
-  const hint = $('pc-dept-tamin-hint');
-  if(hint) hint.style.display = isTamin ? '' : 'none';
+  $('pc-tamin-wrap').style.display = (Vv('pc-stype')==='تأمين صحي') ? '' : 'none';
+  if(Vv('pc-stype')!=='تأمين صحي') $('pc-tamin').value='';
 }
 
 async function printCostSummary(){
@@ -2606,11 +2599,7 @@ async function printCostSummary(){
   const stypeVal = Vv('pc-stype');
   const taminVal = Vv('pc-tamin');
   if(stypeVal==='تأمين صحي' && !taminVal){
-    alert('⚠️ يرجى اختيار فئة تأمين محددة (أطفال / طلبة / منتفعين) لطباعة فواتير التأمين الصحي.\nرقم الفاتورة مرتبط بفئة التأمين، وطباعة كل الفئات مجمّعة معاً ستُظهر نفس الرقم مكرراً لأكثر من مريض من فئات مختلفة.');
-    return;
-  }
-  if(stypeVal==='تأمين صحي' && deptVals.length){
-    alert('⚠️ ترقيم فواتير التأمين الصحي بيشمل كل الأقسام مع بعض دايماً (عشان يفضل التسلسل صحيح من 1 بدون فجوات). يرجى إلغاء تحديد الأقسام (اترك كل الأقسام بدون تحديد) ثم أعد المحاولة.');
+    alert('⚠️ يرجى اختيار فئة تأمين محددة (أطفال / طلبة / منتفعين) لطباعة فواتير التأمين الصحي.');
     return;
   }
 
@@ -2637,22 +2626,12 @@ async function printCostSummary(){
 
   if(!filtered.length){ alert('لا يوجد مرضي مطابقون لهذه المعايير'); return; }
 
-  // (1) ترقيم فواتير التأمين الصحي: نعيد ترقيم كل مجموعة (الشهر المختار + فئة التأمين المختارة) بالكامل من جديد،
-  //     بحيث يكون التسلسل 1،2،3...بدون أي فجوة مهما كانت الحالة السابقة (رقم ناقص، مكرر، أو غير مطابق) —
-  //     ثم يُعرض الجدول دائماً مرتباً حسب رقم الفاتورة نفسه، ونفس هذا الرقم هو اللي يُطبع في فاتورة كل مريض.
   if(stypeVal==='تأمين صحي'){
-    const monthKey = monthVal; // نفس صيغة YYYY-MM المستخدمة في _monthKeyOf
-    const {changed} = await renumberInsuranceGroup(monthKey, taminVal);
-    // تأكيد نهائي: كل مريض في القائمة المعروضة لازم يكون معاه رقم صحيح مطابق فعلاً قبل الطباعة
-    const stillBroken = filtered.filter(pt=>{
-      const key = `${_monthKeyOf(pt)}|${pt.taminType || 'عام'}`;
-      return !pt.insuranceInvoiceNo || pt.insuranceInvoiceKey !== key;
-    });
-    if(stillBroken.length){
-      alert('❌ تعذر التأكد من رقم الفاتورة لعدد '+stillBroken.length+' مريض (على الأغلب بسبب مشكلة في الاتصال). لم تتم الطباعة لتفادي ظهور رقم غير صحيح.\nحاول مرة أخرى.');
-      return;
-    }
-    filtered = filtered.slice().sort((a,b)=>(a.insuranceInvoiceNo||0)-(b.insuranceInvoiceNo||0));
+    filtered = filtered.slice().sort((a,b)=>_ticketNum(a.ticket)-_ticketNum(b.ticket));
+    // صيانة في الخلفية فقط: تحديث رقم الفاتورة الدائم لكل مريض (المستخدم في فاتورته الفردية) عن طريق إعادة ترقيم
+    // المجموعة الكاملة (كل الأقسام) لهذا الشهر وهذه الفئة — لا يؤثر على عمود "م" في هذا الجدول، فهو دائماً
+    // عدّاد طبيعي بسيط لعدد المرضى المعروضين هنا فقط (بحسب الأقسام المختارة في هذه الطباعة تحديداً)
+    renumberInsuranceGroup(monthVal, taminVal).catch(e=>console.error('renumberInsuranceGroup (bg):', e));
   }
 
   const {hdr, rows, tot, drugsTotal, suppliesTotal, screwsTotal, invoiceTotal} = buildCostSummaryRows(filtered);
@@ -2708,7 +2687,7 @@ async function printCostSummary(){
   };
 
   const theadHtml = '<tr><th>م</th>'+visibleCols.map(i=>`<th>${hdr[i]}</th>`).join('')+'</tr>';
-  const bodyHtml = rows.map((r,ri)=>'<tr><td>'+(stypeVal==='تأمين صحي' ? (filtered[ri].insuranceInvoiceNo||(ri+1)) : (ri+1))+'</td>'+visibleCols.map(i=>{
+  const bodyHtml = rows.map((r,ri)=>'<tr><td>'+(ri+1)+'</td>'+visibleCols.map(i=>{
     const v=r[i];
     return `<td${typeof v==='number'?' style="text-align:center"':''}>${fmtCell(v,i)}</td>`;
   }).join('')+'</tr>').join('');
@@ -3840,7 +3819,6 @@ window.onload = init;
     <div style="margin-bottom:14px">
       <label class="lbl">الأقسام الطبية <span style="font-weight:400;color:var(--tm)">(يمكن اختيار أكثر من قسم معاً)</span></label>
       <div id="pc-dept-list" style="max-height:150px;overflow-y:auto;border:1.5px solid var(--b);border-radius:8px;padding:8px 10px;display:flex;flex-direction:column;gap:5px"></div>
-      <div id="pc-dept-tamin-hint" style="display:none;font-size:.78rem;color:#c0392b;margin-top:4px">⚠️ عند طباعة فواتير التأمين الصحي يتم تضمين كل الأقسام معاً إجبارياً، حتى يبقى ترقيم الفواتير متسلسلاً من 1 بدون أي فجوة.</div>
     </div>
     <div class="g2" style="margin-bottom:14px">
       <div>
