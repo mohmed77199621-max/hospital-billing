@@ -1433,9 +1433,15 @@ function applyAutoLinkedItems(_reason){
   const cvpQty = _sumQtyByNames(['قسطرة cvpاطفال','قسطرة cvp اطفال','قسطرة cvp كبار','قسطرة cvpكبار']);
   changed = _ensureItem('خدمات أخري','رسوم تركيب cvp', cvpQty, {lockedQty:true, lockDelete:true, autoKey:'link-cvp-fee'}) || changed;
 
-  // (6) بنك الدم: كيس دم/وحدة بلازما → توافق بنك دم (بعدد الأكياس) + فصيلة بنك دم (مرة واحدة) + جهاز نقل دم (مستلزمات)
-  const bloodQty = _sumQtyByNames(['كيس دم','وحدة بلازما']);
-  changed = _ensureItem('بنك الدم','توافق بنك دم', bloodQty, {lockedQty:true, lockDelete:true, autoKey:'link-blood-compat'}) || changed;
+  // (6) بنك الدم:
+  //   - توافق بنك دم = عدد "كيس دم" فقط (حتى لو اتصرف معه وحدات بلازما، توافق بنك دم بيفضل بعدد الأكياس بالظبط)
+  //   - لو مفيش أي كيس دم خالص واتصرف بلازما بس، توافق بنك دم = 1 دايماً مهما كان عدد وحدات البلازما
+  //   - فصيلة بنك دم وجهاز نقل الدم بيتحسبوا بناءً على إجمالي (كيس دم + بلازما) زي ما هو معمول من الأول
+  const bloodBagQty  = _sumQtyByNames(['كيس دم']);
+  const plasmaQty    = _sumQtyByNames(['وحدة بلازما']);
+  const bloodQty     = bloodBagQty + plasmaQty; // إجمالي الأصناف — يُستخدم لفصيلة بنك الدم وجهاز نقل الدم
+  const bloodCompatQty = bloodBagQty>0 ? bloodBagQty : (plasmaQty>0 ? 1 : 0);
+  changed = _ensureItem('بنك الدم','توافق بنك دم', bloodCompatQty, {lockedQty:true, lockDelete:true, autoKey:'link-blood-compat'}) || changed;
   if(bloodQty>0){
     // تُضاف تلقائياً بكمية 1 عند أول ظهور لبنود الدم فقط، ثم تصبح كميتها قابلة للتعديل يدوياً
     // ولا تتم إعادة ضبطها تلقائياً طالما البند موجوداً (حتى لا يُلغى تعديل المستخدم)
