@@ -1740,20 +1740,7 @@ function buildInvoice(pt){
 }
 
 /* ========== PREVIEW & PRINT ========== */
-// يضمن أن أي مريض تأمين صحي محفوظ بالفعل معاه رقم فاتورة صحيح ومطابق لشهر خروجه وفئة تأمينه الحاليين قبل الطباعة/المعاينة —
-// سواء كان مريضاً قديماً لسه مالوش رقم، أو مريضاً اتعدّل تاريخ خروجه/فئته بعد ما كان له رقم فأصبح رقمه القديم غير مطابق
-async function ensurePermanentInvoiceNo(pt){
-  if(!pt || pt.stype!=='تأمين صحي' || !pt.firestoreId) return;
-  const monthKey = _monthKeyOf(pt);
-  const key = `${monthKey}|${pt.taminType || 'عام'}`;
-  if(pt.insuranceInvoiceNo && pt.insuranceInvoiceKey===key) return; // له رقم صحيح بالفعل يطابق شهره وفئته الحاليين
-  await renumberInsuranceGroup(monthKey, pt.taminType);
-}
 async function previewInvoice(){
-  if(editId){
-    const existing = patients.find(p=>p.firestoreId===editId);
-    await ensurePermanentInvoiceNo(existing);
-  }
   $('prev-content').innerHTML=buildInvoice(null);
   $('prev-modal').style.display='flex';
 }
@@ -1777,7 +1764,6 @@ async function markPatientPrinted(fid){
 }
 
 async function printCurrentInvoice(pt){
-  await ensurePermanentInvoiceNo(pt);
   const patientName = ((pt&&pt.name)?pt.name:Vv('p_name').trim()) || '—';
   const fid = (pt && pt.firestoreId) ? pt.firestoreId : '';
   const html=buildInvoice(pt||null);
@@ -1912,9 +1898,6 @@ function getFormData(){
     // حقول لا يجب أن تضيع عند التعديل
     printCount: old ? (old.printCount||0) : 0,
     lastPrintedAt: old ? (old.lastPrintedAt||null) : null,
-    insuranceInvoiceNo: old ? (old.insuranceInvoiceNo||null) : null,
-    insuranceInvoiceKey: old ? (old.insuranceInvoiceKey||null) : null,
-    insuranceInvoiceBatchKey: old ? (old.insuranceInvoiceBatchKey||null) : null,
   };
 }
 
@@ -1966,6 +1949,7 @@ async function savePatient(){
       const dupSnap = await db.collection('patients')
         .where('ticket','==', ticket)
         .where('dept','==', dept)
+        .limit(2) // كفاية نعرف فيه تكرار ولا لأ (واحد ممكن يكون المريض نفسه عند التعديل)
         .get();
       const dup = dupSnap.docs.find(d=>d.id !== editId);
       if(dup){
@@ -1983,14 +1967,7 @@ async function savePatient(){
     billItems = billItems.filter(x => x.qty > 0);
     renderBill();
 
-    // فواتير التأمين الصحي: مبنعملش أي حجز رقم هنا. بعد نجاح الحفظ تحت، هنعمل "إعادة ترقيم" كاملة للمجموعة
-    // (شهر الخروج + فئة التأمين) اللي المريض بقى فيها، وكمان للمجموعة القديمة لو كان اتغيّر منها — وده اللي
-    // بيضمن إن التسلسل يفضل صحيح 1،2،3...بدون أي فجوة أو تكرار مهما حصل.
-    const oldPt = editId ? patients.find(p=>p.firestoreId===editId) : null;
-    const oldInsKey = oldPt ? oldPt.insuranceInvoiceKey : null;
-
     const pt={...getFormData(), savedAt:firebase.firestore.FieldValue.serverTimestamp(), savedBy: currentUser?currentUser.name:'', savedByRole: currentUser?currentUser.role:''};
-    if(stype!=='تأمين صحي'){ pt.insuranceInvoiceNo=null; pt.insuranceInvoiceKey=null; } // خرج من التأمين الصحي: رقمه بيتشال، وهيتم تصحيح فجوة مجموعته القديمة تحت
     setStatus('save');
     let savedTotal = pt.total;
     let savedDoc = null; // النسخة النهائية اللي فعلاً اتحفظت، هنستخدمها لتحديث القائمة محليًا بدل إعادة تحميل كل المرضى من السيرفر
@@ -2008,15 +1985,6 @@ async function savePatient(){
       editId=null; clearForm();
       const idx = patients.findIndex(p=>p.firestoreId===savedDoc.firestoreId);
       if(idx>=0) patients[idx]=savedDoc; else patients.unshift(savedDoc);
-      // إعادة ترقيم فواتير التأمين الصحي: المجموعة الحالية دايماً، والمجموعة القديمة لو المريض كان فيها وطلعها
-      // (سواء بتغيير تاريخ الخروج/الفئة، أو بالخروج من نوع الخدمة "تأمين صحي" تماماً)
-      if(stype==='تأمين صحي'){
-        await renumberInsuranceGroup(_monthKeyOf(savedDoc), savedDoc.taminType);
-      }
-      if(oldInsKey && oldInsKey !== savedDoc.insuranceInvoiceKey){
-        const [oldMonthKey, oldTamin] = oldInsKey.split('|');
-        await renumberInsuranceGroup(oldMonthKey, oldTamin==='عام' ? '' : oldTamin);
-      }
       alert('✅ تم حفظ بيانات المريض:\n'+name+'\nالإجمالي: '+fmt(savedTotal)+' ج.م');
       renderPatients();
       setStatus('ok');
@@ -2506,66 +2474,10 @@ function buildCostSummaryRows(list){
   return {hdr, rows, tot, drugsTotal, suppliesTotal, screwsTotal, invoiceTotal};
 }
 
-// (1) ترقيم فواتير التأمين الصحي حسب نفس ترتيب "طباعة تكلفة الفواتير" (يُحفظ داخل المريض ليظهر في الفاتورة)
+// استخراج الرقم من رقم التذكرة (للترتيب حسب رقم التذكرة في طباعة تكلفة الفواتير)
 function _ticketNum(t){
   const n = parseInt(String(t||'').replace(/[^\d]/g,''), 10);
   return isNaN(n) ? 0 : n;
-}
-// تحويل أي نص تاريخ (بأي صيغة نصية مستخدمة في النظام) إلى Date صالحة
-function _parseDateStr(str){
-  if(!str) return null;
-  let d;
-  if(String(str).includes('/')){
-    const [dd,mm,yy]=String(str).split('/');
-    d = new Date(`${yy}-${String(mm).padStart(2,'0')}-${String(dd).padStart(2,'0')}T00:00:00`);
-  } else {
-    d = new Date(str+'T00:00:00');
-  }
-  return isNaN(d) ? null : d;
-}
-function _parseExitDate(pt){ return _parseDateStr(pt.exit || pt.exitRaw); }
-// مفتاح الشهر (YYYY-MM) من تاريخ خروج المريض — يُستخدم لتصفير الترقيم كل شهر
-function _monthKeyOfDate(d){ return d ? (d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')) : 'بدون-تاريخ'; }
-function _monthKeyOf(pt){ return _monthKeyOfDate(_parseExitDate(pt)); }
-
-// === الآلية الجديدة: "إعادة ترقيم كاملة" بدل عداد متزايد ===
-// العداد المتزايد القديم كان ممكن يسيب فجوات دائمة (رقم يتاخد من العداد بس يفشل تسجيله لأي مريض بسبب انقطاع اتصال
-// مثلاً)، وكمان كان بيدي رقم لمريض من مجموعة (شهر+فئة) حتى لو الطباعة الحالية بتعرض جزء من الأقسام بس، فتبان
-// الأرقام وكأنها "ناقصة من النص". الحل الجديد: بنجيب كل مرضى نفس (الشهر + فئة التأمين) مهما كان القسم، ونرقمهم
-// من جديد بالكامل 1،2،3...بدون أي فجوة، ونحفظ نفس الرقم دايماً في بيانات كل مريض ليطابق فاتورته المطبوعة تماماً.
-// أي مريض رقمه صحيح بالفعل وفي مكانه الصحيح لا تحصل له أي كتابة (لتقليل التغيير قدر الإمكان).
-async function renumberInsuranceGroup(monthKey, taminType){
-  const key = `${monthKey||'بدون-تاريخ'}|${taminType || 'عام'}`;
-  const group = patients.filter(p=>p.stype==='تأمين صحي' && p.firestoreId && `${_monthKeyOf(p)}|${p.taminType || 'عام'}`===key);
-  if(!group.length) return {total:0, changed:0};
-  // المرضى اللي معاهم رقم صحيح فعلاً (من نفس المجموعة) بيحافظوا على ترتيبهم النسبي، وأي مريض بدون رقم أو رقمه
-  // من مجموعة مختلفة (تعديل تاريخ خروج/فئة) بيتحط آخر الترتيب حسب تاريخ الخروج ثم رقم التذكرة
-  const sorted = group.slice().sort((a,b)=>{
-    const an = (a.insuranceInvoiceKey===key && a.insuranceInvoiceNo) ? a.insuranceInvoiceNo : Infinity;
-    const bn = (b.insuranceInvoiceKey===key && b.insuranceInvoiceNo) ? b.insuranceInvoiceNo : Infinity;
-    if(an!==bn) return an-bn;
-    const da=_parseExitDate(a), db_=_parseExitDate(b);
-    if(da && db_ && da.getTime()!==db_.getTime()) return da-db_;
-    if(da && !db_) return -1;
-    if(!da && db_) return 1;
-    return _ticketNum(a.ticket)-_ticketNum(b.ticket);
-  });
-  let changed = 0;
-  for(let i=0;i<sorted.length;i++){
-    const pt = sorted[i];
-    const correctNo = i+1;
-    if(pt.insuranceInvoiceKey===key && pt.insuranceInvoiceNo===correctNo) continue; // صحيح بالفعل، مفيش داعي لأي كتابة
-    try{
-      await db.collection('patients').doc(pt.firestoreId).set({insuranceInvoiceNo: correctNo, insuranceInvoiceKey: key}, {merge:true});
-      pt.insuranceInvoiceNo = correctNo; pt.insuranceInvoiceKey = key;
-      const local = patients.find(p=>p.firestoreId===pt.firestoreId);
-      if(local){ local.insuranceInvoiceNo = correctNo; local.insuranceInvoiceKey = key; }
-      changed++;
-    }catch(e){
-      console.error('renumberInsuranceGroup:', pt.firestoreId, e);
-    }
-  }
-  return {total: sorted.length, changed};
 }
 
 function openPrintCostModal(){
@@ -2623,10 +2535,6 @@ async function printCostSummary(){
 
   if(stypeVal==='تأمين صحي'){
     filtered = filtered.slice().sort((a,b)=>_ticketNum(a.ticket)-_ticketNum(b.ticket));
-    // صيانة في الخلفية فقط: تحديث رقم الفاتورة الدائم لكل مريض (المستخدم في فاتورته الفردية) عن طريق إعادة ترقيم
-    // المجموعة الكاملة (كل الأقسام) لهذا الشهر وهذه الفئة — لا يؤثر على عمود "م" في هذا الجدول، فهو دائماً
-    // عدّاد طبيعي بسيط لعدد المرضى المعروضين هنا فقط (بحسب الأقسام المختارة في هذه الطباعة تحديداً)
-    renumberInsuranceGroup(monthVal, taminVal).catch(e=>console.error('renumberInsuranceGroup (bg):', e));
   }
 
   const {hdr, rows, tot, drugsTotal, suppliesTotal, screwsTotal, invoiceTotal} = buildCostSummaryRows(filtered);
