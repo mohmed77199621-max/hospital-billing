@@ -409,7 +409,7 @@ input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
         <button class="btn btn-a btn-sm" onclick="openPendingPharmModal()">🆕 مرضى من الصيدلية (<span id="pending-pharm-count">0</span>)</button>
         <span id="pt-count" class="badge bp">جاري التحميل...</span>
-        <input type="text" id="pt-search" class="inp" style="width:200px;font-size:.78rem" placeholder="بحث باسم أو رقم تذكرة..." oninput="renderPatients()">
+        <input type="text" id="pt-search" class="inp" style="width:200px;font-size:.78rem" placeholder="بحث باسم أو رقم تذكرة..." oninput="onPtSearchInput()">
         <button class="btn btn-o btn-sm" onclick="loadPatients(true)" title="تحديث القائمة">🔄 تحديث</button>
       </div>
     </div>
@@ -762,6 +762,7 @@ let depts = [
   "مبتسرين","داخلي كلي"
 ];
 let billItems = [], patients = [], editId = null, selItem = null;
+let _ptSearchTimer=null, _remoteSearchTicket=null, _remoteSearchBusy=false;
 let lastDoc = null, allLoaded = false, loadingMore = false;
 const PAGE_SIZE = 2000;
 
@@ -2154,13 +2155,52 @@ function clearForm(){
   setTimeout(()=>loadDefaultBillItems(), 50); $('stay_days').value=0; renderBill();
 }
 
-function renderPatients(){
+function onPtSearchInput(){
+  clearTimeout(_ptSearchTimer);
+  _remoteSearchTicket=null; // كل ضغطة حرف جديدة تلغي بحث السيرفر السابق (بحث مختلف)
+  renderPatients();
+  // بعد وقفة بسيطة عن الكتابة، لو مفيش نتيجة محليًا، دوّر على رقم التذكرة في السيرفر مباشرة
+  _ptSearchTimer=setTimeout(()=>{
+    const q=(Vv('pt-search')||'').trim();
+    const ql=q.toLowerCase();
+    const localHit = q && patients.some(p=>(p.name||'').toLowerCase().includes(ql)||(p.ticket||'').includes(q));
+    if(q && !localHit) remoteTicketSearch(q);
+  }, 500);
+}
+// بحث احتياطي في قاعدة البيانات نفسها برقم تذكرة بالظبط (يغطي أي مريض مش من ضمن اللي اتحمّل على الجهاز)
+async function remoteTicketSearch(ticket){
+  if(_remoteSearchBusy) return;
+  _remoteSearchBusy=true;
+  _remoteSearchTicket=ticket;
+  const el=$('patients-list');
+  el.innerHTML=`<div style="text-align:center;padding:24px;color:var(--tm);font-size:.82rem">⏳ مفيش نتيجة محمّلة على الجهاز، بيتم البحث برقم التذكرة في قاعدة البيانات...</div>`;
+  try{
+    const snap = await db.collection('patients').where('ticket','==', ticket).limit(10).get();
+    _remoteSearchBusy=false;
+    if(_remoteSearchTicket!==ticket) return; // المستخدم غيّر البحث قبل ما نخلص
+    if(snap.empty){
+      el.innerHTML=`<div style="text-align:center;padding:24px;color:var(--tm);font-size:.82rem">لا نتائج — حتى بعد البحث في كل قاعدة البيانات برقم التذكرة ده بالظبط</div>`;
+      return;
+    }
+    snap.docs.forEach(d=>{
+      const data={...d.data(), firestoreId:d.id};
+      const idx=patients.findIndex(p=>p.firestoreId===d.id);
+      if(idx>=0) patients[idx]=data; else patients.push(data);
+    });
+    renderPatients(true);
+  }catch(e){
+    _remoteSearchBusy=false;
+    console.error('remoteTicketSearch:', e);
+    el.innerHTML=`<div style="text-align:center;padding:24px;color:var(--tm);font-size:.82rem">تعذّر البحث في قاعدة البيانات: ${e.message}</div>`;
+  }
+}
+function renderPatients(skipRemoteHint){
   const q=(Vv('pt-search')||'').toLowerCase();
   const list=q?patients.filter(p=>(p.name||'').toLowerCase().includes(q)||(p.ticket||'').includes(q)):patients;
   $('pt-count').innerText=patients.length+(allLoaded?'':'+')+' مريض محمّل';
   const el=$('patients-list');
   if(!list.length){
-    el.innerHTML=`<div style="text-align:center;padding:24px;color:var(--tm);font-size:.82rem">${q?'لا نتائج':'لا يوجد مرضى محفوظون بعد'}</div>`;
+    el.innerHTML=`<div style="text-align:center;padding:24px;color:var(--tm);font-size:.82rem">${q?(skipRemoteHint?'لا نتائج':'لا نتائج — لو ده رقم تذكرة، البرنامج هيدوّر تلقائيًا في قاعدة البيانات كمان'):'لا يوجد مرضى محفوظون بعد'}</div>`;
     updateLoadMoreBtn(allLoaded?'done':'more');
     return;
   }
