@@ -1135,8 +1135,8 @@ const ICU_DEPTS = {
   'عناية مركزة حروق':   {stayRate:390, med:50, nur:80},
   // عناية متوسطة × 240
   'عناية متوسطة حروق':  {stayRate:240, med:35, nur:45},
-  'عناية مخ واعصاب':    {stayRate:240, med:35, nur:45},
-  'عناية القلب':         {stayRate:240, med:35, nur:45},
+  'عناية مخ واعصاب':    {stayRate:390, med:50, nur:80},
+  'عناية القلب':         {stayRate:390, med:50, nur:80},
   'عناية متوسطة اطفال': {stayRate:240, med:35, nur:45},
   // المبتسرين × 150
   'مبتسرين':            {stayRate:150, med:50, nur:0},
@@ -2109,7 +2109,14 @@ function loadDefaultBillItems(stype){
   const isNafaqa = stype === 'نفقة دولة';
   const isTamin  = stype === 'تأمين صحي';
   // اقتصادي ومجاني → نفس منطق filterDD: يستخدمون قائمة التأمين
+  // نفقة دولة: لا تُضاف هذه الأصناف تلقائيًا
+  const NAFAQA_EXCLUDED = ['قسطرة عادية','قطن 1جم','قطن نصف كيلو'];
+  if(isNafaqa){
+    // لو كانت أُضيفت قبل تغيير النوع إلى نفقة دولة وكميتها صفر → احذفها
+    billItems = billItems.filter(b=>!(b.isDefault && (Number(b.qty)||0)===0 && NAFAQA_EXCLUDED.includes(b.name)));
+  }
   DEFAULT_BILL_ITEMS.forEach(def=>{
+    if(isNafaqa && NAFAQA_EXCLUDED.includes(def.name)) return;
     const alreadyExists = billItems.some(b=>b.name===def.name && b.cat===def.cat);
     if(alreadyExists) return;
     // ابحث على السعر في itemDB حسب نوع الخدمة — فلترة حسب القائمة (نفقة/تأمين/الجميع) أولاً
