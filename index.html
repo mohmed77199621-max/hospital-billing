@@ -1191,7 +1191,9 @@ function applyAutoRates(){
   const days = rawDays;
 
   // أقسام العناية الخاصة — تنطبق على تأمين/نفقة/اقتصادي
-  const icuRates = Object.entries(ICU_DEPTS).find(([k])=>getDeptTag(k)===getDeptTag(dept) && getDeptTag(dept));
+  const icuRates = ICU_DEPTS[dept]
+    ? [dept, ICU_DEPTS[dept]]   // مطابقة باسم القسم أولًا
+    : Object.entries(ICU_DEPTS).find(([k])=>getDeptTag(k)===getDeptTag(dept) && getDeptTag(dept));
   if(icuRates){
     const r = icuRates[1];
     if(getDeptTag(dept)==='nicu'){
