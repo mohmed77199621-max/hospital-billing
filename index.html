@@ -2281,9 +2281,34 @@ function openExcelExportModal(){
 }
 function closeExcelModal(){ $('excel-modal').style.display='none'; }
 
+/* ========== تحميل كل المرضى قبل التصدير ========== */
+// البرنامج يحمّل المرضى على دفعات (2000 في كل دفعة)، فكان التصدير يشمل الدفعات المحمّلة فقط.
+async function ensureAllPatientsLoaded(){
+  if(allLoaded) return true;
+  const notice = document.createElement('div');
+  notice.style.cssText = 'position:fixed;top:16px;left:50%;transform:translateX(-50%);background:#1e3a8a;color:#fff;padding:10px 20px;border-radius:10px;z-index:99999;font-weight:700;font-size:.85rem;box-shadow:0 4px 14px rgba(0,0,0,.25)';
+  document.body.appendChild(notice);
+  let guard = 0;
+  try{
+    while(!allLoaded && guard++ < 500){
+      notice.textContent = '⏳ جاري تحميل كل المرضى للتصدير... ('+patients.length+')';
+      if(loadingMore){ await new Promise(r=>setTimeout(r,300)); continue; }
+      const before = patients.length;
+      await loadPatients(false);
+      if(!allLoaded && patients.length===before && !loadingMore) break; // خطأ اتصال — لا نكرر للأبد
+    }
+  } finally { notice.remove(); }
+  if(!allLoaded){
+    alert('تعذّر تحميل كل المرضى (مشكلة في الاتصال). حاول مرة أخرى حتى لا يكون الملف ناقصًا.');
+    return false;
+  }
+  return true;
+}
+
 /* ========== تصدير الشيت التفصيلي ========== */
-function exportDetailedExcel(){
+async function exportDetailedExcel(){
   closeExcelModal();
+  if(!(await ensureAllPatientsLoaded())) return;
   if(!patients.length){alert('لا يوجد مرضي محفوظون');return;}
 
   const fromVal = $('excel-from').value;
@@ -2359,8 +2384,9 @@ function exportDetailedExcel(){
 }
 /* ========================================= */
 
-function exportAllExcel(){
+async function exportAllExcel(){
   closeExcelModal();
+  if(!(await ensureAllPatientsLoaded())) return;
   if(!patients.length){alert('لا يوجد مرضي محفوظون');return;}
 
   // فلتر التاريخ
