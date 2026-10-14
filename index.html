@@ -2614,12 +2614,20 @@ async function exportAllExcel(){
     'إجمالي الأدوية','إجمالي المستلزمات','إجمالي شرائح ومسامير','إجمالي الأشعة',
     'إجمالي التحاليل','إجمالي بنك الدم','إجمالي الأجهزة','إجمالي خدمات أخري',
     'إجمالي الفاتورة','ملاحظات',
-    'تمت الطباعة','عدد مرات الطباعة'
+    'تمت الطباعة','عدد مرات الطباعة',
+    'استكمال قيمة الفاتورة (نفقة الدولة)'
   ];
   const rows=filtered.map(pt=>{
     const c={'أدوية':0,'مستلزمات':0,'شرائح ومسامير':0,'أشعة':0,'تحاليل':0,'بنك الدم':0,'أجهزة':0,'خدمات أخري':0};
     (pt.items||[]).forEach(i=>{if(i.cat in c)c[i.cat]+=i.total;});
     const stay=parseFloat(fmt(pt.fStay||0));
+    // نفقة الدولة: لو القرارات غطّت الفاتورة → عبارة الاستكمال، وإلا → المبلغ المتبقي (رقم ليُجمع في الإجمالي)
+    let decStatus='';
+    const _decs=(pt.decisions||[]);
+    if(pt.stype==='نفقة دولة' && _decs.length){
+      const rem=Math.round(((Number(pt.total)||0)-_decs.reduce((a,x)=>a+(Number(x.amount)||0),0))*100)/100;
+      decStatus = rem<=0 ? 'تم استكمال قيمة الفاتورة' : rem;
+    }
     return [
       pt.ticket||'', pt.name||'', pt.dept||'', pt.stype||'', pt.taminType||'', pt.group||'', pt.letter||'',
       toExcelDate(pt.entry||pt.entryRaw), toExcelDate(pt.exit||pt.exitRaw), pt.days||0,
@@ -2632,7 +2640,8 @@ async function exportAllExcel(){
       parseFloat(fmt(pt.total)),
       pt.notes||'',
       (pt.printCount||0)>0 ? 'نعم' : 'لا',
-      (pt.printCount||0)
+      (pt.printCount||0),
+      decStatus
     ];
   });
   // صف الإجماليات — نبني خانة بخانة بالترتيب الصحيح
@@ -2659,7 +2668,7 @@ async function exportAllExcel(){
     }
   });
 
-  ws['!cols']=hdr.map((_,i)=>({wch:[14,22,16,14,12,14,18,12,12,12,12,12,12,12,12,14,16,14,12,12,14,14,18,18,12,20,14,14,14,24,10,14][i]||14}));
+  ws['!cols']=hdr.map((_,i)=>({wch:[14,22,16,14,12,14,18,12,12,12,12,12,12,12,12,14,16,14,12,12,14,14,18,18,12,20,14,14,14,24,10,14,26][i]||14}));
   ws['!freeze']={xSplit:0,ySplit:1}; // تجميد صف الهيدر
 
   const wb=XLSX.utils.book_new();
