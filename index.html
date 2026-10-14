@@ -560,20 +560,20 @@ input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
   </div>
 </div>
 
-<!-- DECISIONS MODAL (نفقة الدولة) -->
+<!-- DECISIONS MODAL (نفقة الدولة — أقسام العناية فقط) -->
 <div id="dec-modal" class="modal" onclick="if(event.target===this)closeDecisionsModal()">
-  <div class="modal-box" style="max-width:700px">
+  <div class="modal-box" style="max-width:560px">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;border-bottom:2px solid var(--b);padding-bottom:12px">
       <h2 style="font-weight:900;font-size:.95rem;color:var(--p)">🏛 قرارات نفقة الدولة</h2>
       <button onclick="closeDecisionsModal()" style="background:none;border:none;cursor:pointer;font-size:1.4rem;color:var(--tm)">✕</button>
     </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 42px;gap:8px;margin-bottom:12px">
-      <input type="text" id="dec-new-no" class="inp" placeholder="رقم القرار">
-      <input type="text" id="dec-new-code" class="inp" placeholder="الكود">
-      <input type="number" id="dec-new-amt" class="inp" placeholder="مبلغ القرار" min="0" step="0.01" style="text-align:center" onkeydown="if(event.key==='Enter'){event.preventDefault();addDecision();}">
-      <button type="button" onclick="addDecision()" class="btn btn-p" style="padding:0;justify-content:center;width:42px;height:38px;font-size:1.2rem;flex-shrink:0">+</button>
+    <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:12px">
+      <div><label class="lbl">رقم القرار <span style="color:#c0392b">*</span></label><input type="text" id="dec-new-no" class="inp" placeholder="اكتب رقم القرار"></div>
+      <div><label class="lbl">الكود <span style="color:#c0392b">*</span></label><input type="text" id="dec-new-code" class="inp" placeholder="اكتب الكود"></div>
+      <div><label class="lbl">مبلغ القرار (ج.م) <span style="color:#c0392b">*</span></label><input type="number" id="dec-new-amt" class="inp" placeholder="0.00" min="0" step="0.01" onkeydown="if(event.key==='Enter'){event.preventDefault();addDecision();}"></div>
+      <button type="button" onclick="addDecision()" class="btn btn-o" style="width:100%;justify-content:center">➕ إضافة القرار</button>
     </div>
-    <div style="overflow-x:auto;border-radius:8px;border:1px solid var(--b);margin-bottom:14px">
+    <div style="overflow-x:auto;border-radius:8px;border:1px solid var(--b);margin-bottom:12px">
       <table class="tbl">
         <thead><tr>
           <th>م</th><th>رقم القرار</th><th>الكود</th><th>مبلغ القرار</th><th>المتبقي</th><th></th>
@@ -582,9 +582,7 @@ input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
       </table>
     </div>
     <div id="dec-totals" style="font-weight:800;color:var(--p);font-size:.82rem;line-height:2;margin-bottom:14px"></div>
-    <div style="display:flex;justify-content:flex-end">
-      <button type="button" id="dec-done-btn" onclick="decDone()" class="btn btn-p">✔ تم</button>
-    </div>
+    <button type="button" id="dec-done-btn" onclick="decDone()" class="btn btn-p" style="width:100%;justify-content:center">✔ تم</button>
   </div>
 </div>
 
@@ -1188,6 +1186,7 @@ const OP_FEES = {...FEES_TAMIN, ...FEES_OBS};
 
 /* ===== عند تغيير القسم ===== */
 function onDeptChange(){
+  updateDecisionsCardVisibility();
   const dept = Vv('p_dept');
   const tag   = getDeptTag(dept);
   const isObs = tag === 'obs';
@@ -1212,9 +1211,7 @@ function onStypeChange(){
   $('tamin-wrap').style.display = isTamin ? '' : 'none';
   if(!isTamin) $('p_tamin_type').value = '';
   // نفقة الدولة: أظهر بطاقة القرارات، وافتح شاشة الإضافة إن لم يوجد قرار بعد
-  const isNaf = stype === 'نفقة دولة';
-  if($('decisions-card')) $('decisions-card').style.display = isNaf ? '' : 'none';
-  if(isNaf) renderDecisionsSummary();
+  updateDecisionsCardVisibility();
   // عند اختيار نوع الخدمة لأول مرة → أضف الأصناف الافتراضية
   if(stype) setTimeout(()=>loadDefaultBillItems(stype), 50);
   applyAutoRates();
@@ -1710,18 +1707,25 @@ function decWithRemaining(decs, grand){
   let cum=0;
   return decs.map(d=>{ cum+=Number(d.amount)||0; return {...d, remaining: grand-cum}; });
 }
+// الشاشة والجدول لنفقة الدولة في أقسام العناية فقط
+function decisionsRequired(){ return Vv('p_stype')==='نفقة دولة' && !!ICU_DEPTS[Vv('p_dept')]; }
+function updateDecisionsCardVisibility(){
+  const c=$('decisions-card'); if(!c) return;
+  c.style.display = decisionsRequired() ? '' : 'none';
+  if(decisionsRequired()) renderDecisionsSummary();
+}
 let _decSaveMode = false;   // النافذة مفتوحة من زر الحفظ؟
 let _decConfirmed = false;  // تم تأكيد القرارات للحفظ الحالي
 function openDecisionsModal(saveMode){
   _decSaveMode = (saveMode===true);
   const b=$('dec-done-btn');
   if(b) b.textContent = _decSaveMode ? '💾 تأكيد القرارات وحفظ المريض' : '✔ تم';
-  $('dec-new-no').value = Vv('p_letter').trim();
+  $('dec-new-no').value = '';
   $('dec-new-code').value = '';
   $('dec-new-amt').value = '';
   renderDecisions();
   $('dec-modal').style.display='flex';
-  setTimeout(()=>{ const el = $('dec-new-no').value ? $('dec-new-code') : $('dec-new-no'); if(el) el.focus(); }, 50);
+  setTimeout(()=>{ const el=$('dec-new-no'); if(el) el.focus(); }, 50);
 }
 function closeDecisionsModal(){
   _decSaveMode=false;
@@ -1732,8 +1736,9 @@ function addDecision(){
   const no = $('dec-new-no').value.trim();
   const code = $('dec-new-code').value.trim();
   const amount = parseFloat($('dec-new-amt').value);
-  if(!no){ alert('⚠️ يرجى إدخال رقم القرار'); return false; }
-  if(!(amount>=0)){ alert('⚠️ يرجى إدخال مبلغ القرار'); return false; }
+  if(!no){ alert('⚠️ يرجى إدخال رقم القرار'); $('dec-new-no').focus(); return false; }
+  if(!code){ alert('⚠️ يرجى إدخال الكود'); $('dec-new-code').focus(); return false; }
+  if(!(amount>0)){ alert('⚠️ يرجى إدخال مبلغ القرار (أكبر من صفر)'); $('dec-new-amt').focus(); return false; }
   stateDecisions.push({no, code, amount});
   $('dec-new-no').value=''; $('dec-new-code').value=''; $('dec-new-amt').value='';
   markFormDirty();
@@ -1743,9 +1748,10 @@ function addDecision(){
 }
 function decDone(){
   // لو كُتب قرار ولم يُضغط + أضفه تلقائيًا
-  if($('dec-new-amt').value.trim()!==''){ if(!addDecision()) return; }
+  if($('dec-new-no').value.trim()||$('dec-new-code').value.trim()||$('dec-new-amt').value.trim()){ if(!addDecision()) return; }
   if(_decSaveMode){
     if(!stateDecisions.length){ alert('⚠️ لا يمكن حفظ مريض نفقة دولة بدون إضافة قرار واحد على الأقل'); return; }
+    if(stateDecisions.some(d=>!String(d.no||'').trim()||!String(d.code||'').trim()||!(Number(d.amount)>0))){ alert('⚠️ يرجى استكمال جميع خانات القرارات (رقم القرار، الكود، المبلغ)'); return; }
     _decConfirmed=true;
     closeDecisionsModal();
     savePatient();
@@ -1758,8 +1764,8 @@ function delDecision(i){
 }
 function editDecision(i, field, val){
   if(!stateDecisions[i]) return;
-  if(field==='amount') val = Math.max(0, parseFloat(val)||0);
-  else val = String(val).trim();
+  if(field==='amount') val = parseFloat(val)||0; else val = String(val).trim();
+  if(!val){ alert('⚠️ لا يمكن ترك هذه الخانة فارغة'); renderDecisions(); return; }
   stateDecisions[i][field]=val;
   markFormDirty();
   renderDecisions(); renderDecisionsSummary();
@@ -1824,7 +1830,7 @@ function buildInvoice(pt){
   const cats=['أدوية','مستلزمات','شرائح ومسامير','أشعة','تحاليل','بنك الدم','أجهزة','خدمات أخري'];
 
   // جدول قرارات نفقة الدولة — يُطبع أسفل الإجمالي الكلي المطلوب
-  const decs = (stype==='نفقة دولة') ? (live?stateDecisions:(pt.decisions||[])) : [];
+  const decs = (stype==='نفقة دولة' && ICU_DEPTS[dept]) ? (live?stateDecisions:(pt.decisions||[])) : [];
   let decHtml='';
   if(decs.length){
     const drows=decWithRemaining(decs, grand);
@@ -2052,7 +2058,7 @@ function getFormData(){
     entryRaw:Vv('p_entry'),   exitRaw:Vv('p_exit'),
     days, fixed:JSON.parse(JSON.stringify(fixed)),
     items:JSON.parse(JSON.stringify(billItems)),
-    decisions: (Vv('p_stype')==='نفقة دولة') ? JSON.parse(JSON.stringify(stateDecisions)) : [],
+    decisions: decisionsRequired() ? JSON.parse(JSON.stringify(stateDecisions)) : [],
     feesSum, itemsSum, total:feesSum+itemsSum,
     fStay:parseFloat(Vv('f_stay'))||0,  fMed:parseFloat(Vv('f_med'))||0,
     fNur:parseFloat(Vv('f_nur'))||0,    fDoc:parseFloat(Vv('f_doc'))||0,
@@ -2109,7 +2115,7 @@ async function savePatient(){
     }
 
     // نفقة الدولة: لا حفظ إلا بعد إدخال القرارات من النافذة
-    if(stype==='نفقة دولة'){
+    if(decisionsRequired()){
       if(!_decConfirmed){ openDecisionsModal(true); return; }
       _decConfirmed=false;
       if(!stateDecisions.length){ openDecisionsModal(true); return; }
@@ -2178,8 +2184,7 @@ function editPatient(fid){
   [...$('p_stype').options].forEach(o=>{if(o.value===pt.stype)o.selected=true;});
   // استعادة قرارات نفقة الدولة
   stateDecisions = JSON.parse(JSON.stringify(pt.decisions||[]));
-  $('decisions-card').style.display = (pt.stype==='نفقة دولة') ? '' : 'none';
-  renderDecisionsSummary();
+  updateDecisionsCardVisibility();
   // استعادة فئة التأمين وقائمة الولادة
   if(pt.stype==='تأمين صحي'){
     $('tamin-wrap').style.display='';
