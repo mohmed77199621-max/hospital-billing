@@ -2772,6 +2772,9 @@ async function printCostSummary(){
     return;
   }
 
+  // تحميل كل المرضى أولًا — البرنامج يحمّلهم على دفعات، وبدون هذه الخطوة تدخل في الطباعة الدفعة المحمّلة فقط
+  if(!(await ensureAllPatientsLoaded())) return;
+
   function parsePD(str){
     if(!str) return null;
     if(str.includes('/')){
