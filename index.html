@@ -2773,6 +2773,8 @@ async function printCostSummary(){
   }
 
   // تحميل كل المرضى أولًا — البرنامج يحمّلهم على دفعات، وبدون هذه الخطوة تدخل في الطباعة الدفعة المحمّلة فقط
+  // إعادة تحميل القائمة من قاعدة البيانات (لالتقاط أي مريض أُضيف أو عُدّل من جهاز آخر) ثم تحميل كل الدفعات
+  await loadPatients(true);
   if(!(await ensureAllPatientsLoaded())) return;
 
   function parsePD(str){
