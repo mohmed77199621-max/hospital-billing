@@ -1810,7 +1810,6 @@ function buildInvoice(pt){
   const live=!pt;
   const name  =live?Vv('p_name') :pt.name;
   const ticket=live?Vv('p_ticket'):pt.ticket;
-  const invSeq = live ? ((patients.find(p=>p.firestoreId===editId)||{}).invoiceSeq||'') : (pt.invoiceSeq||'');
   const dept  =live?Vv('p_dept') :pt.dept;
   const stype =live?Vv('p_stype'):pt.stype;
   const letter=live?Vv('p_letter'):pt.letter;
@@ -1878,7 +1877,7 @@ function buildInvoice(pt){
       <tr><td class="lh">اسم المريض</td><td style="font-weight:900;font-size:10pt">${name||'—'}</td><td class="lh">رقم التذكرة</td><td style="font-weight:900">${ticket||'—'}</td></tr>
       <tr><td class="lh">القسم الطبي</td><td style="font-weight:800">${dept||'—'}</td><td class="lh">نوع الخدمة</td><td style="font-weight:800">${stype||'—'}</td></tr>
       <tr><td class="lh">فئة التأمين</td><td style="font-weight:800">${taminType||'—'}</td><td class="lh">نوع العملية</td><td>${optype||'—'}</td></tr>
-      ${(stype==='تأمين صحي' && invSeq) ? `<tr><td class="lh">رقم الخطاب / القرار</td><td>${letter||'—'}</td><td class="lh">رقم الفاتورة</td><td style="font-weight:900;font-size:10pt">${invSeq}</td></tr>` : `<tr><td class="lh">رقم الخطاب / القرار</td><td colspan="3">${letter||'—'}</td></tr>`}
+      <tr><td class="lh">رقم الخطاب / القرار</td><td colspan="3">${letter||'—'}</td></tr>
       <tr><td class="lh">تاريخ الدخول</td><td style="font-weight:800">${entry||'—'}</td><td class="lh">تاريخ الخروج</td><td style="font-weight:800">${exitD||'—'}</td></tr>
       <tr><td class="lh">مدة الإقامة</td><td colspan="3" style="font-weight:900;font-size:10pt">${days} يوم</td></tr>
     </table>
@@ -2152,19 +2151,13 @@ async function savePatient(){
     try{
       if(editId){
         // بيانات مدخل البيانات/المدير هي الأساسية والأخيرة — تُحفظ كما هي على الشاشة بالضبط، بدون أي دمج أو تخمين
-        // نحتفظ بوقت الإدخال الأصلي حتى لا يتغير ترتيب المريض في الجداول عند تعديله
-        const _old = patients.find(p=>p.firestoreId===editId);
-        const _created = _old ? (_old.createdAt || _old.savedAt) : null;
-        if(_created) pt.createdAt = _created;
-        if(_old && _old.invoiceSeq) pt.invoiceSeq = _old.invoiceSeq; // رقم الفاتورة (ترتيبه في جدول التأمين) لا يضيع عند التعديل
         await db.collection('patients').doc(editId).set(pt);
         savedTotal = pt.total;
-        savedDoc = {...pt, firestoreId: editId, savedAt: new Date(), createdAt: _created || new Date()}; // serverTimestamp() sentinel لا يصلح للعرض المحلي، فبنستخدم وقت الجهاز مؤقتًا لحد ما يوصل التحديث الحقيقي من المستمع الحي
+        savedDoc = {...pt, firestoreId: editId, savedAt: new Date()}; // serverTimestamp() sentinel لا يصلح للعرض المحلي، فبنستخدم وقت الجهاز مؤقتًا لحد ما يوصل التحديث الحقيقي من المستمع الحي
       }
       else{
-        pt.createdAt = firebase.firestore.FieldValue.serverTimestamp(); // وقت الإدخال لأول مرة (لا يتغير بالتعديل)
         const ref = await db.collection('patients').add(pt);
-        savedDoc = {...pt, firestoreId: ref.id, savedAt: new Date(), createdAt: new Date()};
+        savedDoc = {...pt, firestoreId: ref.id, savedAt: new Date()};
       }
       editId=null; clearForm();
       const idx = patients.findIndex(p=>p.firestoreId===savedDoc.firestoreId);
@@ -2744,15 +2737,6 @@ function buildCostSummaryRows(list){
 }
 
 // استخراج الرقم من رقم التذكرة (للترتيب حسب رقم التذكرة في طباعة تكلفة الفواتير)
-// وقت إدخال المريض بالميللي ثانية (وقت الإدخال الأول، وإن لم يوجد فآخر وقت حفظ)
-function _entryMs(pt){
-  const t = pt.createdAt || pt.savedAt;
-  if(!t) return 0;
-  if(typeof t.toMillis==='function') return t.toMillis();
-  if(t instanceof Date) return t.getTime();
-  if(t.seconds) return t.seconds*1000;
-  return 0;
-}
 function _ticketNum(t){
   const n = parseInt(String(t||'').replace(/[^\d]/g,''), 10);
   return isNaN(n) ? 0 : n;
@@ -2788,6 +2772,11 @@ async function printCostSummary(){
     return;
   }
 
+  // تحميل كل المرضى أولًا — البرنامج يحمّلهم على دفعات، وبدون هذه الخطوة تدخل في الطباعة الدفعة المحمّلة فقط
+  // إعادة تحميل القائمة من قاعدة البيانات (لالتقاط أي مريض أُضيف أو عُدّل من جهاز آخر) ثم تحميل كل الدفعات
+  await loadPatients(true);
+  if(!(await ensureAllPatientsLoaded())) return;
+
   function parsePD(str){
     if(!str) return null;
     if(str.includes('/')){
@@ -2799,28 +2788,7 @@ async function printCostSummary(){
 
   const [yy,mm] = monthVal.split('-').map(Number);
 
-  // جلب مرضى الشهر المختار فقط من قاعدة البيانات (قراءات أقل بكثير من تحميل كل المرضى)
-  const mm2 = String(mm).padStart(2,'0');
-  let monthDocs = [];
-  try{
-    setStatus('wait');
-    const snap = await db.collection('patients')
-      .where('exitRaw','>=',`${yy}-${mm2}-01`)
-      .where('exitRaw','<=',`${yy}-${mm2}-31`)
-      .get();
-    monthDocs = snap.docs.map(d=>({...d.data(), firestoreId:d.id}));
-    setStatus('ok');
-  }catch(err){
-    console.error('جلب مرضى الشهر:', err);
-    setStatus('err');
-    alert('⚠️ تعذّر جلب بيانات الشهر من قاعدة البيانات. تحقق من الاتصال وأعد المحاولة.');
-    return;
-  }
-  // إضافة المرضى المحمّلين بالفعل في الشاشة (دون قراءة جديدة) في حال لم يكن لديهم تاريخ خروج بصيغة قياسية
-  const _seenIds = new Set(monthDocs.map(x=>x.firestoreId));
-  patients.forEach(x=>{ if(!_seenIds.has(x.firestoreId)) monthDocs.push(x); });
-
-  let filtered = monthDocs.filter(pt=>{
+  let filtered = patients.filter(pt=>{
     const exitD = parsePD(pt.exit||pt.exitRaw);
     if(!exitD || isNaN(exitD)) return false;
     if(exitD.getFullYear()!==yy || (exitD.getMonth()+1)!==mm) return false;
@@ -2832,25 +2800,8 @@ async function printCostSummary(){
 
   if(!filtered.length){ alert('لا يوجد مرضي مطابقون لهذه المعايير'); return; }
 
-  // الترتيب حسب ترتيب الإدخال: الأقدم إدخالًا أولًا، والأحدث إدخالًا في آخر الجدول
-  filtered = filtered.slice().sort((a,b)=>_entryMs(a)-_entryMs(b) || _ticketNum(a.ticket)-_ticketNum(b.ticket));
-
-  // التأمين الصحي: رقم كل مريض في هذا الجدول (م) يُحفظ عليه ليظهر كـ«رقم الفاتورة» في فاتورته المطبوعة
   if(stypeVal==='تأمين صحي'){
-    const toNumber = filtered.map((pt,i)=>({pt,seq:i+1})).filter(x=>x.pt.firestoreId && x.pt.invoiceSeq!==x.seq);
-    if(toNumber.length){
-      try{
-        for(let k=0;k<toNumber.length;k+=400){
-          const batch=db.batch();
-          toNumber.slice(k,k+400).forEach(x=>batch.update(db.collection('patients').doc(x.pt.firestoreId),{invoiceSeq:x.seq}));
-          await batch.commit();
-        }
-        toNumber.forEach(x=>{ x.pt.invoiceSeq=x.seq; const lp=patients.find(p=>p.firestoreId===x.pt.firestoreId); if(lp) lp.invoiceSeq=x.seq; });
-      }catch(err){
-        console.error('invoiceSeq:', err);
-        alert('⚠️ تعذّر حفظ أرقام الفواتير على فواتير المرضى. سيُطبع الجدول، لكن قد لا تظهر الأرقام على فواتيرهم.');
-      }
-    }
+    filtered = filtered.slice().sort((a,b)=>_ticketNum(a.ticket)-_ticketNum(b.ticket));
   }
 
   const {hdr, rows, tot, drugsTotal, suppliesTotal, screwsTotal, invoiceTotal} = buildCostSummaryRows(filtered);
