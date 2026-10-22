@@ -2312,7 +2312,8 @@ function loadDefaultBillItems(stype){
     let found = catItems.find(x=>x.name===def.name);
     if(!found) found = catItems.find(x=>normalize(x.name)===defN);
     if(!found) found = catItems.find(x=>normalize(x.name).includes(defN)||defN.includes(normalize(x.name)));
-    const price = found ? found.price : 0;
+    if(!found) return; // الصنف غير موجود في قائمة الأسعار → لا يُضاف
+    const price = found.price;
     billItems.push({
       id: Date.now() + Math.random(),
       name: def.name, cat: def.cat,
@@ -2703,7 +2704,7 @@ function buildCostSummaryRows(list){
     _screwsRaw   += screwsVal;
     const stay=parseFloat(fmt(pt.fStay||0));
     return [
-      pt.ticket||'', pt.name||'', pt.dept||'', pt.stype||'', pt.taminType||'', pt.group||'', pt.letter||'',
+      pt.ticket||'', pt.name||'', pt.dept||'', pt.stype||'', pt.taminType||'', (pt.dept==='العظام' ? (pt.group||'') : ''), pt.letter||'',
       pt.entry||pt.entryRaw||'', pt.exit||pt.exitRaw||'', pt.days||0,
       stay, pt.fMed||0, pt.fNur||0,
       pt.fDoc||0, pt.fAnes||0, pt.fOr||0, pt.optype||'',
@@ -2772,11 +2773,6 @@ async function printCostSummary(){
     return;
   }
 
-  // تحميل كل المرضى أولًا — البرنامج يحمّلهم على دفعات، وبدون هذه الخطوة تدخل في الطباعة الدفعة المحمّلة فقط
-  // إعادة تحميل القائمة من قاعدة البيانات (لالتقاط أي مريض أُضيف أو عُدّل من جهاز آخر) ثم تحميل كل الدفعات
-  await loadPatients(true);
-  if(!(await ensureAllPatientsLoaded())) return;
-
   function parsePD(str){
     if(!str) return null;
     if(str.includes('/')){
@@ -2788,7 +2784,28 @@ async function printCostSummary(){
 
   const [yy,mm] = monthVal.split('-').map(Number);
 
-  let filtered = patients.filter(pt=>{
+  // جلب مرضى الشهر المختار مباشرة من قاعدة البيانات (قراءة واحدة لهذا الشهر فقط، بدون تحميل بقية المرضى)
+  const mm2 = String(mm).padStart(2,'0');
+  let monthDocs = [];
+  try{
+    setStatus('wait');
+    const snap = await db.collection('patients')
+      .where('exitRaw','>=',`${yy}-${mm2}-01`)
+      .where('exitRaw','<=',`${yy}-${mm2}-31`)
+      .get();
+    monthDocs = snap.docs.map(d=>({...d.data(), firestoreId:d.id}));
+    setStatus('ok');
+  }catch(err){
+    console.error('جلب مرضى الشهر:', err);
+    setStatus('err');
+    alert('⚠️ تعذّر جلب بيانات الشهر من قاعدة البيانات. تحقق من الاتصال وأعد المحاولة.');
+    return;
+  }
+  // المرضى المحمّلون أصلًا في الشاشة تُضاف دون قراءة جديدة (لو لم يكن لتاريخ خروجهم صيغة قياسية)
+  const _seenIds = new Set(monthDocs.map(x=>x.firestoreId));
+  patients.forEach(x=>{ if(!_seenIds.has(x.firestoreId)) monthDocs.push(x); });
+
+  let filtered = monthDocs.filter(pt=>{
     const exitD = parsePD(pt.exit||pt.exitRaw);
     if(!exitD || isNaN(exitD)) return false;
     if(exitD.getFullYear()!==yy || (exitD.getMonth()+1)!==mm) return false;
