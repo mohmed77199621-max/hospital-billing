@@ -1806,7 +1806,7 @@ function refreshDecisionsUI(){
 }
 
 /* ========== INVOICE ========== */
-function buildInvoice(pt){
+function buildInvoice(pt, invoiceNo){
   const live=!pt;
   const name  =live?Vv('p_name') :pt.name;
   const ticket=live?Vv('p_ticket'):pt.ticket;
@@ -1874,6 +1874,7 @@ function buildInvoice(pt){
   </div>
   <div class="inv-meta">
     <table>
+      ${invoiceNo?`<tr><td class="lh">رقم الفاتورة</td><td colspan="3" style="font-weight:900;font-size:11pt">${invoiceNo}</td></tr>`:''}
       <tr><td class="lh">اسم المريض</td><td style="font-weight:900;font-size:10pt">${name||'—'}</td><td class="lh">رقم التذكرة</td><td style="font-weight:900">${ticket||'—'}</td></tr>
       <tr><td class="lh">القسم الطبي</td><td style="font-weight:800">${dept||'—'}</td><td class="lh">نوع الخدمة</td><td style="font-weight:800">${stype||'—'}</td></tr>
       <tr><td class="lh">فئة التأمين</td><td style="font-weight:800">${taminType||'—'}</td><td class="lh">نوع العملية</td><td>${optype||'—'}</td></tr>
@@ -1935,9 +1936,11 @@ async function markPatientPrinted(fid){
 async function printCurrentInvoice(pt){
   const patientName = ((pt&&pt.name)?pt.name:Vv('p_name').trim()) || '—';
   const fid = (pt && pt.firestoreId) ? pt.firestoreId : '';
-  const html=buildInvoice(pt||null);
+  // نفتح النافذة فوراً (قبل أي انتظار) حتى لا يحجبها المتصفح
   const w=window.open('','_blank','width=1000,height=800');
   if(!w){alert('يرجى السماح بالنوافذ المنبثقة في المتصفح');return;}
+  const invNo = pt ? await getInvoiceNumber(pt) : '';
+  const html=buildInvoice(pt||null, invNo);
   w.document.write(`<!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
@@ -2144,7 +2147,7 @@ async function savePatient(){
     billItems = billItems.filter(x => x.qty > 0);
     renderBill();
 
-    const pt={...getFormData(), savedAt:firebase.firestore.FieldValue.serverTimestamp(), savedBy: currentUser?currentUser.name:'', savedByRole: currentUser?currentUser.role:''};
+    const pt={...getFormData(), savedAt:firebase.firestore.FieldValue.serverTimestamp(), orderByTime:true, savedBy: currentUser?currentUser.name:'', savedByRole: currentUser?currentUser.role:''};
     setStatus('save');
     let savedTotal = pt.total;
     let savedDoc = null; // النسخة النهائية اللي فعلاً اتحفظت، هنستخدمها لتحديث القائمة محليًا بدل إعادة تحميل كل المرضى من السيرفر
@@ -2704,7 +2707,7 @@ function buildCostSummaryRows(list){
     _screwsRaw   += screwsVal;
     const stay=parseFloat(fmt(pt.fStay||0));
     return [
-      pt.ticket||'', pt.name||'', pt.dept||'', pt.stype||'', pt.taminType||'', (pt.dept==='العظام' ? (pt.group||'') : ''), pt.letter||'',
+      pt.ticket||'', pt.name||'', pt.dept||'', pt.stype||'', pt.taminType||'', (getDeptTag(pt.dept)==='bone' ? (pt.group||'') : ''), pt.letter||'',
       pt.entry||pt.entryRaw||'', pt.exit||pt.exitRaw||'', pt.days||0,
       stay, pt.fMed||0, pt.fNur||0,
       pt.fDoc||0, pt.fAnes||0, pt.fOr||0, pt.optype||'',
@@ -2735,6 +2738,83 @@ function buildCostSummaryRows(list){
   });
   const invoiceTotal  = rows.reduce((a,r)=>a+(r[28]||0),0);
   return {hdr, rows, tot, drugsTotal, suppliesTotal, screwsTotal, invoiceTotal};
+}
+
+// ===== ترتيب القائمة حسب وقت ضغط زر الحفظ + ترقيم فواتير التأمين الصحي =====
+const INVOICE_NO_FROM = 202611; // الترقيم يبدأ للمرضى الذين يخرجون من شهر 11/2026 فصاعداً
+
+// وقت آخر ضغط على زر الحفظ بالمللي ثانية (Timestamp من Firestore أو Date أو غير موجود للسجلات القديمة)
+function _savedMs(pt){
+  const v = pt && pt.savedAt;
+  if(!v) return 0;
+  if(typeof v.toMillis==='function') return v.toMillis();
+  if(v instanceof Date) return v.getTime();
+  if(typeof v.seconds==='number') return v.seconds*1000 + Math.floor((v.nanoseconds||0)/1e6);
+  const t = new Date(v).getTime();
+  return isNaN(t) ? 0 : t;
+}
+// الأقدم حفظاً في الأعلى والأحدث في الأسفل (وعند التساوي: رقم التذكرة)
+function _sortBySaved(list){
+  return list.slice().sort((a,b)=>{
+    const d=_savedMs(a)-_savedMs(b);
+    return d!==0 ? d : (_ticketNum(a.ticket)-_ticketNum(b.ticket));
+  });
+}
+// ترتيب قائمة الطباعة:
+// - من شهر 11/2026 فصاعداً: كله حسب وقت الحفظ (الأقدم أعلى، الأحدث أسفل)
+// - الشهور السابقة: الترتيب القديم كما كان بالضبط (تأمين صحي = رقم التذكرة، غير ذلك = كما هو)،
+//   وأي مريض يُحفظ/يُعدَّل بعد هذا التحديث (عليه العلامة orderByTime) يُوضع أسفل الجدول حسب وقت الحفظ
+function _sortForList(list, yy, mm, stypeVal){
+  if(yy*100+mm >= INVOICE_NO_FROM) return _sortBySaved(list);
+  let base = list.filter(p=>!p.orderByTime);
+  const touched = list.filter(p=>p.orderByTime);
+  if(stypeVal==='تأمين صحي') base = base.slice().sort((a,b)=>_ticketNum(a.ticket)-_ticketNum(b.ticket));
+  return base.concat(_sortBySaved(touched));
+}
+// [سنة، شهر] من تاريخ خروج المريض
+function _exitYM(pt){
+  const raw = pt.exitRaw || pt.exit || '';
+  let m = String(raw).match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if(m) return [+m[1], +m[2]];
+  m = String(raw).match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if(m) return [+m[3], +m[2]];
+  return null;
+}
+function _invoiceNoApplies(yy,mm,stype){
+  return stype==='تأمين صحي' && (yy*100+mm) >= INVOICE_NO_FROM;
+}
+// جلب مرضى شهر خروج معيّن (من قاعدة البيانات) + المحمّلين محلياً
+async function _fetchMonthPatients(yy,mm){
+  const mm2 = String(mm).padStart(2,'0');
+  const snap = await db.collection('patients')
+    .where('exitRaw','>=',`${yy}-${mm2}-01`)
+    .where('exitRaw','<=',`${yy}-${mm2}-31`)
+    .get();
+  const docs = snap.docs.map(d=>({...d.data(), firestoreId:d.id}));
+  const seen = new Set(docs.map(x=>x.firestoreId));
+  patients.forEach(x=>{ if(!seen.has(x.firestoreId)) docs.push(x); });
+  return docs;
+}
+// خريطة رقم الفاتورة (firestoreId → رقم) لكل مرضى (شهر + تأمين صحي + فئة التأمين) بكل الأقسام
+function _buildInvoiceNoMap(monthDocs, yy, mm, taminVal){
+  const group = monthDocs.filter(pt=>{
+    const ym=_exitYM(pt);
+    return ym && ym[0]===yy && ym[1]===mm && pt.stype==='تأمين صحي' && pt.taminType===taminVal;
+  });
+  const map = {};
+  _sortBySaved(group).forEach((pt,i)=>{ map[pt.firestoreId]=i+1; });
+  return map;
+}
+// رقم فاتورة مريض واحد (للفاتورة المطبوعة الفردية) — فارغ لو غير منطبق
+async function getInvoiceNumber(pt){
+  try{
+    if(!pt || !pt.firestoreId || pt.stype!=='تأمين صحي' || !pt.taminType) return '';
+    const ym=_exitYM(pt);
+    if(!ym || !_invoiceNoApplies(ym[0],ym[1],pt.stype)) return '';
+    const docs = await _fetchMonthPatients(ym[0],ym[1]);
+    const map = _buildInvoiceNoMap(docs, ym[0], ym[1], pt.taminType);
+    return map[pt.firestoreId] || '';
+  }catch(e){ console.error('getInvoiceNumber:', e); return ''; }
 }
 
 // استخراج الرقم من رقم التذكرة (للترتيب حسب رقم التذكرة في طباعة تكلفة الفواتير)
@@ -2785,15 +2865,10 @@ async function printCostSummary(){
   const [yy,mm] = monthVal.split('-').map(Number);
 
   // جلب مرضى الشهر المختار مباشرة من قاعدة البيانات (قراءة واحدة لهذا الشهر فقط، بدون تحميل بقية المرضى)
-  const mm2 = String(mm).padStart(2,'0');
   let monthDocs = [];
   try{
     setStatus('wait');
-    const snap = await db.collection('patients')
-      .where('exitRaw','>=',`${yy}-${mm2}-01`)
-      .where('exitRaw','<=',`${yy}-${mm2}-31`)
-      .get();
-    monthDocs = snap.docs.map(d=>({...d.data(), firestoreId:d.id}));
+    monthDocs = await _fetchMonthPatients(yy,mm);
     setStatus('ok');
   }catch(err){
     console.error('جلب مرضى الشهر:', err);
@@ -2801,9 +2876,6 @@ async function printCostSummary(){
     alert('⚠️ تعذّر جلب بيانات الشهر من قاعدة البيانات. تحقق من الاتصال وأعد المحاولة.');
     return;
   }
-  // المرضى المحمّلون أصلًا في الشاشة تُضاف دون قراءة جديدة (لو لم يكن لتاريخ خروجهم صيغة قياسية)
-  const _seenIds = new Set(monthDocs.map(x=>x.firestoreId));
-  patients.forEach(x=>{ if(!_seenIds.has(x.firestoreId)) monthDocs.push(x); });
 
   let filtered = monthDocs.filter(pt=>{
     const exitD = parsePD(pt.exit||pt.exitRaw);
@@ -2817,9 +2889,12 @@ async function printCostSummary(){
 
   if(!filtered.length){ alert('لا يوجد مرضي مطابقون لهذه المعايير'); return; }
 
-  if(stypeVal==='تأمين صحي'){
-    filtered = filtered.slice().sort((a,b)=>_ticketNum(a.ticket)-_ticketNum(b.ticket));
-  }
+  // الترتيب: الأقدم حفظاً في الأعلى والأحدث (أو من عُدّل تاريخ خروجه) في الأسفل
+  filtered = _sortForList(filtered, yy, mm, stypeVal);
+
+  // ترقيم الفواتير (تأمين صحي + فئة تأمين، من 11/2026): الرقم = ترتيب المريض بين كل مرضى الشهر والفئة
+  const useInvNo = _invoiceNoApplies(yy,mm,stypeVal) && !!taminVal;
+  const invNoMap = useInvNo ? _buildInvoiceNoMap(monthDocs, yy, mm, taminVal) : null;
 
   const {hdr, rows, tot, drugsTotal, suppliesTotal, screwsTotal, invoiceTotal} = buildCostSummaryRows(filtered);
 
@@ -2854,7 +2929,7 @@ async function printCostSummary(){
 
   // أوزان تقريبية لعرض كل عمود (نفس نسب أعمدة شيت الإكسل) لتوزيع عرض الجدول بما يضمن بقاءه داخل عرض الورقة
   const COL_W = [14,22,16,14,12,14,18,12,12,12,12,12,12,12,12,14,16,14,12,12,14,14,18,18,12,20,14,14,14,24,10,14];
-  const SERIAL_W = 6; // عمود المسلسل (م)
+  const SERIAL_W = useInvNo ? 9 : 6; // عمود المسلسل (م) / رقم الفاتورة
   const totalW = visibleCols.reduce((a,i)=>a+(COL_W[i]||14),0) + SERIAL_W;
   const colgroupHtml = '<colgroup>'
     + `<col style="width:${(SERIAL_W/totalW*100).toFixed(3)}%">`
@@ -2873,8 +2948,8 @@ async function printCostSummary(){
     return fmtExact(v);
   };
 
-  const theadHtml = '<tr><th>م</th>'+visibleCols.map(i=>`<th>${hdr[i]}</th>`).join('')+'</tr>';
-  const bodyHtml = rows.map((r,ri)=>'<tr><td>'+(ri+1)+'</td>'+visibleCols.map(i=>{
+  const theadHtml = '<tr><th>'+(useInvNo?'رقم الفاتورة':'م')+'</th>'+visibleCols.map(i=>`<th>${hdr[i]}</th>`).join('')+'</tr>';
+  const bodyHtml = rows.map((r,ri)=>'<tr><td>'+(useInvNo ? (invNoMap[filtered[ri].firestoreId]||(ri+1)) : (ri+1))+'</td>'+visibleCols.map(i=>{
     const v=r[i];
     return `<td${typeof v==='number'?' style="text-align:center"':''}>${fmtCell(v,i)}</td>`;
   }).join('')+'</tr>').join('');
