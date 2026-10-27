@@ -2147,20 +2147,35 @@ async function savePatient(){
     billItems = billItems.filter(x => x.qty > 0);
     renderBill();
 
-    const pt={...getFormData(), savedAt:firebase.firestore.FieldValue.serverTimestamp(), orderByTime:true, savedBy: currentUser?currentUser.name:'', savedByRole: currentUser?currentUser.role:''};
+    const _fv = firebase.firestore.FieldValue.serverTimestamp();
+    const pt={...getFormData(), savedAt:_fv, seqAt:_fv, orderByTime:true, savedBy: currentUser?currentUser.name:'', savedByRole: currentUser?currentUser.role:''};
     setStatus('save');
     let savedTotal = pt.total;
     let savedDoc = null; // النسخة النهائية اللي فعلاً اتحفظت، هنستخدمها لتحديث القائمة محليًا بدل إعادة تحميل كل المرضى من السيرفر
+    let _seqIsNew = true; // هل الترتيب/الرقم جديد (أول حفظ أو تغيّر شهر الخروج/نوع الخدمة/فئة التأمين)؟
     try{
       if(editId){
+        // الرقم المسلسل ثابت من أول حفظ: نحتفظ بوقت أول حفظ، ولا نبدّله إلا لو انتقل المريض لمجموعة أخرى (شهر خروج / نوع خدمة / فئة تأمين مختلفة)
+        try{
+          let old = patients.find(p=>p.firestoreId===editId);
+          if(!old){ const od = await db.collection('patients').doc(editId).get(); if(od.exists) old = od.data(); }
+          if(old){
+            const k = x=>{ const ym=_exitYM(x); return (ym?ym[0]+'-'+ym[1]:'')+'|'+(x.stype||'')+'|'+(x.stype==='تأمين صحي'?(x.taminType||''):''); };
+            if(k(old)===k(pt)){
+              const oldYM=_exitYM(old);
+              if(old.seqAt){ pt.seqAt=old.seqAt; _seqIsNew=false; }
+              else if(oldYM && oldYM[0]*100+oldYM[1]>=INVOICE_NO_FROM && old.savedAt){ pt.seqAt=old.savedAt; _seqIsNew=false; } // سجل قديم من شهر 11 فأحدث: يحتفظ بمكانه
+            }
+          }
+        }catch(e){ console.warn('seqAt keep:', e); }
         // بيانات مدخل البيانات/المدير هي الأساسية والأخيرة — تُحفظ كما هي على الشاشة بالضبط، بدون أي دمج أو تخمين
         await db.collection('patients').doc(editId).set(pt);
         savedTotal = pt.total;
-        savedDoc = {...pt, firestoreId: editId, savedAt: new Date()}; // serverTimestamp() sentinel لا يصلح للعرض المحلي، فبنستخدم وقت الجهاز مؤقتًا لحد ما يوصل التحديث الحقيقي من المستمع الحي
+        savedDoc = {...pt, firestoreId: editId, savedAt: new Date()}; if(_seqIsNew) savedDoc.seqAt = savedDoc.savedAt; // serverTimestamp() sentinel لا يصلح للعرض المحلي، فبنستخدم وقت الجهاز مؤقتًا لحد ما يوصل التحديث الحقيقي من المستمع الحي
       }
       else{
         const ref = await db.collection('patients').add(pt);
-        savedDoc = {...pt, firestoreId: ref.id, savedAt: new Date()};
+        savedDoc = {...pt, firestoreId: ref.id, savedAt: new Date(), seqAt: new Date()};
       }
       editId=null; clearForm();
       const idx = patients.findIndex(p=>p.firestoreId===savedDoc.firestoreId);
@@ -2745,7 +2760,8 @@ const INVOICE_NO_FROM = 202611; // الترقيم يبدأ للمرضى الذي
 
 // وقت آخر ضغط على زر الحفظ بالمللي ثانية (Timestamp من Firestore أو Date أو غير موجود للسجلات القديمة)
 function _savedMs(pt){
-  const v = pt && pt.savedAt;
+  // وقت أول حفظ للمريض (seqAt) ثابت لا يتغير بالتعديل؛ والسجلات القديمة تعتمد على savedAt
+  const v = pt && (pt.seqAt || pt.savedAt);
   if(!v) return 0;
   if(typeof v.toMillis==='function') return v.toMillis();
   if(v instanceof Date) return v.getTime();
