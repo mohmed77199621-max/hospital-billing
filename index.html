@@ -2161,6 +2161,7 @@ async function savePatient(){
           if(!old){ const od = await db.collection('patients').doc(editId).get(); if(od.exists) old = od.data(); }
           if(old){
             const k = x=>{ const ym=_exitYM(x); return (ym?ym[0]+'-'+ym[1]:'')+'|'+(x.stype||'')+'|'+(x.stype==='تأمين صحي'?(x.taminType||''):''); };
+            if(k(old)!==k(pt)) await _recordInvoiceGap(editId, old); // انتقل لمجموعة أخرى: يبقى رقمه القديم محجوزاً
             if(k(old)===k(pt)){
               const oldYM=_exitYM(old);
               if(old.seqAt){ pt.seqAt=old.seqAt; _seqIsNew=false; }
@@ -2233,7 +2234,9 @@ async function deletePatient(fid){
   if(!pt||!confirm('تأكيد حذف المريض:\n'+(pt.name||'')+'؟\nلا يمكن التراجع عن الحذف'))return;
   try{
     setStatus('save');
+    const gapOk = await _recordInvoiceGap(fid, pt); // حجز رقم الفاتورة قبل الحذف
     await db.collection('patients').doc(fid).delete();
+    if(!gapOk) alert('⚠️ تم حذف المريض لكن تعذّر حجز رقم فاتورته، فقد تتغير أرقام الفواتير التالية له.');
     patients = patients.filter(p=>p.firestoreId!==fid);
     renderPatients();
     setStatus('ok');
@@ -2811,15 +2814,52 @@ async function _fetchMonthPatients(yy,mm){
   patients.forEach(x=>{ if(!seen.has(x.firestoreId)) docs.push(x); });
   return docs;
 }
-// خريطة رقم الفاتورة (firestoreId → رقم) لكل مرضى (شهر + تأمين صحي + فئة التأمين) بكل الأقسام
-function _buildInvoiceNoMap(monthDocs, yy, mm, taminVal){
+// ===== أرقام الفواتير المحجوزة (المرضى المحذوفون أو المنقولون لشهر/فئة أخرى) =====
+// عند حذف مريض يبقى رقمه محجوزاً (يظهر شرطة في القائمة) حتى لا تتغير أرقام الباقين
+async function _recordInvoiceGap(fid, oldData){
+  try{
+    let d = oldData;
+    if(!d){
+      const snap = await db.collection('patients').doc(fid).get();
+      if(!snap.exists) return true;
+      d = snap.data();
+    }
+    const ym=_exitYM(d);
+    if(!ym || d.stype!=='تأمين صحي' || !d.taminType || !_invoiceNoApplies(ym[0],ym[1],d.stype)) return true; // لا يحتاج حجز رقم
+    await db.collection('invoiceGaps').doc(fid).set({
+      ym: ym[0]+'-'+ym[1], taminType: d.taminType, dept: d.dept||'',
+      seqMs: _savedMs(d), at: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    return true;
+  }catch(e){ console.warn('invoice gap:', e); return false; }
+}
+async function _fetchInvoiceGaps(yy,mm){
+  try{
+    const snap = await db.collection('invoiceGaps').where('ym','==',yy+'-'+mm).get();
+    return snap.docs.map(d=>({fid:d.id, ...d.data()}));
+  }catch(e){ console.warn('fetch gaps:', e); return []; }
+}
+// أرقام الفواتير لكل مرضى (شهر + تأمين صحي + فئة التأمين) بكل الأقسام مع الأرقام المحجوزة
+// يرجع { map: firestoreId→رقم، gaps: [{no, dept}] }
+function _buildInvoiceNoMap(monthDocs, yy, mm, taminVal, gapDocs){
   const group = monthDocs.filter(pt=>{
     const ym=_exitYM(pt);
     return ym && ym[0]===yy && ym[1]===mm && pt.stype==='تأمين صحي' && pt.taminType===taminVal;
   });
-  const map = {};
-  _sortBySaved(group).forEach((pt,i)=>{ map[pt.firestoreId]=i+1; });
-  return map;
+  const ids = new Set(group.map(p=>p.firestoreId));
+  const gapItems = (gapDocs||[]).filter(g=>g.taminType===taminVal && !ids.has(g.fid)).map(g=>({gap:g, ms:+g.seqMs||0}));
+  const items = group.map(p=>({pt:p, ms:_savedMs(p)})).concat(gapItems);
+  items.sort((x,y)=>{
+    if(x.ms!==y.ms) return x.ms-y.ms;
+    if(x.pt && y.pt) return _ticketNum(x.pt.ticket)-_ticketNum(y.pt.ticket);
+    return x.pt ? -1 : (y.pt ? 1 : 0);
+  });
+  const map = {}, gaps = [];
+  items.forEach((it,i)=>{
+    if(it.pt) map[it.pt.firestoreId]=i+1;
+    else gaps.push({no:i+1, dept:it.gap.dept||''});
+  });
+  return {map, gaps};
 }
 // رقم فاتورة مريض واحد (للفاتورة المطبوعة الفردية) — فارغ لو غير منطبق
 async function getInvoiceNumber(pt){
@@ -2827,9 +2867,8 @@ async function getInvoiceNumber(pt){
     if(!pt || !pt.firestoreId || pt.stype!=='تأمين صحي' || !pt.taminType) return '';
     const ym=_exitYM(pt);
     if(!ym || !_invoiceNoApplies(ym[0],ym[1],pt.stype)) return '';
-    const docs = await _fetchMonthPatients(ym[0],ym[1]);
-    const map = _buildInvoiceNoMap(docs, ym[0], ym[1], pt.taminType);
-    return map[pt.firestoreId] || '';
+    const [docs, gaps] = await Promise.all([_fetchMonthPatients(ym[0],ym[1]), _fetchInvoiceGaps(ym[0],ym[1])]);
+    return _buildInvoiceNoMap(docs, ym[0], ym[1], pt.taminType, gaps).map[pt.firestoreId] || '';
   }catch(e){ console.error('getInvoiceNumber:', e); return ''; }
 }
 
@@ -2910,7 +2949,13 @@ async function printCostSummary(){
 
   // ترقيم الفواتير (تأمين صحي + فئة تأمين، من 11/2026): الرقم = ترتيب المريض بين كل مرضى الشهر والفئة
   const useInvNo = _invoiceNoApplies(yy,mm,stypeVal) && !!taminVal;
-  const invNoMap = useInvNo ? _buildInvoiceNoMap(monthDocs, yy, mm, taminVal) : null;
+  let invNoMap = null, invGaps = [];
+  if(useInvNo){
+    const gapDocs = await _fetchInvoiceGaps(yy,mm);
+    const r = _buildInvoiceNoMap(monthDocs, yy, mm, taminVal, gapDocs);
+    invNoMap = r.map;
+    invGaps = r.gaps.filter(g=>!deptVals.length || deptVals.includes(g.dept));
+  }
 
   const {hdr, rows, tot, drugsTotal, suppliesTotal, screwsTotal, invoiceTotal} = buildCostSummaryRows(filtered);
 
@@ -2965,10 +3010,22 @@ async function printCostSummary(){
   };
 
   const theadHtml = '<tr><th>'+(useInvNo?'رقم الفاتورة':'م')+'</th>'+visibleCols.map(i=>`<th>${hdr[i]}</th>`).join('')+'</tr>';
-  const bodyHtml = rows.map((r,ri)=>'<tr><td>'+(useInvNo ? (invNoMap[filtered[ri].firestoreId]||(ri+1)) : (ri+1))+'</td>'+visibleCols.map(i=>{
+  const rowHtml = (r,ri,no)=>'<tr><td>'+no+'</td>'+visibleCols.map(i=>{
     const v=r[i];
     return `<td${typeof v==='number'?' style="text-align:center"':''}>${fmtCell(v,i)}</td>`;
-  }).join('')+'</tr>').join('');
+  }).join('')+'</tr>';
+  let bodyHtml;
+  if(useInvNo){
+    // الأرقام المحجوزة (مرضى محذوفون) تظهر كصف شرطة في مكان رقمها
+    const entries = rows.map((r,ri)=>({no: invNoMap[filtered[ri].firestoreId]||(ri+1), html: null, r, ri}))
+      .concat(invGaps.map(g=>({no:g.no, gap:true})));
+    entries.sort((x,y)=>x.no-y.no);
+    bodyHtml = entries.map(e=> e.gap
+      ? '<tr><td>'+e.no+'</td>'+visibleCols.map(()=>'<td style="text-align:center">—</td>').join('')+'</tr>'
+      : rowHtml(e.r,e.ri,e.no)).join('');
+  } else {
+    bodyHtml = rows.map((r,ri)=>rowHtml(r,ri,ri+1)).join('');
+  }
   const totHtml = '<tr class="pc-tot-row"><td colspan="2">الإجمالي الكلي</td>'+visibleCols.slice(1).map(i=>{
     const v=tot[i];
     return `<td>${fmtTotCell(v,i)}</td>`;
@@ -3803,7 +3860,9 @@ function renderPharmPatients(){
 async function deletePharmPatient(fid, name){
   if(!confirm('⚠️ تأكيد حذف المريض:\n' + name + '\nلا يمكن التراجع عن الحذف')) return;
   try{
+    const gapOk = await _recordInvoiceGap(fid); // حجز رقم الفاتورة قبل الحذف
     await db.collection('patients').doc(fid).delete();
+    if(!gapOk) alert('⚠️ تم حذف المريض لكن تعذّر حجز رقم فاتورته، فقد تتغير أرقام الفواتير التالية له.');
     pharmPatients = pharmPatients.filter(p=>p.firestoreId!==fid);
     renderPharmPatients();
   }catch(e){ alert('❌ خطأ في الحذف: '+e.message); }
