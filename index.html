@@ -216,8 +216,7 @@ input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
     <input type="password" id="l_pass" class="login-inp" placeholder="كلمة المرور" onkeydown="if(event.key==='Enter')doLogin()">
     <button class="login-btn" onclick="doLogin()">🔐 دخول</button>
     <div style="margin-top:14px;font-size:.78rem">
-      <span style="color:var(--tm)">مستخدم جديد؟</span>
-      <a href="javascript:void(0)" onclick="showRegisterScreen()" style="color:var(--pl);font-weight:900;text-decoration:none">سجّل حسابك من هنا</a>
+      <span style="color:var(--tm)">للحصول على حساب جديد، تواصل مع مدير النظام</span>
     </div>
     <div style="margin-top:10px;font-size:.66rem;color:var(--tm)">جميع العمليات مسجلة باسم المستخدم</div>
   </div>
@@ -837,8 +836,14 @@ function init(){
   $('login-screen').style.display='flex';
   
   setStatus('wait');
-  ensureAdminSeed();
+}
 
+/* يبدأ تحميل البيانات بعد تسجيل الدخول فقط (قواعد الأمان تمنع القراءة قبله) */
+let _listenersStarted = false;
+function startDataListeners(){
+  if(_listenersStarted) return;
+  _listenersStarted = true;
+  setStatus('wait');
   // تحميل القائمة الأصلية (مدخل البيانات) — استماع مباشر للتحديثات الفورية
   let mainFirstLoad = true;
   db.collection('settings').doc('main').onSnapshot(snap=>{
@@ -3622,6 +3627,7 @@ async function doLogin(){
 
 function finishLogin(){
   $('login-screen').style.display='none';
+  startDataListeners();
   applyRoleUI();
   db.collection('auditLog').add({action:'login', user:currentUser.name, role:currentUser.role, at: firebase.firestore.FieldValue.serverTimestamp()}).catch(()=>{});
 }
@@ -3633,7 +3639,7 @@ function doLogout(){
   // إيقاف جميع المستمعات الفورية
   if(_pharmPatientsUnsub){ _pharmPatientsUnsub(); _pharmPatientsUnsub=null; }
   if(_patientsUnsub){ _patientsUnsub(); _patientsUnsub=null; }
-  auth.signOut().catch(()=>{});
+  auth.signOut().catch(()=>{}).finally(()=>location.reload());
   currentUser = null;
   pharmPatients = []; patients = [];
   $('login-screen').style.display='flex';
