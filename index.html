@@ -362,7 +362,7 @@ input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
               <input type="text" id="i_q" oninput="filterDD()" onfocus="filterDD()" onblur="hideDD()" placeholder="اكتب للبحث..." class="inp" style="width:100%;box-sizing:border-box">
               <div id="i_dd" class="dd-list"></div>
             </div>
-            <input type="number" id="i_qty" value="1" min="0.01" step="0.01" class="inp" style="flex:0 0 70px;text-align:center">
+            <input type="number" id="i_qty" value="1" min="0.01" step="any" class="inp" style="flex:0 0 70px;text-align:center">
             <button onclick="addItem()" class="btn btn-p" style="flex:0 0 42px;width:42px;height:38px;padding:0;justify-content:center;font-size:1.2rem">+</button>
           </div>
         </div>
@@ -844,6 +844,11 @@ function init(){
 const ALL_STYPES = ['اقتصادي','نفقة دولة','قوائم انتظار','تأمين صحي','مجاني'];
 const ALL_CATS   = ['أدوية','مستلزمات','شرائح ومسامير','أشعة','تحاليل','بنك الدم','أجهزة','خدمات أخري'];
 function _stypeVisible(s){ return !(currentUser && Array.isArray(currentUser.allowedStypes)) || currentUser.allowedStypes.includes(s); }
+/* أنواع المرضى التي تظهر للمستخدم في القوائم والتقارير (يحددها المدير) — null = الكل */
+function _ptVisible(pt){
+  if(!currentUser || !Array.isArray(currentUser.visibleStypes)) return true;
+  return currentUser.visibleStypes.includes(pt && pt.stype);
+}
 function _catAllowed(c){ return !(currentUser && Array.isArray(currentUser.allowedCats)) || currentUser.allowedCats.includes(c); }
 function applyUserPerms(){
   if(!currentUser || currentUser.role==='admin') return;
@@ -1557,8 +1562,10 @@ function addItem(){
   }
   if(!selItem){alert('يرجى اختيار صنف من القائمة');return;}
   if(!_catAllowed(Vv('i_cat'))){alert('⚠️ لا تملك صلاحية إضافة أصناف من هذا القسم');return;}
-  const qty=Math.max(0.01,parseFloat(Vv('i_qty'))||1);
+  let qty=Math.max(0.01,parseFloat(Vv('i_qty'))||1);
   const cat=Vv('i_cat');
+  // نفقة الدولة (أقسام العناية): كل الأصناف غير المستلزمات بكميات صحيحة فقط (بدون كسور)
+  if(decisionsRequired() && cat!=='مستلزمات'){ qty=Math.max(1,Math.round(qty)); }
   const existing=billItems.find(x=>x.name===selItem.name && x.cat===cat);
   if(existing){
     existing.qty=parseFloat((existing.qty+qty).toFixed(4));
@@ -1622,7 +1629,13 @@ function updateItemQty(id, val){ markFormDirty();
     renderBill();
     return;
   }
-  const qty = parseFloat(val);
+  let qty = parseFloat(val);
+  // نفقة الدولة (أقسام العناية): كميات صحيحة فقط لغير المستلزمات
+  if(qty>0 && decisionsRequired() && item.cat!=='مستلزمات' && !Number.isInteger(qty)){
+    qty = Math.max(1, Math.round(qty));
+    item.qty = qty; item.total = parseFloat((item.price*qty).toFixed(4));
+    renderBill(); calcTotal(); return;
+  }
   // لو الكمية صفر أو أقل → احذف الصنف فوراً
   if(!qty || qty <= 0){
     billItems = billItems.filter(x=>x.id!==id);
@@ -2609,8 +2622,9 @@ async function remoteTicketSearch(ticket){
 }
 function renderPatients(skipRemoteHint){
   const q=(Vv('pt-search')||'').toLowerCase();
-  const list=q?patients.filter(p=>(p.name||'').toLowerCase().includes(q)||(p.ticket||'').includes(q)):patients;
-  $('pt-count').innerText=patients.length+(allLoaded?'':'+')+' مريض محمّل';
+  const _vis=patients.filter(_ptVisible);
+  const list=q?_vis.filter(p=>(p.name||'').toLowerCase().includes(q)||(p.ticket||'').includes(q)):_vis;
+  $('pt-count').innerText=_vis.length+(allLoaded?'':'+')+' مريض محمّل';
   const el=$('patients-list');
   if(!list.length){
     el.innerHTML=`<div style="text-align:center;padding:24px;color:var(--tm);font-size:.82rem">${q?(skipRemoteHint?'لا نتائج':'لا نتائج — لو ده رقم تذكرة، البرنامج هيدوّر تلقائيًا في قاعدة البيانات كمان'):'لا يوجد مرضى محفوظون بعد'}</div>`;
@@ -2726,9 +2740,9 @@ async function exportDetailedExcel(){
     return new Date(str+'T00:00:00');
   }
 
-  let filtered = patients;
+  let filtered = patients.filter(_ptVisible);
   if(fromDate||toDate){
-    filtered = patients.filter(pt=>{
+    filtered = filtered.filter(pt=>{
       const ed = parseD(pt.entry||pt.entryRaw);
       if(!ed) return true;
       if(fromDate && ed<fromDate) return false;
@@ -2814,9 +2828,9 @@ async function exportAllExcel(){
     return dateToExcelSerial(str);
   }
 
-  let filtered = patients;
+  let filtered = patients.filter(_ptVisible);
   if(fromDate || toDate){
-    filtered = patients.filter(pt=>{
+    filtered = filtered.filter(pt=>{
       const entryDate = parsePatientDate(pt.entry || pt.entryRaw);
       if(!entryDate) return true; // إذا لم يوجد تاريخ، اشمله
       if(fromDate && entryDate < fromDate) return false;
@@ -3849,6 +3863,7 @@ async function finishLogin(){
       const d = me.exists ? me.data() : {};
       currentUser.allowedStypes = Array.isArray(d.allowedStypes) ? d.allowedStypes : null;
       currentUser.allowedCats   = Array.isArray(d.allowedCats)   ? d.allowedCats   : null;
+      currentUser.visibleStypes = Array.isArray(d.visibleStypes) ? d.visibleStypes : null;
     }catch(e){ console.error('perms:', e); }
   }
   applyUserPerms();
@@ -3940,6 +3955,7 @@ function renderUMList(){
     else {
       if(Array.isArray(u.allowedStypes)) prev.allowedStypes = u.allowedStypes;
       if(Array.isArray(u.allowedCats))   prev.allowedCats   = u.allowedCats;
+      if(Array.isArray(u.visibleStypes)) prev.visibleStypes = u.visibleStypes;
     }
   });
   const people = [...seen.values()];
@@ -3947,7 +3963,7 @@ function renderUMList(){
   el.innerHTML = people.map(u=>{
     const nm = u.name.replace(/'/g,"\\'");
     const isMe = currentUser && u.name===currentUser.name;
-    const custom = Array.isArray(u.allowedStypes) || Array.isArray(u.allowedCats);
+    const custom = Array.isArray(u.allowedStypes) || Array.isArray(u.allowedCats) || Array.isArray(u.visibleStypes);
     return `
     <div class="um-row">
       <div>
@@ -3971,9 +3987,11 @@ function openPermModal(name){
   const docs = allUsers.filter(u=>u.name===name);
   const st = (docs.map(d=>d.allowedStypes).find(Array.isArray)) || null;
   const ct = (docs.map(d=>d.allowedCats).find(Array.isArray)) || null;
+  const vs = (docs.map(d=>d.visibleStypes).find(Array.isArray)) || null;
   $('perm-title').textContent = '⚙️ صلاحيات: ' + name;
   const box = (cls,v,on)=>`<label style="display:flex;gap:8px;align-items:center;font-size:.82rem;font-weight:700;padding:5px 2px;cursor:pointer"><input type="checkbox" class="${cls}" value="${v}" ${on?'checked':''}> ${v}</label>`;
   $('perm-stypes').innerHTML = ALL_STYPES.map(s=>box('perm-st',s,!st||st.includes(s))).join('');
+  $('perm-vis').innerHTML    = ALL_STYPES.map(s=>box('perm-vs',s,!vs||vs.includes(s))).join('');
   $('perm-cats').innerHTML   = ALL_CATS.map(c=>box('perm-ct',c,!ct||ct.includes(c))).join('');
   $('perm-modal').style.display='flex';
 }
@@ -3981,11 +3999,14 @@ function closePermModal(){ $('perm-modal').style.display='none'; _permUserName=n
 async function savePerms(){
   const sts=[...document.querySelectorAll('.perm-st:checked')].map(x=>x.value);
   const cts=[...document.querySelectorAll('.perm-ct:checked')].map(x=>x.value);
+  const vss=[...document.querySelectorAll('.perm-vs:checked')].map(x=>x.value);
+  if(!vss.length){ alert('⚠️ اختر نوع مرضى واحداً على الأقل يظهر للمستخدم'); return; }
   if(!sts.length){ alert('⚠️ اختر نوع خدمة واحداً على الأقل'); return; }
   const del = firebase.firestore.FieldValue.delete();
   const upd = {
     allowedStypes: sts.length===ALL_STYPES.length ? del : sts,
-    allowedCats:   cts.length===ALL_CATS.length   ? del : cts
+    allowedCats:   cts.length===ALL_CATS.length   ? del : cts,
+    visibleStypes: vss.length===ALL_STYPES.length ? del : vss
   };
   try{
     for(const d of allUsers.filter(u=>u.name===_permUserName)){
@@ -4402,9 +4423,12 @@ window.onload = init;
       <h2 id="perm-title" style="font-weight:900;font-size:.95rem;color:var(--p)">⚙️ الصلاحيات</h2>
       <button onclick="closePermModal()" style="background:none;border:none;cursor:pointer;font-size:1.4rem;color:var(--tm)">✕</button>
     </div>
-    <div style="font-size:.78rem;font-weight:900;color:var(--p);margin-bottom:4px">أنواع الخدمة المسموحة</div>
-    <div style="font-size:.68rem;color:var(--tm);margin-bottom:6px">يختار منها المستخدم ويرى مرضاها فقط. ما لم يُعلَّم يُخفى عنه.</div>
+    <div style="font-size:.78rem;font-weight:900;color:var(--p);margin-bottom:4px">أنواع الخدمة المسموح له بتسجيلها</div>
+    <div style="font-size:.68rem;color:var(--tm);margin-bottom:6px">الأنواع التي يستطيع اختيارها عند تسجيل مريض جديد.</div>
     <div id="perm-stypes" style="background:#f7f8f9;border-radius:8px;padding:8px 12px;margin-bottom:14px"></div>
+    <div style="font-size:.78rem;font-weight:900;color:var(--p);margin-bottom:4px">أنواع المرضى التي تظهر للمستخدم</div>
+    <div style="font-size:.68rem;color:var(--tm);margin-bottom:6px">يرى في قائمة المرضى والتقارير المصدَّرة المرضى من الأنواع المعلَّمة فقط، حتى لو سجّلهم غيره.</div>
+    <div id="perm-vis" style="background:#f7f8f9;border-radius:8px;padding:8px 12px;margin-bottom:14px"></div>
     <div style="font-size:.78rem;font-weight:900;color:var(--p);margin-bottom:4px">أقسام الأصناف المسموحة</div>
     <div style="font-size:.68rem;color:var(--tm);margin-bottom:6px">ما لم يُعلَّم يُخفى عنه ولا يستطيع إضافة أصنافه.</div>
     <div id="perm-cats" style="background:#f7f8f9;border-radius:8px;padding:8px 12px;margin-bottom:16px;display:grid;grid-template-columns:1fr 1fr;gap:0 10px"></div>
