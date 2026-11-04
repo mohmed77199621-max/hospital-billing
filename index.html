@@ -300,7 +300,7 @@ input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
           <div><label class="lbl">نوع الخدمة</label>
             <select id="p_stype" class="inp" onchange="onStypeChange()">
               <option value="">— اختر نوع الخدمة —</option>
-              <option>اقتصادي</option><option>نفقة دولة</option><option>تأمين صحي</option><option>مجاني</option>
+              <option>اقتصادي</option><option>نفقة دولة</option><option>قوائم انتظار</option><option>تأمين صحي</option><option>مجاني</option>
             </select>
           </div>
           <div><label class="lbl">ملاحظات</label><textarea id="p_notes" class="inp" rows="2" placeholder="أي ملاحظات إضافية..." style="resize:vertical;min-height:54px"></textarea></div>
@@ -619,6 +619,7 @@ input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
           <div style="font-size:.74rem;font-weight:900;color:var(--p);margin-bottom:10px">➕ إضافة صنف</div>
           <select id="s_cat" class="inp" style="margin-bottom:7px" onchange="onAddCatChange()"><option>أدوية</option><option>مستلزمات</option><option>شرائح ومسامير</option><option>أشعة</option><option>تحاليل</option><option>بنك الدم</option><option>أجهزة</option><option>خدمات أخري</option></select>
           <input type="text" id="s_name" placeholder="اسم الصنف" class="inp" style="margin-bottom:7px">
+          <input type="text" id="s_code" placeholder="كود الصنف (اختياري)" class="inp" style="margin-bottom:7px">
           <input type="number" id="s_price" placeholder="السعر (ج.م)" class="inp" style="margin-bottom:7px" min="0" step="0.01">
           <div id="s_list_wrap" style="margin-bottom:7px">
             <label style="font-size:.68rem;color:var(--tm);font-weight:700;display:block;margin-bottom:4px">هذا الصنف خاص بـ:</label>
@@ -653,6 +654,7 @@ input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
           <div style="font-size:.74rem;font-weight:900;color:#856404;margin-bottom:10px">➕ إضافة صنف لقائمة النفقة</div>
           <select id="pn_cat" class="inp" style="margin-bottom:7px"><option>أدوية</option><option>مستلزمات</option><option>شرائح ومسامير</option></select>
           <input type="text" id="pn_name" placeholder="اسم الصنف" class="inp" style="margin-bottom:7px">
+          <input type="text" id="pn_code" placeholder="كود الصنف (اختياري)" class="inp" style="margin-bottom:7px">
           <input type="number" id="pn_price" placeholder="السعر (ج.م)" class="inp" style="margin-bottom:7px" min="0" step="0.01">
           <button onclick="addPharmListItem('nafaqa')" class="btn btn-p" style="width:100%;justify-content:center;background:#856404;border-color:#856404">إضافة لقائمة النفقة</button>
         </div>
@@ -838,6 +840,26 @@ function init(){
   setStatus('wait');
 }
 
+/* ===== صلاحيات كل مستخدم: أنواع الخدمة وأقسام الأصناف (يحددها المدير) ===== */
+const ALL_STYPES = ['اقتصادي','نفقة دولة','قوائم انتظار','تأمين صحي','مجاني'];
+const ALL_CATS   = ['أدوية','مستلزمات','شرائح ومسامير','أشعة','تحاليل','بنك الدم','أجهزة','خدمات أخري'];
+function _stypeVisible(s){ return !(currentUser && Array.isArray(currentUser.allowedStypes)) || currentUser.allowedStypes.includes(s); }
+function _catAllowed(c){ return !(currentUser && Array.isArray(currentUser.allowedCats)) || currentUser.allowedCats.includes(c); }
+function applyUserPerms(){
+  if(!currentUser || currentUser.role==='admin') return;
+  const cut = (id, ok)=>{ const sel=$(id); if(!sel) return; [...sel.options].forEach(o=>{ if(o.value!=='' && !ok(o.value)) o.remove(); }); };
+  if(Array.isArray(currentUser.allowedStypes)){
+    cut('p_stype', _stypeVisible);
+    const sel=$('p_stype');
+    if(sel && currentUser.allowedStypes.length===1){ sel.value=currentUser.allowedStypes[0]; try{ onStypeChange(); }catch(e){} }
+  }
+  if(Array.isArray(currentUser.allowedCats)){
+    cut('i_cat', _catAllowed);
+    cut('ph_cat', _catAllowed);
+    const ic=$('i_cat'); if(ic && !ic.options.length){ ic.style.display='none'; const q=$('i_q'); if(q){ q.disabled=true; q.placeholder='لا تملك صلاحية إضافة أصناف'; } }
+  }
+}
+
 /* يبدأ تحميل البيانات بعد تسجيل الدخول فقط (قواعد الأمان تمنع القراءة قبله) */
 let _listenersStarted = false;
 function startDataListeners(){
@@ -955,7 +977,7 @@ async function loadPatients(reset=false){
     const snap=await q.get();
     if(reset){ patients=[]; lastDoc=null; allLoaded=false; }
     if(snap.empty && reset){ renderPatients(); setStatus('ok'); loadingMore=false; updateLoadMoreBtn('done'); _startPatientsLiveListener(); return; }
-    snap.docs.forEach(doc=>patients.push({...doc.data(),firestoreId:doc.id}));
+    snap.docs.forEach(doc=>{ if(_stypeVisible(doc.data().stype)) patients.push({...doc.data(),firestoreId:doc.id}); });
     lastDoc=snap.docs[snap.docs.length-1]||null;
     allLoaded=snap.docs.length<PAGE_SIZE;
     renderPatients();
@@ -1201,6 +1223,10 @@ function onDeptChange(){
 }
 
 /* ===== عند تغيير نوع الخدمة ===== */
+/* قوائم الانتظار تأخذ نفس خواص نفقة الدولة بالكامل */
+const NAFAQA_LIKE = ['نفقة دولة','قوائم انتظار'];
+function isNafaqaLike(s){ return NAFAQA_LIKE.includes(s); }
+
 function onStypeChange(){
   const stype = Vv('p_stype');
   const isTamin = stype === 'تأمين صحي';
@@ -1276,7 +1302,7 @@ function applyAutoRates(){
   }
 
   // تأمين صحي / نفقة دولة — أقسام عادية
-  if(stype === 'تأمين صحي' || stype === 'نفقة دولة'){
+  if(stype === 'تأمين صحي' || isNafaqaLike(stype)){
     $('f_stay').value = days * TAMIN_STAY_RATE;
     if(optype && FEES_TAMIN[optype]){
       const r = FEES_TAMIN[optype];
@@ -1322,7 +1348,7 @@ function calcDays(){
 function filterDD(){
   const cat=Vv('i_cat'),q=Vv('i_q').toLowerCase();
   const stype=Vv('p_stype')||'';
-  const isNafaqa = stype==='نفقة دولة';
+  const isNafaqa = isNafaqaLike(stype);
   const isTamin  = stype==='تأمين صحي';
   const isPharmCat = ['أدوية','مستلزمات','شرائح ومسامير'].includes(cat);
 
@@ -1344,7 +1370,7 @@ function filterDD(){
     dd.innerHTML=list.map(x=>{
       return `<div class="dd-item" onmousedown="pickItem(this)"
         data-name="${x.name.replace(/"/g,'&quot;')}"
-        data-price="${x.price}">${x.name} &mdash; <b>${x.price} ج.م</b></div>`;
+        data-price="${x.price}" data-code="${(x.code||'').replace(/"/g,'&quot;')}">${x.name}${x.code?` <span style="color:#856404;font-size:.7rem">[${x.code}]</span>`:''} &mdash; <b>${x.price} ج.م</b></div>`;
     }).join('');
     dd.style.display='block';
   } else dd.style.display='none';
@@ -1352,7 +1378,7 @@ function filterDD(){
 function hideDD(){setTimeout(()=>$('i_dd').style.display='none',160);}
 function pickItem(el){
   $('i_q').value=el.dataset.name;
-  selItem={name:el.dataset.name, price:parseFloat(el.dataset.price)};
+  selItem={name:el.dataset.name, price:parseFloat(el.dataset.price), code:el.dataset.code||''};
   $('i_dd').style.display='none';
 }
 function resetSel(){$('i_q').value='';selItem=null;}
@@ -1382,7 +1408,7 @@ function _sumQtyByNames(names, cat){
 }
 function _getPriceFromDB(cat, name){
   const stype = Vv('p_stype')||'';
-  const isNafaqa = stype==='نفقة دولة';
+  const isNafaqa = isNafaqaLike(stype);
   const isTamin  = stype==='تأمين صحي';
   const all = (itemDB[cat]||[]);
   const filtered = all.filter(x=>{
@@ -1530,6 +1556,7 @@ function addItem(){
     return;
   }
   if(!selItem){alert('يرجى اختيار صنف من القائمة');return;}
+  if(!_catAllowed(Vv('i_cat'))){alert('⚠️ لا تملك صلاحية إضافة أصناف من هذا القسم');return;}
   const qty=Math.max(0.01,parseFloat(Vv('i_qty'))||1);
   const cat=Vv('i_cat');
   const existing=billItems.find(x=>x.name===selItem.name && x.cat===cat);
@@ -1537,7 +1564,7 @@ function addItem(){
     existing.qty=parseFloat((existing.qty+qty).toFixed(4));
     existing.total=parseFloat((existing.price*existing.qty).toFixed(4));
   } else {
-    billItems.push({id:Date.now(),name:selItem.name,cat,price:selItem.price,origPrice:selItem.price,qty,total:selItem.price*qty});
+    billItems.push({id:Date.now(),name:selItem.name,cat,price:selItem.price,origPrice:selItem.price,qty,total:selItem.price*qty,...(selItem.code?{code:selItem.code}:{})});
     markFormDirty();
   }
   applyAutoLinkedItems('add');
@@ -1640,7 +1667,7 @@ function renderBill(){
   }
   tb.innerHTML=billItems.map((i,n)=>`<tr class="${i.qty===0?'zero-qty-row ':''} ${i.isDefault&&i.qty===0?'bill-card-default':i.qty>0?'bill-card-added':''}" id="bill-row-${i.id}">
     <td style="color:var(--tm);font-size:.72rem">${n+1}</td>
-    <td style="font-weight:700">${i.name}</td>
+    <td style="font-weight:700">${i.name}${i.code?`<span style="font-size:.62rem;color:#856404;margin-right:5px">[${i.code}]</span>`:''}</td>
     <td style="text-align:center"><span class="badge bp">${i.cat}</span></td>
     <td style="text-align:center">
       <input type="number" value="${i.qty}" min="0.01" step="0.01" ${i.lockedQty?'disabled':''}
@@ -1718,7 +1745,7 @@ function decWithRemaining(decs, grand){
   return decs.map(d=>{ cum+=Number(d.amount)||0; return {...d, remaining: grand-cum}; });
 }
 // الشاشة والجدول لنفقة الدولة في أقسام العناية فقط
-function decisionsRequired(){ return Vv('p_stype')==='نفقة دولة' && !!ICU_DEPTS[Vv('p_dept')]; }
+function decisionsRequired(){ return isNafaqaLike(Vv('p_stype')) && !!ICU_DEPTS[Vv('p_dept')]; }
 function updateDecisionsCardVisibility(){
   const c=$('decisions-card'); if(!c) return;
   c.style.display = decisionsRequired() ? '' : 'none';
@@ -1817,6 +1844,156 @@ function refreshDecisionsUI(){
 }
 
 /* ========== INVOICE ========== */
+/* ===== توزيع فاتورة العناية على قرارات نفقة الدولة (ورقة منفصلة في آخر الفاتورة المطبوعة) ===== */
+function allocateDecisions(decs, fixed, items, days){
+  const EPS = 0.005;
+  const r2 = x => Math.round((x + Number.EPSILON) * 100) / 100;
+  const keyOf = f => f.key || ({'اقامة تحت جهاز تنفس':'stay_oxy','اقامة':'stay','إقامة':'stay','إشراف طبي':'med','إشراف تمريض':'nur'}[f.label]) || 'other';
+  const fx = k => (fixed||[]).filter(f=>keyOf(f)===k).reduce((a,f)=>a+(Number(f.val)||0),0);
+  const warnings = [];
+
+  /* 1) وحدات الأيام: كل يوم = إقامة + إشراف طبي + إشراف تمريض (والأيام بالأكسجين أولاً في المبتسرين) */
+  const D = Number(days)||0;
+  const oxyFee = fx('stay_oxy'), stayFee = fx('stay'), medFee = fx('med'), nurFee = fx('nur');
+  const oxyDays = oxyFee>0 ? Math.min(D, Math.round(oxyFee/400*1000)/1000) : 0;
+  const normDays = Math.max(D-oxyDays, 0);
+  const oxyRate  = oxyDays>0  ? oxyFee/oxyDays  : 0;
+  const stayRate = normDays>0 ? stayFee/normDays : 0;
+  const medRate  = D>0 ? medFee/D : 0;
+  const nurRate  = D>0 ? nurFee/D : 0;
+  const units = [];
+  for(let i=0;i<oxyDays;i++)  units.push({oxy:true,  w:Math.min(1, oxyDays-i)});
+  for(let i=0;i<normDays;i++) units.push({oxy:false, w:Math.min(1, normDays-i)});
+  const unitCost = u => u.w * ((u.oxy?oxyRate:stayRate) + medRate + nurRate);
+  let ui = 0;
+
+  /* 2) الأصناف: أدوية أولاً ثم باقي الفئات بكميات صحيحة؛ المستلزمات قيمة فقط؛ الأجور الأخرى بنداً واحداً */
+  const ORDER = ['أدوية','شرائح ومسامير','أشعة','تحاليل','بنك الدم','أجهزة','خدمات أخري'];
+  const pool = [];
+  const nonSupply = (items||[]).filter(i=>i.cat!=='مستلزمات' && (Number(i.qty)||0)>0);
+  const rank = c => { const k = ORDER.indexOf(c); return k<0 ? ORDER.length : k; };
+  nonSupply.map((it,idx)=>({it,idx})).sort((a,b)=>rank(a.it.cat)-rank(b.it.cat)||a.idx-b.idx).forEach(({it})=>{
+    const qty = Number(it.qty)||0, price = Number(it.price)||0;
+    const whole = Math.floor(qty+1e-9), frac = Math.round((qty-whole)*10000)/10000;
+    if(whole>0) pool.push({it, price, rem:whole, indivisible:false});
+    if(frac>1e-6){
+      pool.push({it, price, rem:frac, indivisible:true});
+      warnings.push('الصنف «'+it.name+'» كميته ('+qty+') غير صحيحة — يلزم إدخال أرقام صحيحة');
+    }
+  });
+  (fixed||[]).filter(f=>keyOf(f)==='other').forEach(f=>{
+    pool.push({it:{name:f.label, cat:'أجور أخرى'}, price:Number(f.val)||0, rem:1, indivisible:true});
+  });
+  let supplyLeft = r2((items||[]).filter(i=>i.cat==='مستلزمات').reduce((a,i)=>a+(Number(i.total)||0),0));
+
+  const out = decs.map(d=>({dec:d, cap:Number(d.amount)||0, rows:[], over:false}));
+
+  const pushDays = (o, oxyW, normW)=>{
+    const tot = oxyW + normW;
+    if(oxyW>0)  o.rows.push({kind:'day', label:'اقامة تحت جهاز تنفس', qty:oxyW,  unit:'يوم', price:oxyRate,  amount:r2(oxyW*oxyRate)});
+    if(normW>0) o.rows.push({kind:'day', label:'إقامة',               qty:normW, unit:'يوم', price:stayRate, amount:r2(normW*stayRate)});
+    if(medRate>0 && tot>0) o.rows.push({kind:'day', label:'إشراف طبي',   qty:tot, unit:'يوم', price:medRate, amount:r2(tot*medRate)});
+    if(nurRate>0 && tot>0) o.rows.push({kind:'day', label:'إشراف تمريض', qty:tot, unit:'يوم', price:nurRate, amount:r2(tot*nurRate)});
+  };
+  const sum = o => r2(o.rows.reduce((a,r)=>a+r.amount,0));
+
+  out.forEach(o=>{
+    let R = o.cap;
+    // (أ) الإقامة والإشراف الطبي وإشراف التمريض — والأيام التي لا تكفيها القيمة تُرحَّل للقرار التالي
+    let oxyW=0, normW=0;
+    while(ui<units.length && unitCost(units[ui]) <= R+EPS){
+      const u = units[ui++]; R = r2(R - unitCost(u));
+      if(u.oxy) oxyW += u.w; else normW += u.w;
+    }
+    pushDays(o, oxyW, normW);
+    // (ب) الأدوية ثم باقي الأصناف — كميات صحيحة، بقدر ما يكمل مبلغ القرار
+    pool.forEach(e=>{
+      if(e.rem<=0) return;
+      let u;
+      if(e.indivisible) u = (r2(e.rem*e.price) <= R+EPS) ? e.rem : 0;
+      else u = e.price>0 ? Math.min(e.rem, Math.floor((R+EPS)/e.price)) : e.rem;
+      if(u>0){
+        const amt = r2(u*e.price);
+        o.rows.push({kind:'item', cat:e.it.cat, item:e.it, label:e.it.name, qty:u, price:e.price, amount:amt});
+        e.rem = Math.round((e.rem-u)*10000)/10000; R = r2(R-amt);
+      }
+    });
+    // (ج) المستلزمات: قيمة فقط، تُقسَّم على القرارات بقدر ما يكمل مبلغ القرار
+    if(supplyLeft>EPS && R>EPS){
+      const s = r2(Math.min(R, supplyLeft));
+      o.rows.push({kind:'supply', label:'مستلزمات (قيمة إجمالية)', amount:s});
+      supplyLeft = r2(supplyLeft - s); R = r2(R - s);
+    }
+  });
+
+  /* ما تبقّى بعد آخر قرار (لو لم تنطبق الأعداد الصحيحة تماماً) يُضاف لآخر قرار مع تنبيه */
+  const last = out[out.length-1];
+  let oxyW=0, normW=0;
+  while(ui<units.length){ const u=units[ui++]; if(u.oxy) oxyW+=u.w; else normW+=u.w; }
+  if(oxyW+normW>0){ pushDays(last, oxyW, normW); last.over=true; }
+  pool.forEach(e=>{
+    if(e.rem>0){ last.rows.push({kind:'item', cat:e.it.cat, item:e.it, label:e.it.name, qty:e.rem, price:e.price, amount:r2(e.rem*e.price)}); e.rem=0; last.over=true; }
+  });
+  if(supplyLeft>EPS){ last.rows.push({kind:'supply', label:'مستلزمات (قيمة إجمالية)', amount:supplyLeft}); supplyLeft=0; last.over=true; }
+  if(last.over) warnings.push('تعذّر توزيع كل البنود داخل مبالغ القرارات بأعداد صحيحة؛ أُضيف الباقي لآخر قرار وقد يتجاوز مبلغه');
+  out.forEach(o=>{ o.used = sum(o); });
+  return {out, warnings};
+}
+
+
+/* بناء الورقة الأخيرة المنفصلة: جدول لكل قرار بمبلغه */
+function buildDecisionsPage(c){
+  const r2 = x => Math.round((x + Number.EPSILON) * 100) / 100;
+  const res = allocateDecisions(c.decs, c.fixed, c.items, c.days);
+  const out = res.out;
+  const showCode = out.some(o=>o.rows.some(r=>r.kind==='item' && _itemCode(r.item, c.stype)));
+  const sections = out.map((o,k)=>{
+    const d = o.dec;
+    const rows = o.rows.map((r,n)=>{
+      let qty='—', price='—', code='';
+      if(r.kind==='day'){ qty = fmtAsEntered(r.qty)+' يوم'; price = fmt(r.price); }
+      else if(r.kind==='item'){ qty = fmtAsEntered(r.qty); price = fmt(r.price); code = _itemCode(r.item, c.stype)||''; }
+      return `<tr><td style="text-align:center;color:#555">${n+1}</td><td>${r.label}</td>${showCode?`<td style="text-align:center;font-weight:700">${code}</td>`:''}<td style="text-align:center">${qty}</td><td style="text-align:center">${price}</td><td style="text-align:center;font-weight:700">${fmt(r.amount)}</td></tr>`;
+    }).join('');
+    const rem = r2(o.cap - o.used);
+    const span = showCode ? 5 : 4;
+    const remRow = rem > 0.005
+      ? `<tr><td colspan="${span}" style="text-align:right;padding:4px 8px">المتبقي من مبلغ القرار (غير مستخدم في هذه الفاتورة)</td><td style="text-align:center;padding:4px 8px">${fmt(rem)}</td></tr>`
+      : (rem < -0.005 ? `<tr><td colspan="${span}" style="text-align:right;padding:4px 8px">زيادة عن مبلغ القرار</td><td style="text-align:center;padding:4px 8px">${fmt(-rem)}</td></tr>` : '');
+    return `<section style="margin-top:10px;page-break-inside:avoid">
+      <div class="inv-sec">القرار (${k+1}) — رقم القرار: ${decEsc(d.no)} — الكود: ${decEsc(d.code)||'—'} — مبلغ القرار: ${fmtAsEntered(d.amount)} ج.م</div>
+      <table class="inv-items" style="margin-bottom:5px">
+        <thead><tr><th style="width:24px;text-align:center">#</th><th style="text-align:right">البيان</th>${showCode?'<th style="width:70px;text-align:center">الكود</th>':''}<th style="width:60px;text-align:center">الكمية</th><th style="width:68px;text-align:center">سعر الوحدة</th><th style="width:80px;text-align:center">الإجمالي (ج.م)</th></tr></thead>
+        <tbody>${rows || `<tr><td colspan="${span+1}" style="text-align:center;color:#555">لا توجد بنود على هذا القرار</td></tr>`}
+          <tr style="font-weight:900"><td colspan="${span}" style="text-align:right;padding:4px 8px">إجمالي ما تم تحميله على القرار</td><td style="text-align:center;padding:4px 8px">${fmt(o.used)}</td></tr>
+          ${remRow}
+        </tbody></table></section>`;
+  }).join('');
+  const html = `<div class="inv-wrap" style="page-break-before:always;break-before:page">
+    <div class="inv-hdr">
+      <div style="font-size:9pt;font-weight:900">جمهورية مصر العربية — وزارة الصحة والسكان</div>
+      <div style="font-size:13pt;font-weight:900;margin:2px 0">مستشفى سوهاج العام</div>
+      <div style="font-size:8.8pt;font-weight:700">كشف توزيع الفاتورة على قرارات نفقة الدولة</div>
+    </div>
+    <div class="inv-meta"><table>
+      <tr><td class="lh">اسم المريض</td><td style="font-weight:900">${c.name||'—'}</td><td class="lh">رقم التذكرة</td><td style="font-weight:900">${c.ticket||'—'}</td></tr>
+      <tr><td class="lh">القسم الطبي</td><td style="font-weight:800">${c.dept||'—'}</td><td class="lh">نوع الخدمة</td><td style="font-weight:800">${c.stype||'—'}</td></tr>
+      <tr><td class="lh">تاريخ الدخول</td><td>${c.entry||'—'}</td><td class="lh">تاريخ الخروج</td><td>${c.exitD||'—'}</td></tr>
+      <tr><td class="lh">مدة الإقامة</td><td style="font-weight:800">${c.days} يوم</td><td class="lh">الإجمالي الكلي</td><td style="font-weight:900">${fmt(c.grand)} ج.م</td></tr>
+    </table></div>
+    ${sections}
+  </div>`;
+  return {html, warnings: res.warnings};
+}
+
+function _itemCode(it, stype){
+  if(it.code) return it.code;
+  try{
+    const pools = isNafaqaLike(stype) ? [ (pharmItemDB.nafaqa||{})[it.cat]||[], itemDB[it.cat]||[] ] : [ itemDB[it.cat]||[] ];
+    for(const arr of pools){ const f = arr.find(x=>x.name===it.name && x.code); if(f) return f.code; }
+  }catch(e){}
+  return '';
+}
 function buildInvoice(pt, invoiceNo){
   const live=!pt;
   const name  =live?Vv('p_name') :pt.name;
@@ -1840,7 +2017,7 @@ function buildInvoice(pt, invoiceNo){
   const cats=['أدوية','مستلزمات','شرائح ومسامير','أشعة','تحاليل','بنك الدم','أجهزة','خدمات أخري'];
 
   // جدول قرارات نفقة الدولة — يُطبع أسفل الإجمالي الكلي المطلوب
-  const decs = (stype==='نفقة دولة' && ICU_DEPTS[dept]) ? (live?stateDecisions:(pt.decisions||[])) : [];
+  const decs = (isNafaqaLike(stype) && ICU_DEPTS[dept]) ? (live?stateDecisions:(pt.decisions||[])) : [];
   let decHtml='';
   if(decs.length){
     const drows=decWithRemaining(decs, grand);
@@ -1854,6 +2031,17 @@ function buildInvoice(pt, invoiceNo){
       </tbody></table></section>`;
   }
 
+  // الورقة الأخيرة: توزيع الفاتورة على القرارات — فقط عند استكمال مبلغ الفاتورة من القرارات
+  let decPage='';
+  if(decs.length && grand>0){
+    const totalDecAmt = decs.reduce((a,x)=>a+(Number(x.amount)||0),0);
+    if(totalDecAmt + 0.005 >= grand){
+      const dp = buildDecisionsPage({decs, fixed, items, days, grand, stype, name, ticket, dept, entry, exitD});
+      decPage = dp.html;
+      if(dp.warnings.length) setTimeout(()=>alert('⚠️ تنبيه توزيع القرارات:\n\n'+dp.warnings.join('\n')), 100);
+    }
+  }
+
   const fixedRows=fixed.map((f,n)=>`<tr>
     <td style="text-align:center;color:#555">${n+1}</td><td>${f.label}</td>
     <td style="text-align:center">—</td><td style="text-align:center">—</td>
@@ -1863,13 +2051,14 @@ function buildInvoice(pt, invoiceNo){
   const PHARM_CATS = {'أدوية':'أدوية','مستلزمات':'مستلزمات','شرائح ومسامير':'شرائح ومسامير'};
   cats.forEach(cat=>{
     const g=items.filter(i=>i.cat===cat);if(!g.length)return;
+    const _showCode = g.some(i=>_itemCode(i,stype));
     const ct=g.reduce((a,x)=>a+x.total,0);
     catSec+=`<section class="inv-cat-group"><div class="inv-sec">${cat} — ${g.length} صنف</div>
     <table class="inv-items" style="margin-bottom:5px">
-      <thead><tr><th style="width:24px;text-align:center">#</th><th style="text-align:right">اسم الصنف</th><th style="width:44px;text-align:center">الكمية</th><th style="width:68px;text-align:center">سعر الوحدة</th><th style="width:78px;text-align:center">الإجمالي (ج.م)</th></tr></thead>
+      <thead><tr><th style="width:24px;text-align:center">#</th><th style="text-align:right">اسم الصنف</th>${_showCode?'<th style="width:70px;text-align:center">الكود</th>':''}<th style="width:44px;text-align:center">الكمية</th><th style="width:68px;text-align:center">سعر الوحدة</th><th style="width:78px;text-align:center">الإجمالي (ج.م)</th></tr></thead>
       <tbody>
-        ${g.map((i,n)=>`<tr><td style="text-align:center;color:#555">${n+1}</td><td>${i.name}</td><td style="text-align:center">${i.qty}</td><td style="text-align:center">${fmt(i.price)}</td><td style="text-align:center;font-weight:700">${fmt(i.total)}</td></tr>`).join('')}
-        <tr style="font-weight:900"><td colspan="4" style="text-align:right;padding:4px 8px">إجمالي ${cat}</td><td style="text-align:center;padding:4px 8px;font-weight:900">${fmt(ct)}</td></tr>
+        ${g.map((i,n)=>`<tr><td style="text-align:center;color:#555">${n+1}</td><td>${i.name}</td>${_showCode?`<td style="text-align:center;font-weight:700">${_itemCode(i,stype)||''}</td>`:''}<td style="text-align:center">${i.qty}</td><td style="text-align:center">${fmt(i.price)}</td><td style="text-align:center;font-weight:700">${fmt(i.total)}</td></tr>`).join('')}
+        <tr style="font-weight:900"><td colspan="${_showCode?5:4}" style="text-align:right;padding:4px 8px">إجمالي ${cat}</td><td style="text-align:center;padding:4px 8px;font-weight:900">${fmt(ct)}</td></tr>
       </tbody></table>
       ${PHARM_CATS[cat]?`<div class="inv-sigs" style="grid-template-columns:1fr;max-width:260px;margin:6px 0 14px auto">
         <div class="inv-sig">صيدلي سعر الوحدة<br><small style="font-size:7.5pt;font-weight:700">(${cat})</small><br><span style="font-size:8pt;font-weight:400">الاسم: .....................</span></div>
@@ -1917,7 +2106,7 @@ function buildInvoice(pt, invoiceNo){
   </div>
   <div style="text-align:center;font-size:8pt;color:#555;margin-top:10px;border-top:1px solid #999;padding-top:5px">مستشفى سوهاج العام — تاريخ الطباعة: ${new Date().toLocaleDateString('ar-EG')}</div>
   </div>
-</div>`;
+</div>${decPage}`;
 }
 
 /* ========== PREVIEW & PRINT ========== */
@@ -2112,9 +2301,10 @@ async function savePatient(){
     if(!stype) { alert('⚠️ يرجى اختيار نوع الخدمة');           return; }
     if(!entry) { alert('⚠️ يرجى إدخال تاريخ الدخول');          return; }
     if(!exit)  { alert('⚠️ يرجى إدخال تاريخ الخروج');          return; }
-    if(days<=0){ alert('⚠️ يرجى إدخال عدد أيام الإقامة (أكبر من صفر)'); return; }
+    if(days<0 || (days===0 && currentGrandTotal()>0)){ alert('⚠️ يرجى إدخال عدد أيام الإقامة (أكبر من صفر)'); return; }
+    // فاتورة إجماليها صفر: يُسمح بحفظها بدون أيام إقامة وبدون قرارات
     if(entry && exit && exit < entry){ alert('⚠️ تاريخ الخروج لا يمكن أن يكون قبل تاريخ الدخول'); return; }
-    if((stype==='تأمين صحي'||stype==='نفقة دولة') && !letter){
+    if((stype==='تأمين صحي'||isNafaqaLike(stype)) && !letter){
       alert('⚠️ يرجى إدخال رقم الخطاب / القرار للتأمين الصحي أو نفقة الدولة'); return;
     }
     if(stype==='تأمين صحي' && !taminType){
@@ -2128,7 +2318,7 @@ async function savePatient(){
     }
 
     // نفقة الدولة: لا حفظ إلا بعد إدخال القرارات من النافذة
-    if(decisionsRequired()){
+    if(decisionsRequired() && currentGrandTotal()>0){
       if(!_decConfirmed){ openDecisionsModal(true); return; }
       _decConfirmed=false;
       if(!stateDecisions.length){ openDecisionsModal(true); return; }
@@ -2317,7 +2507,7 @@ const DEFAULT_BILL_ITEMS = [
 function loadDefaultBillItems(stype){
   // لا تضيف أصناف افتراضية إذا لم يُحدد نوع الخدمة بعد
   if(!stype) return;
-  const isNafaqa = stype === 'نفقة دولة';
+  const isNafaqa = isNafaqaLike(stype);
   const isTamin  = stype === 'تأمين صحي';
   // اقتصادي ومجاني → نفس منطق filterDD: يستخدمون قائمة التأمين
   // نفقة دولة: لا تُضاف هذه الأصناف تلقائيًا
@@ -2330,6 +2520,7 @@ function loadDefaultBillItems(stype){
     if(isNafaqa && NAFAQA_EXCLUDED.includes(def.name)) return;
     const alreadyExists = billItems.some(b=>b.name===def.name && b.cat===def.cat);
     if(alreadyExists) return;
+    if(!_catAllowed(def.cat)) return;
     // ابحث على السعر في itemDB حسب نوع الخدمة — فلترة حسب القائمة (نفقة/تأمين/الجميع) أولاً
     const allCatItems = itemDB[def.cat] || [];
     const catItems = allCatItems.filter(x=>{
@@ -2373,6 +2564,7 @@ function clearForm(){
   billItems=[];
   // تحميل الأصناف الافتراضية بكمية 0
   setTimeout(()=>loadDefaultBillItems(), 50); $('stay_days').value=0; renderBill();
+  if(currentUser && Array.isArray(currentUser.allowedStypes) && currentUser.allowedStypes.length===1){ $('p_stype').value=currentUser.allowedStypes[0]; try{ onStypeChange(); }catch(e){} }
 }
 
 function onPtSearchInput(){
@@ -2403,6 +2595,7 @@ async function remoteTicketSearch(ticket){
       return;
     }
     snap.docs.forEach(d=>{
+      if(!_stypeVisible(d.data().stype)) return;
       const data={...d.data(), firestoreId:d.id};
       const idx=patients.findIndex(p=>p.firestoreId===d.id);
       if(idx>=0) patients[idx]=data; else patients.push(data);
@@ -2657,7 +2850,7 @@ async function exportAllExcel(){
     // نفقة الدولة: لو القرارات غطّت الفاتورة → عبارة الاستكمال، وإلا → المبلغ المتبقي (رقم ليُجمع في الإجمالي)
     let decStatus='';
     const _decs=(pt.decisions||[]);
-    if(pt.stype==='نفقة دولة' && _decs.length){
+    if(isNafaqaLike(pt.stype) && _decs.length){
       const rem=Math.round(((Number(pt.total)||0)-_decs.reduce((a,x)=>a+(Number(x.amount)||0),0))*100)/100;
       decStatus = rem<=0 ? 'تم استكمال قيمة الفاتورة' : rem;
     }
@@ -3238,6 +3431,7 @@ function renderPharmListItems(listType){
             <span style="font-size:.75rem;font-weight:700">${x.name}</span>
           </div>
           <div style="display:flex;align-items:center;gap:5px;flex-shrink:0;flex-wrap:wrap">
+            ${isNafaqa?`<input type="text" value="${(x.code||'').replace(/"/g,'&quot;')}" placeholder="الكود" title="كود الصنف" onchange="updatePharmListCode('${listType}','${cat}',${realIdx},this.value)" style="width:80px;padding:3px 6px;border:1px solid var(--b);border-radius:5px;font-size:.72rem;text-align:center;font-family:'Noto Kufi Arabic',sans-serif">`:''}
             <input type="number" value="${x.price}" min="0" step="0.01" title="السعر"
               style="width:72px;padding:3px 6px;border:1px solid var(--b);border-radius:5px;font-size:.75rem;font-weight:800;color:${color};text-align:center;font-family:'Noto Kufi Arabic',sans-serif"
               onchange="updatePharmListPrice('${listType}','${cat}',${realIdx},this.value)">
@@ -3265,7 +3459,9 @@ function addPharmListItem(listType){
   if(!pharmItemDB[listType][cat]) pharmItemDB[listType][cat]=[];
   if(pharmItemDB[listType][cat].find(x=>x.name===name)){ alert('هذا الصنف موجود بالفعل في القائمة'); return; }
   const entry = {name, price};
+  const _pc = (document.getElementById(prefix+'_code')?.value||'').trim(); if(_pc) entry.code=_pc;
   pharmItemDB[listType][cat].push(entry);
+  if(document.getElementById(prefix+'_code')) document.getElementById(prefix+'_code').value='';
   document.getElementById(prefix+'_name').value='';
   document.getElementById(prefix+'_price').value='';
   renderPharmListItems(listType);
@@ -3295,6 +3491,12 @@ function flashSaved(rowId){
   }, 1200);
 }
 
+function updatePharmListCode(listType, cat, idx, val){
+  const c = String(val||'').trim();
+  if(c) pharmItemDB[listType][cat][idx].code = c; else delete pharmItemDB[listType][cat][idx].code;
+  savePharmSettings(listType);
+  flashSaved('pharm-row-'+listType+'-'+cat+'-'+idx);
+}
 function updatePharmListPrice(listType, cat, idx, val){
   const p = parseFloat(val);
   if(isNaN(p)||p<0){ renderPharmListItems(listType); return; }
@@ -3341,6 +3543,7 @@ function renderSetItems(){
           </div>
           <div style="display:flex;align-items:center;gap:5px;flex-shrink:0;flex-wrap:wrap">
             ${listSelect}
+            <input type="text" value="${(x.code||'').replace(/"/g,'&quot;')}" placeholder="الكود" title="كود الصنف" onchange="updateDBCode('${cat}',${realIdx},this.value)" style="width:80px;padding:3px 6px;border:1px solid var(--b);border-radius:5px;font-size:.72rem;text-align:center;font-family:'Noto Kufi Arabic',sans-serif">
             <input type="number" value="${x.price}" min="0" step="0.01" title="السعر"
               style="width:76px;padding:3px 6px;border:1px solid var(--b);border-radius:5px;font-size:.75rem;font-weight:800;color:var(--p);text-align:center;font-family:'Noto Kufi Arabic',sans-serif"
               onchange="updateDBPrice('${cat}',${realIdx},this.value)">
@@ -3412,6 +3615,12 @@ function delDBItem(cat,idx){
   if(!confirm('حذف هذا الصنف نهائياً؟'))return;
   itemDB[cat].splice(idx,1); renderSetItems(); saveSettings();
 }
+function updateDBCode(cat,idx,val){
+  itemDB[cat][idx].code = String(val||'').trim();
+  if(!itemDB[cat][idx].code) delete itemDB[cat][idx].code;
+  saveSettings();
+  flashSaved('item-row-'+cat+'-'+idx);
+}
 function updateDBPrice(cat,idx,val){
   const p=parseFloat(val);
   if(isNaN(p)||p<0){renderSetItems();return;}
@@ -3432,9 +3641,10 @@ function addNewItem(){
   if(!itemDB[cat])itemDB[cat]=[];
   if(itemDB[cat].find(x=>x.name===name)){alert('هذا الصنف موجود بالفعل في القائمة');return;}
   const entry={name,price};
+  const _code=(Vv('s_code')||'').trim(); if(_code) entry.code=_code;
   if(LIST_OWNED_CATS.includes(cat)) entry.list = Vv('s_list') || 'all';
   itemDB[cat].push(entry);
-  $('s_name').value=''; $('s_price').value='';
+  $('s_name').value=''; $('s_price').value=''; if($('s_code')) $('s_code').value='';
   renderSetItems(); saveSettings();
 }
 function renderSetDepts(){
@@ -3631,8 +3841,17 @@ async function doLogin(){
   }
 }
 
-function finishLogin(){
+async function finishLogin(){
   $('login-screen').style.display='none';
+  if(currentUser.role!=='admin'){
+    try{
+      const me = await db.collection('users').doc(currentUser.uid).get();
+      const d = me.exists ? me.data() : {};
+      currentUser.allowedStypes = Array.isArray(d.allowedStypes) ? d.allowedStypes : null;
+      currentUser.allowedCats   = Array.isArray(d.allowedCats)   ? d.allowedCats   : null;
+    }catch(e){ console.error('perms:', e); }
+  }
+  applyUserPerms();
   startDataListeners();
   applyRoleUI();
   db.collection('auditLog').add({action:'login', user:currentUser.name, role:currentUser.role, at: firebase.firestore.FieldValue.serverTimestamp()}).catch(()=>{});
@@ -3713,18 +3932,68 @@ function closeUserMgmt(){ $('um-modal').style.display='none'; }
 
 function renderUMList(){
   const el = $('um-list');
-  if(!allUsers.length){ el.innerHTML='<p style="text-align:center;color:var(--tm);padding:14px">لا يوجد مستخدمون</p>'; return; }
-  el.innerHTML = allUsers.map(u=>`
+  // سطر واحد لكل شخص (قد توجد أكثر من وثيقة بنفس الاسم)
+  const seen = new Map();
+  allUsers.forEach(u=>{
+    const prev = seen.get(u.name);
+    if(!prev) seen.set(u.name, {...u});
+    else {
+      if(Array.isArray(u.allowedStypes)) prev.allowedStypes = u.allowedStypes;
+      if(Array.isArray(u.allowedCats))   prev.allowedCats   = u.allowedCats;
+    }
+  });
+  const people = [...seen.values()];
+  if(!people.length){ el.innerHTML='<p style="text-align:center;color:var(--tm);padding:14px">لا يوجد مستخدمون</p>'; return; }
+  el.innerHTML = people.map(u=>{
+    const nm = u.name.replace(/'/g,"\\'");
+    const isMe = currentUser && u.name===currentUser.name;
+    const custom = Array.isArray(u.allowedStypes) || Array.isArray(u.allowedCats);
+    return `
     <div class="um-row">
       <div>
         <span style="font-weight:900;font-size:.85rem">${u.name}</span>
         <span class="role-badge ${ROLE_COLORS[u.role]||'role-data'}" style="font-size:.67rem;padding:2px 8px;border-radius:6px;margin-right:8px">${ROLE_LABELS[u.role]||u.role}</span>
+        ${custom?`<span style="font-size:.66rem;padding:2px 8px;border-radius:6px;background:#fff3cd;color:#856404;font-weight:900">⚙️ صلاحيات مخصّصة</span>`:''}
       </div>
-      <div style="display:flex;gap:6px">
-        <button onclick="resetUserPass('${u.uid}','${u.name}')" class="btn btn-o btn-sm">🔑 تغيير كلمة مرور</button>
-        ${u.uid!==currentUser.uid?`<button onclick="deleteUser('${u.uid}','${u.name}')" class="btn btn-r btn-sm">🗑 حذف</button>`:''}
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        ${u.role!=='admin'?`<button onclick="openPermModal('${nm}')" class="btn btn-o btn-sm">⚙️ الصلاحيات</button>`:''}
+        <button onclick="resetUserPass('${u.uid}','${nm}')" class="btn btn-o btn-sm">🔑 تغيير كلمة مرور</button>
+        ${!isMe?`<button onclick="deleteUser('${u.uid}','${nm}')" class="btn btn-r btn-sm">🗑 حذف</button>`:''}
       </div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
+}
+
+/* ===== نافذة صلاحيات المستخدم (أنواع الخدمة + أقسام الأصناف) ===== */
+let _permUserName = null;
+function openPermModal(name){
+  _permUserName = name;
+  const docs = allUsers.filter(u=>u.name===name);
+  const st = (docs.map(d=>d.allowedStypes).find(Array.isArray)) || null;
+  const ct = (docs.map(d=>d.allowedCats).find(Array.isArray)) || null;
+  $('perm-title').textContent = '⚙️ صلاحيات: ' + name;
+  const box = (cls,v,on)=>`<label style="display:flex;gap:8px;align-items:center;font-size:.82rem;font-weight:700;padding:5px 2px;cursor:pointer"><input type="checkbox" class="${cls}" value="${v}" ${on?'checked':''}> ${v}</label>`;
+  $('perm-stypes').innerHTML = ALL_STYPES.map(s=>box('perm-st',s,!st||st.includes(s))).join('');
+  $('perm-cats').innerHTML   = ALL_CATS.map(c=>box('perm-ct',c,!ct||ct.includes(c))).join('');
+  $('perm-modal').style.display='flex';
+}
+function closePermModal(){ $('perm-modal').style.display='none'; _permUserName=null; }
+async function savePerms(){
+  const sts=[...document.querySelectorAll('.perm-st:checked')].map(x=>x.value);
+  const cts=[...document.querySelectorAll('.perm-ct:checked')].map(x=>x.value);
+  if(!sts.length){ alert('⚠️ اختر نوع خدمة واحداً على الأقل'); return; }
+  const del = firebase.firestore.FieldValue.delete();
+  const upd = {
+    allowedStypes: sts.length===ALL_STYPES.length ? del : sts,
+    allowedCats:   cts.length===ALL_CATS.length   ? del : cts
+  };
+  try{
+    for(const d of allUsers.filter(u=>u.name===_permUserName)){
+      await db.collection('users').doc(d.uid).update(upd);
+    }
+    await loadUsers(); renderUMList(); closePermModal();
+    alert('✅ تم حفظ الصلاحيات. تسري عند تسجيل دخول المستخدم القادم.');
+  }catch(e){ alert('❌ خطأ: '+e.message); }
 }
 
 async function addUser(){
@@ -3765,7 +4034,8 @@ async function addUser(){
 async function deleteUser(uid, name){
   if(!confirm('حذف المستخدم: '+name+'؟\n\nده هيلغي وصوله للبيانات فوراً، لكن لو عايز تمسح حساب الدخول بتاعه نهائياً من Firebase كمان، لازم تعمل ده يدوياً من Firebase Console ← Authentication ← Users.')) return;
   try{
-    await db.collection('users').doc(uid).delete();
+    const same = allUsers.filter(u=>u.name===name);
+    for(const d of (same.length?same:[{uid}])) await db.collection('users').doc(d.uid).delete();
     await loadUsers(); renderUMList();
   }catch(e){ alert('❌ خطأ: '+e.message); }
 }
@@ -3781,12 +4051,13 @@ let pharmPatients = []; // patients loaded specifically for the pharmacy view (o
 
 /* خريطة نوع الخدمة <-> دور الصيدلي */
 const STYPE_FOR_ROLE = { nafaqa: 'نفقة دولة', tamin: 'تأمين صحي' };
+const STYPES_FOR_ROLE = { nafaqa: ['نفقة دولة','قوائم انتظار'], tamin: ['تأمين صحي'] };
 
 let _pharmPatientsUnsub = null; // مستمع خفيف (وثيقة واحدة بس) لإشعار "فيه تحديثات جديدة"، مش تحميل القائمة كلها
 let _pharmLastKnownSavedAt = null;
 async function loadPharmPatients(){
   const role = currentUser ? currentUser.role : '';
-  const myStype = STYPE_FOR_ROLE[role];
+  const myStype = STYPES_FOR_ROLE[role];
   if(!myStype){ pharmPatients=[]; renderPharmPatients(); return; }
   $('pharm-patients-list').innerHTML = `<div style="text-align:center;padding:24px;color:var(--tm)">⏳ جاري التحميل...</div>`;
   const banner = $('pharm-live-update-banner'); if(banner) banner.remove();
@@ -3794,7 +4065,7 @@ async function loadPharmPatients(){
   try{
     // تحميل لمرة واحدة بس (مش متابعة لحظية مستمرة) — بيوفر قراءات كتير جدًا على مدار الوردية
     const snap = await db.collection('patients')
-      .where('stype','==', myStype)
+      .where('stype','in', myStype)
       .where('finalized','==', false)
       .get();
     pharmPatients = snap.docs.map(d=>({...d.data(), firestoreId:d.id}));
@@ -3816,7 +4087,7 @@ async function loadPharmPatients(){
 function _startPharmLiveNotifier(myStype){
   if(_pharmPatientsUnsub){ _pharmPatientsUnsub(); _pharmPatientsUnsub=null; }
   _pharmPatientsUnsub = db.collection('patients')
-    .where('stype','==', myStype)
+    .where('stype','in', myStype)
     .where('finalized','==', false)
     .orderBy('savedAt','desc').limit(1)
     .onSnapshot(snap=>{
@@ -3984,7 +4255,7 @@ function filterPharmDD(){
   if(!filtered.length){ dd.style.display='none'; return; }
   dd.innerHTML = filtered.map(x=>`
     <div class="dd-item" onmousedown="selectPharmItem('${x.name.replace(/'/g,"\\'")}')">
-      ${x.name}
+      ${x.name}${x.code?` <span style="color:#856404;font-size:.7rem">[${x.code}]</span>`:''}
       <span style="float:left;color:var(--p);font-weight:900">${x.price} ج.م</span>
     </div>`).join('');
   dd.style.display='block';
@@ -4015,7 +4286,7 @@ function addPharmItem(){
   const existing = pharmBillItems.find(x=>x.name===name && x.cat===cat);
   if(existing){ existing.qty+=qty; existing.total=parseFloat((existing.qty*existing.price).toFixed(2)); }
   else {
-    pharmBillItems.push({id: Date.now()+Math.random(), cat, name, qty, price:item.price, total:parseFloat((qty*item.price).toFixed(2)), returned:0, addedBy:currentUser?currentUser.name:''});
+    pharmBillItems.push({id: Date.now()+Math.random(), cat, name, qty, price:item.price, ...(item.code?{code:item.code}:{}), total:parseFloat((qty*item.price).toFixed(2)), returned:0, addedBy:currentUser?currentUser.name:''});
   }
   renderPharmBill();
   $('ph_q').value=''; $('ph_qty').value=1;
@@ -4045,7 +4316,7 @@ function renderPharmBill(){
     const netTotal = parseFloat((net*it.price).toFixed(2));
     return `<tr>
       <td>${i+1}</td>
-      <td>${it.name}${it.addedBy?`<span style="font-size:.6rem;color:var(--tm);margin-right:4px">(${it.addedBy})</span>`:''}</td>
+      <td>${it.name}${it.code?`<span style="font-size:.62rem;color:#856404;margin-right:4px">[${it.code}]</span>`:''}${it.addedBy?`<span style="font-size:.6rem;color:var(--tm);margin-right:4px">(${it.addedBy})</span>`:''}</td>
       <td>${it.cat}</td>
       <td style="text-align:center">${it.qty}</td>
       <td style="text-align:center">${it.price}</td>
@@ -4124,6 +4395,26 @@ document.addEventListener('keydown', function(e){
 window.onload = init;
 </script>
 
+<!-- USER PERMISSIONS MODAL -->
+<div id="perm-modal" class="modal" onclick="if(event.target===this)closePermModal()" style="display:none">
+  <div class="modal-box" style="max-width:460px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;border-bottom:2px solid var(--b);padding-bottom:12px">
+      <h2 id="perm-title" style="font-weight:900;font-size:.95rem;color:var(--p)">⚙️ الصلاحيات</h2>
+      <button onclick="closePermModal()" style="background:none;border:none;cursor:pointer;font-size:1.4rem;color:var(--tm)">✕</button>
+    </div>
+    <div style="font-size:.78rem;font-weight:900;color:var(--p);margin-bottom:4px">أنواع الخدمة المسموحة</div>
+    <div style="font-size:.68rem;color:var(--tm);margin-bottom:6px">يختار منها المستخدم ويرى مرضاها فقط. ما لم يُعلَّم يُخفى عنه.</div>
+    <div id="perm-stypes" style="background:#f7f8f9;border-radius:8px;padding:8px 12px;margin-bottom:14px"></div>
+    <div style="font-size:.78rem;font-weight:900;color:var(--p);margin-bottom:4px">أقسام الأصناف المسموحة</div>
+    <div style="font-size:.68rem;color:var(--tm);margin-bottom:6px">ما لم يُعلَّم يُخفى عنه ولا يستطيع إضافة أصنافه.</div>
+    <div id="perm-cats" style="background:#f7f8f9;border-radius:8px;padding:8px 12px;margin-bottom:16px;display:grid;grid-template-columns:1fr 1fr;gap:0 10px"></div>
+    <div style="display:flex;gap:10px;justify-content:flex-end">
+      <button onclick="closePermModal()" class="btn btn-o">إلغاء</button>
+      <button onclick="savePerms()" class="btn btn-p">💾 حفظ الصلاحيات</button>
+    </div>
+  </div>
+</div>
+
 <!-- EXCEL EXPORT MODAL -->
 <!-- EXCEL EXPORT MODAL -->
 <div id="excel-modal" class="modal" onclick="if(event.target===this)closeExcelModal()" style="display:none">
@@ -4174,7 +4465,7 @@ window.onload = init;
         <label class="lbl">نوع الخدمة</label>
         <select id="pc-stype" class="inp" onchange="onPcStypeChange()">
           <option value="">— كل الأنواع —</option>
-          <option>اقتصادي</option><option>نفقة دولة</option><option>تأمين صحي</option><option>مجاني</option>
+          <option>اقتصادي</option><option>نفقة دولة</option><option>قوائم انتظار</option><option>تأمين صحي</option><option>مجاني</option>
         </select>
       </div>
       <div id="pc-tamin-wrap" style="display:none">
