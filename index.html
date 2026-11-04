@@ -1966,6 +1966,9 @@ function buildDecisionsPage(c){
       let qty='—', price='—', code='';
       if(r.kind==='day'){ qty = fmtAsEntered(r.qty)+' يوم'; price = fmt(r.price); }
       else if(r.kind==='item'){ qty = fmtAsEntered(r.qty); price = fmt(r.price); code = _itemCode(r.item, c.stype)||''; }
+      if(r.kind==='supply'){
+        return `<tr><td style="text-align:center;color:#555">${n+1}</td><td style="font-weight:800">مستلزمات</td><td colspan="${showCode?3:2}" style="text-align:center;color:#555">مبلغ إجمالي</td><td style="text-align:center;font-weight:700">${fmt(r.amount)}</td></tr>`;
+      }
       return `<tr><td style="text-align:center;color:#555">${n+1}</td><td>${r.label}</td>${showCode?`<td style="text-align:center;font-weight:700">${code}</td>`:''}<td style="text-align:center">${qty}</td><td style="text-align:center">${price}</td><td style="text-align:center;font-weight:700">${fmt(r.amount)}</td></tr>`;
     }).join('');
     const rem = r2(o.cap - o.used);
@@ -3365,18 +3368,18 @@ function openSettings(){
     // صيدلي النفقة يرى قائمة النفقة فقط — بدون قائمة مدخل البيانات ولا الأقسام الطبية
     if(nafaqaTab) nafaqaTab.style.display='';
     if(taminTab)  taminTab.style.display='none';
-    if(itemsTab)  itemsTab.style.display='none';
+    if(itemsTab)  itemsTab.style.display='';
     if(deptsTab)  deptsTab.style.display='none';
-    $('set-modal').style.display='flex';
+    applySettingsPerms(); $('set-modal').style.display='flex';
     sTab('s-nafaqa');
     return;
   } else if(role === 'tamin'){
     // صيدلي التأمين يرى قائمة التأمين فقط — بدون قائمة مدخل البيانات ولا الأقسام الطبية
     if(nafaqaTab) nafaqaTab.style.display='none';
     if(taminTab)  taminTab.style.display='';
-    if(itemsTab)  itemsTab.style.display='none';
+    if(itemsTab)  itemsTab.style.display='';
     if(deptsTab)  deptsTab.style.display='none';
-    $('set-modal').style.display='flex';
+    applySettingsPerms(); $('set-modal').style.display='flex';
     sTab('s-tamin');
     return;
   } else if(role === 'data'){
@@ -3388,10 +3391,9 @@ function openSettings(){
     if(deptsTab)  deptsTab.style.display='none';
     // تقييد فئة الإضافة على الأدوية والمستلزمات فقط
     const catSel = $('s_cat');
-    if(catSel) catSel.innerHTML = '<option>أدوية</option><option>مستلزمات</option>';
     renderSetItems();
     onAddCatChange();
-    $('set-modal').style.display='flex';
+    applySettingsPerms(); $('set-modal').style.display='flex';
     sTab('s-items');
     return;
   } else {
@@ -3406,7 +3408,7 @@ function openSettings(){
   }
   renderSetItems(); renderSetDepts();
   onAddCatChange();
-  $('set-modal').style.display='flex';
+  applySettingsPerms(); $('set-modal').style.display='flex';
 }
 function closeSettings(){$('set-modal').style.display='none';}
 function sTab(id){
@@ -3522,6 +3524,50 @@ function updatePharmListPrice(listType, cat, idx, val){
 /* تفعيل زر "إعدادات" للصيدلي — يفتح فقط على قائمته */
 // الفئات التي يُسمح فيها بتحديد ملكية الصنف (تأمين / نفقة / الجميع)
 const LIST_OWNED_CATS = ['أدوية','مستلزمات'];
+const SET_ALL_CATS = ['أدوية','مستلزمات','شرائح ومسامير','أشعة','تحاليل','بنك الدم','أجهزة','خدمات أخري'];
+/* القوائم التي يحق للمستخدم إضافة/تعديل أصنافها (حسب صلاحية نوع الخدمة):
+   نفقة دولة → nafaqa ، تأمين/اقتصادي/مجاني → tamin ، 'all' (الجميع) لا يُعدَّل إلا لمن يملك الاثنين */
+function _myItemLists(){
+  const ALL=['all','nafaqa','tamin'];
+  if(!currentUser || currentUser.role==='admin') return ALL;
+  // الملكية التي حددها المدير للمستخدم في الصلاحيات لها الأولوية
+  if(typeof currentUser.itemList==='string' && ALL.includes(currentUser.itemList)){
+    return currentUser.itemList==='all' ? ALL : [currentUser.itemList];
+  }
+  let st = Array.isArray(currentUser.allowedStypes) ? currentUser.allowedStypes
+         : (currentUser.role==='nafaqa' ? ['نفقة دولة'] : currentUser.role==='tamin' ? ['تأمين صحي'] : null);
+  if(!st) return ALL;
+  const n = st.some(isNafaqaLike), tm = st.some(s=>!isNafaqaLike(s));
+  const r=[]; if(n) r.push('nafaqa'); if(tm) r.push('tamin'); if(n&&tm) r.push('all');
+  return r;
+}
+function _canEditItem(cat, x){
+  if(!LIST_OWNED_CATS.includes(cat)) return true;   // أشعة/تحاليل/... مفتوحة للجميع
+  return _myItemLists().includes((x&&x.list)||'all');
+}
+/* القائمة التي تُسجَّل بها أصناف المستخدم الجديدة (يحددها المدير؛ وإلا تُستنتج من نوع الخدمة) */
+function _myNewItemList(){
+  if(!currentUser || currentUser.role==='admin') return null;   // المدير يختار بنفسه
+  if(typeof currentUser.itemList==='string' && ['all','nafaqa','tamin'].includes(currentUser.itemList)) return currentUser.itemList;
+  const m=_myItemLists();
+  return m.includes('all') ? 'all' : (m[0]||'all');
+}
+function applySettingsPerms(){
+  const sc=$('s_cat');
+  if(sc){ const cur=sc.value; sc.innerHTML=SET_ALL_CATS.map(c=>`<option>${c}</option>`).join(''); if(SET_ALL_CATS.includes(cur)) sc.value=cur; }
+  const sl=$('s_list');
+  if(sl){
+    const labels={all:'👥 الجميع (تأمين ونفقة)',nafaqa:'💊 نفقة الدولة فقط',tamin:'🏥 التأمين فقط'};
+    const mine=_myItemLists();
+    const forced=_myNewItemList();
+    if(forced){   // غير المدير: الملكية مثبّتة حسب ما حدده المدير ولا يغيّرها
+      sl.innerHTML=`<option value="${forced}">${labels[forced]}</option>`; sl.value=forced; sl.disabled=true;
+    } else {
+      sl.innerHTML=['all','nafaqa','tamin'].map(k=>`<option value="${k}">${labels[k]}</option>`).join(''); sl.disabled=false;
+    }
+  }
+  renderSetItems(); onAddCatChange();
+}
 const LIST_LABELS = { all:'👥 الجميع', nafaqa:'💊 نفقة الدولة', tamin:'🏥 التأمين' };
 const LIST_COLORS = { all:{bg:'#eef2ff',c:'var(--p)'}, nafaqa:{bg:'#fff3cd',c:'#856404'}, tamin:{bg:'#d1ecf1',c:'#0c5460'} };
 
@@ -3530,9 +3576,7 @@ function renderSetItems(){
   const listFilter = Vv('s_list_filter')||'';
   const role = currentUser ? currentUser.role : 'admin';
   // مدخل البيانات يرى فقط فئتي الأدوية والمستلزمات (تماماً مثل صلاحية الصيدلي على قائمته)
-  const cats = role==='data'
-    ? ['أدوية','مستلزمات']
-    : ['أدوية','مستلزمات','شرائح ومسامير','أشعة','تحاليل','بنك الدم','أجهزة','خدمات أخري'];
+  const cats = SET_ALL_CATS;
   let total=0,html='';
   cats.forEach(cat=>{
     const arr=itemDB[cat]||[];
@@ -3546,6 +3590,8 @@ function renderSetItems(){
       ${items.map(x=>{
         const realIdx=arr.indexOf(x);
         const curList = x.list || 'all';
+        const canEdit = _canEditItem(cat, x);
+        const dis = canEdit ? '' : 'disabled title="هذا الصنف خاص بقائمة أخرى — لا تملك صلاحية تعديله"';
         const lc = LIST_COLORS[curList];
         const listLabel = curList==='nafaqa' ? '💊 نفقة الدولة' : curList==='tamin' ? '🏥 التأمين' : '👥 الجميع';
         const listSelect = isOwnedCat
@@ -3557,12 +3603,12 @@ function renderSetItems(){
           </div>
           <div style="display:flex;align-items:center;gap:5px;flex-shrink:0;flex-wrap:wrap">
             ${listSelect}
-            <input type="text" value="${(x.code||'').replace(/"/g,'&quot;')}" placeholder="الكود" title="كود الصنف" onchange="updateDBCode('${cat}',${realIdx},this.value)" style="width:80px;padding:3px 6px;border:1px solid var(--b);border-radius:5px;font-size:.72rem;text-align:center;font-family:'Noto Kufi Arabic',sans-serif">
-            <input type="number" value="${x.price}" min="0" step="0.01" title="السعر"
+            <input type="text" value="${(x.code||'').replace(/"/g,'&quot;')}" placeholder="الكود" title="كود الصنف" ${dis} onchange="updateDBCode('${cat}',${realIdx},this.value)" style="width:80px;padding:3px 6px;border:1px solid var(--b);border-radius:5px;font-size:.72rem;text-align:center;font-family:'Noto Kufi Arabic',sans-serif">
+            <input type="number" value="${x.price}" min="0" step="0.01" title="السعر" ${dis}
               style="width:76px;padding:3px 6px;border:1px solid var(--b);border-radius:5px;font-size:.75rem;font-weight:800;color:var(--p);text-align:center;font-family:'Noto Kufi Arabic',sans-serif"
               onchange="updateDBPrice('${cat}',${realIdx},this.value)">
             <span style="font-size:.68rem;color:var(--tm)">ج.م</span>
-            <button onclick="delDBItem('${cat}',${realIdx})" style="background:none;border:none;cursor:pointer;color:#e57373;font-size:.95rem;line-height:1" title="حذف">🗑</button>
+            <button ${canEdit?'':'hidden'} onclick="delDBItem('${cat}',${realIdx})" style="background:none;border:none;cursor:pointer;color:#e57373;font-size:.95rem;line-height:1" title="حذف">🗑</button>
           </div>
         </div>`;
       }).join('')}
@@ -3626,16 +3672,19 @@ function downloadItemDBExcel(){
   XLSX.writeFile(wb, 'قائمة_مدخل_البيانات_'+today+'.xlsx');
 }
 function delDBItem(cat,idx){
+  if(!_canEditItem(cat,itemDB[cat][idx])){alert('⚠️ هذا الصنف خاص بقائمة أخرى — لا تملك صلاحية حذفه');return;}
   if(!confirm('حذف هذا الصنف نهائياً؟'))return;
   itemDB[cat].splice(idx,1); renderSetItems(); saveSettings();
 }
 function updateDBCode(cat,idx,val){
+  if(!_canEditItem(cat,itemDB[cat][idx])){alert('⚠️ لا تملك صلاحية تعديل هذا الصنف');renderSetItems();return;}
   itemDB[cat][idx].code = String(val||'').trim();
   if(!itemDB[cat][idx].code) delete itemDB[cat][idx].code;
   saveSettings();
   flashSaved('item-row-'+cat+'-'+idx);
 }
 function updateDBPrice(cat,idx,val){
+  if(!_canEditItem(cat,itemDB[cat][idx])){alert('⚠️ لا تملك صلاحية تعديل سعر هذا الصنف');renderSetItems();return;}
   const p=parseFloat(val);
   if(isNaN(p)||p<0){renderSetItems();return;}
   itemDB[cat][idx].price=p;
@@ -3656,7 +3705,8 @@ function addNewItem(){
   if(itemDB[cat].find(x=>x.name===name)){alert('هذا الصنف موجود بالفعل في القائمة');return;}
   const entry={name,price};
   const _code=(Vv('s_code')||'').trim(); if(_code) entry.code=_code;
-  if(LIST_OWNED_CATS.includes(cat)) entry.list = Vv('s_list') || 'all';
+  if(LIST_OWNED_CATS.includes(cat)) entry.list = _myNewItemList() || Vv('s_list') || 'all';
+  if(!_canEditItem(cat, entry)){ alert('⚠️ لا تملك صلاحية إضافة صنف لهذه القائمة'); return; }
   itemDB[cat].push(entry);
   $('s_name').value=''; $('s_price').value=''; if($('s_code')) $('s_code').value='';
   renderSetItems(); saveSettings();
@@ -3864,6 +3914,7 @@ async function finishLogin(){
       currentUser.allowedStypes = Array.isArray(d.allowedStypes) ? d.allowedStypes : null;
       currentUser.allowedCats   = Array.isArray(d.allowedCats)   ? d.allowedCats   : null;
       currentUser.visibleStypes = Array.isArray(d.visibleStypes) ? d.visibleStypes : null;
+      currentUser.itemList      = typeof d.itemList==='string' ? d.itemList : null;
     }catch(e){ console.error('perms:', e); }
   }
   applyUserPerms();
@@ -3956,6 +4007,7 @@ function renderUMList(){
       if(Array.isArray(u.allowedStypes)) prev.allowedStypes = u.allowedStypes;
       if(Array.isArray(u.allowedCats))   prev.allowedCats   = u.allowedCats;
       if(Array.isArray(u.visibleStypes)) prev.visibleStypes = u.visibleStypes;
+      if(typeof u.itemList==='string')   prev.itemList = u.itemList;
     }
   });
   const people = [...seen.values()];
@@ -3963,7 +4015,7 @@ function renderUMList(){
   el.innerHTML = people.map(u=>{
     const nm = u.name.replace(/'/g,"\\'");
     const isMe = currentUser && u.name===currentUser.name;
-    const custom = Array.isArray(u.allowedStypes) || Array.isArray(u.allowedCats) || Array.isArray(u.visibleStypes);
+    const custom = Array.isArray(u.allowedStypes) || Array.isArray(u.allowedCats) || Array.isArray(u.visibleStypes) || typeof u.itemList==='string';
     return `
     <div class="um-row">
       <div>
@@ -3988,6 +4040,8 @@ function openPermModal(name){
   const st = (docs.map(d=>d.allowedStypes).find(Array.isArray)) || null;
   const ct = (docs.map(d=>d.allowedCats).find(Array.isArray)) || null;
   const vs = (docs.map(d=>d.visibleStypes).find(Array.isArray)) || null;
+  const il = (docs.map(d=>d.itemList).find(x=>typeof x==='string')) || '';
+  document.querySelectorAll('input[name="perm-il"]').forEach(r=>{ r.checked = (r.value===il); });
   $('perm-title').textContent = '⚙️ صلاحيات: ' + name;
   const box = (cls,v,on)=>`<label style="display:flex;gap:8px;align-items:center;font-size:.82rem;font-weight:700;padding:5px 2px;cursor:pointer"><input type="checkbox" class="${cls}" value="${v}" ${on?'checked':''}> ${v}</label>`;
   $('perm-stypes').innerHTML = ALL_STYPES.map(s=>box('perm-st',s,!st||st.includes(s))).join('');
@@ -4000,21 +4054,45 @@ async function savePerms(){
   const sts=[...document.querySelectorAll('.perm-st:checked')].map(x=>x.value);
   const cts=[...document.querySelectorAll('.perm-ct:checked')].map(x=>x.value);
   const vss=[...document.querySelectorAll('.perm-vs:checked')].map(x=>x.value);
+  const ilSel=document.querySelector('input[name="perm-il"]:checked');
+  const ilVal=ilSel?ilSel.value:'';
   if(!vss.length){ alert('⚠️ اختر نوع مرضى واحداً على الأقل يظهر للمستخدم'); return; }
   if(!sts.length){ alert('⚠️ اختر نوع خدمة واحداً على الأقل'); return; }
   const del = firebase.firestore.FieldValue.delete();
   const upd = {
     allowedStypes: sts.length===ALL_STYPES.length ? del : sts,
     allowedCats:   cts.length===ALL_CATS.length   ? del : cts,
-    visibleStypes: vss.length===ALL_STYPES.length ? del : vss
+    visibleStypes: vss.length===ALL_STYPES.length ? del : vss,
+    itemList:      ilVal ? ilVal : del
   };
-  try{
-    for(const d of allUsers.filter(u=>u.name===_permUserName)){
-      await db.collection('users').doc(d.uid).update(upd);
-    }
-    await loadUsers(); renderUMList(); closePermModal();
-    alert('✅ تم حفظ الصلاحيات. تسري عند تسجيل دخول المستخدم القادم.');
-  }catch(e){ alert('❌ خطأ: '+e.message); }
+  const docs = allUsers.filter(u=>u.name===_permUserName && u.uid);
+  if(!docs.length){ alert('❌ لم يتم العثور على حساب المستخدم — أعد فتح قائمة المستخدمين ثم حاول مرة أخرى'); return; }
+  const errs=[];
+  for(const d of docs){
+    try{
+      // set+merge بدل update: لا يفشل لو الحقل غير موجود، ويحذف الحقول المعلَّمة للحذف
+      await db.collection('users').doc(d.uid).set(upd, {merge:true});
+    }catch(e){ console.error('savePerms',d.uid,e); errs.push((e.code||'')+' '+(e.message||e)); }
+  }
+  try{ await loadUsers(); renderUMList(); }catch(e){ console.error(e); }
+  if(errs.length){
+    // تشخيص: ما الدور المسجَّل في Firestore للحساب الذي سجّلت به الدخول؟ (القواعد تقرأ الدور من هناك)
+    let diag='';
+    try{
+      const au = auth.currentUser;
+      if(!au){ diag='\n\n🔎 لا توجد جلسة دخول فعّالة (انتهت الجلسة) — سجّل الخروج ثم ادخل من جديد.'; }
+      else{
+        const me = await db.collection('users').doc(au.uid).get();
+        diag = me.exists
+          ? '\n\n🔎 وثيقة حسابك في Firestore: الدور = «'+(me.data().role||'غير محدد')+'»'+(me.data().role!=='admin'?' (يجب أن يكون admin)':'')
+          : '\n\n🔎 لا توجد وثيقة في مجموعة users باسم معرّف حسابك: '+au.uid;
+      }
+    }catch(e2){ diag='\n\n🔎 تعذّر فحص الحساب: '+(e2.message||e2); }
+    alert('❌ تعذّر حفظ الصلاحيات:\n'+errs[0]+diag+(errs[0].includes('permission')?'\n\n(قواعد الأمان في Firestore لا تسمح للمدير بتعديل وثيقة المستخدم)':''));
+    return;
+  }
+  closePermModal();
+  alert('✅ تم حفظ الصلاحيات. تسري عند تسجيل دخول المستخدم القادم.');
 }
 
 async function addUser(){
@@ -4429,6 +4507,14 @@ window.onload = init;
     <div style="font-size:.78rem;font-weight:900;color:var(--p);margin-bottom:4px">أنواع المرضى التي تظهر للمستخدم</div>
     <div style="font-size:.68rem;color:var(--tm);margin-bottom:6px">يرى في قائمة المرضى والتقارير المصدَّرة المرضى من الأنواع المعلَّمة فقط، حتى لو سجّلهم غيره.</div>
     <div id="perm-vis" style="background:#f7f8f9;border-radius:8px;padding:8px 12px;margin-bottom:14px"></div>
+    <div style="font-size:.78rem;font-weight:900;color:var(--p);margin-bottom:4px">الأصناف التي يضيفها المستخدم تكون خاصة بـ</div>
+    <div style="font-size:.68rem;color:var(--tm);margin-bottom:6px">يحدده المدير ولا يستطيع المستخدم تغييره، ولا يعدّل إلا أصناف قائمته. «حسب نوع الخدمة» = يُستنتج من أنواع الخدمة المسموحة له.</div>
+    <div style="background:#f7f8f9;border-radius:8px;padding:8px 12px;margin-bottom:14px">
+      <label style="display:flex;gap:8px;align-items:center;font-size:.82rem;font-weight:700;padding:4px 2px;cursor:pointer"><input type="radio" name="perm-il" value=""> حسب نوع الخدمة (تلقائي)</label>
+      <label style="display:flex;gap:8px;align-items:center;font-size:.82rem;font-weight:700;padding:4px 2px;cursor:pointer"><input type="radio" name="perm-il" value="all"> 👥 الجميع (تأمين ونفقة)</label>
+      <label style="display:flex;gap:8px;align-items:center;font-size:.82rem;font-weight:700;padding:4px 2px;cursor:pointer"><input type="radio" name="perm-il" value="nafaqa"> 💊 نفقة الدولة فقط</label>
+      <label style="display:flex;gap:8px;align-items:center;font-size:.82rem;font-weight:700;padding:4px 2px;cursor:pointer"><input type="radio" name="perm-il" value="tamin"> 🏥 التأمين فقط</label>
+    </div>
     <div style="font-size:.78rem;font-weight:900;color:var(--p);margin-bottom:4px">أقسام الأصناف المسموحة</div>
     <div style="font-size:.68rem;color:var(--tm);margin-bottom:6px">ما لم يُعلَّم يُخفى عنه ولا يستطيع إضافة أصنافه.</div>
     <div id="perm-cats" style="background:#f7f8f9;border-radius:8px;padding:8px 12px;margin-bottom:16px;display:grid;grid-template-columns:1fr 1fr;gap:0 10px"></div>
