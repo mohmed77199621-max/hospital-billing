@@ -3363,6 +3363,7 @@ async function printCostSummary(){
 
 /* ========== الفحوصات (للمدير فقط) ========== */
 const CHK_MONTHS=['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
+function chkLabel(m,y){ return (CHK_MONTHS[(m||1)-1]||'')+(y?(' '+y):''); }
 const CHK_CATS=['أشعة','تحاليل','أجهزة','خدمات أخري'];
 let chkPending=[], chkSaved=[];
 function _chkEsc(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
@@ -3373,9 +3374,9 @@ function _chkFind(name){
 }
 function openCheckupsModal(){
   if(!currentUser || currentUser.role!=='admin'){ alert('⚠️ هذه الشاشة للمدير فقط'); return; }
-  const cur=new Date().getMonth()+1;
-  $('chk-month').innerHTML=CHK_MONTHS.map((m,i)=>`<option value="${i+1}"${i+1===cur?' selected':''}>${m}</option>`).join('');
-  $('chk-filter-month').innerHTML='<option value="0">كل الشهور</option>'+CHK_MONTHS.map((m,i)=>`<option value="${i+1}">${m}</option>`).join('');
+  const _n=new Date();
+  $('chk-month').value=_n.getFullYear()+'-'+String(_n.getMonth()+1).padStart(2,'0');
+  $('chk-filter-month').value='';
   $('chk-items-dl').innerHTML=CHK_CATS.map(cat=>(itemDB[cat]||[]).map(x=>`<option value="${_chkEsc(x.name)}" label="${cat}"></option>`).join('')).join('');
   $('chk-name').value=''; $('chk-letter').value=''; $('chk-tamin').value=''; $('chk-item').value=''; $('chk-qty').value=1;
   chkPending=[]; chkCalc(); chkRenderPending();
@@ -3396,18 +3397,20 @@ function chkAddRow(){
   const tamin=$('chk-tamin').value;
   const f=_chkFind($('chk-item').value);
   let qty=Math.round(parseFloat($('chk-qty').value));
-  const month=parseInt($('chk-month').value,10);
+  const _mv=($('chk-month').value||'').split('-').map(Number);
+  const year=_mv[0], month=_mv[1];
   if(!name){ alert('⚠️ اكتب الاسم'); return; }
+  if(!year||!month){ alert('⚠️ اختر الشهر والسنة'); return; }
   if(!tamin){ alert('⚠️ اختر فئة التأمين'); return; }
   if(!f){ alert('⚠️ اختر نوع الفحص من القائمة (أشعة / تحاليل / أجهزة / خدمات أخرى)'); return; }
   if(!(qty>=1)){ alert('⚠️ الكمية عدد صحيح لا يقل عن 1'); return; }
-  chkPending.push({name,letter,taminType:tamin,item:f.name,cat:f.cat,price:f.price,qty,total:parseFloat((f.price*qty).toFixed(4)),month});
+  chkPending.push({name,letter,taminType:tamin,item:f.name,cat:f.cat,price:f.price,qty,total:parseFloat((f.price*qty).toFixed(4)),month,year});
   $('chk-item').value=''; $('chk-qty').value=1; chkCalc(); chkRenderPending();
   $('chk-item').focus();
 }
 function chkDelPending(i){ chkPending.splice(i,1); chkRenderPending(); }
 function chkRenderPending(){
-  $('chk-pending-body').innerHTML=chkPending.length?chkPending.map((r,i)=>`<tr><td>${i+1}</td><td>${_chkEsc(r.name)}</td><td>${_chkEsc(r.letter)||'—'}</td><td>${r.taminType}</td><td>${_chkEsc(r.item)}</td><td>${r.qty}</td><td>${fmt(r.total)}</td><td>${CHK_MONTHS[r.month-1]}</td><td><button onclick="chkDelPending(${i})" style="background:none;border:none;cursor:pointer;color:#e57373">🗑</button></td></tr>`).join('')
+  $('chk-pending-body').innerHTML=chkPending.length?chkPending.map((r,i)=>`<tr><td>${i+1}</td><td>${_chkEsc(r.name)}</td><td>${_chkEsc(r.letter)||'—'}</td><td>${r.taminType}</td><td>${_chkEsc(r.item)}</td><td>${r.qty}</td><td>${fmt(r.total)}</td><td>${chkLabel(r.month,r.year)}</td><td><button onclick="chkDelPending(${i})" style="background:none;border:none;cursor:pointer;color:#e57373">🗑</button></td></tr>`).join('')
     :'<tr><td colspan="9" style="text-align:center;color:var(--tm)">لم تُضف فحوصات بعد</td></tr>';
   const s=chkPending.reduce((a,r)=>a+r.total,0);
   $('chk-pending-total').textContent=chkPending.length?('عدد البنود: '+chkPending.length+' — الإجمالي: '+fmt(s)+' ج.م'):'';
@@ -3416,12 +3419,11 @@ async function chkSaveAll(){
   if(!chkPending.length){ alert('⚠️ أضف فحصاً واحداً على الأقل قبل الحفظ'); return; }
   const btn=$('chk-save-btn'); btn.disabled=true;
   try{
-    const year=new Date().getFullYear();
     const batch=db.batch();
     chkPending.forEach(r=>{
       batch.set(db.collection('checkups').doc(), {
         name:r.name, letter:r.letter||'', stype:'تأمين صحي', taminType:r.taminType, item:r.item, cat:r.cat,
-        price:r.price, qty:r.qty, total:r.total, month:r.month, year,
+        price:r.price, qty:r.qty, total:r.total, month:r.month, year:r.year,
         createdBy: currentUser?currentUser.name:'', createdAt: firebase.firestore.FieldValue.serverTimestamp()
       });
     });
@@ -3440,9 +3442,9 @@ async function chkLoadSaved(){
   chkRenderSaved();
 }
 function chkRenderSaved(){
-  const m=parseInt($('chk-filter-month').value,10)||0;
-  const list=chkSaved.filter(r=>!m||r.month===m);
-  $('chk-saved-body').innerHTML=list.length?list.map(r=>`<tr><td>${CHK_MONTHS[(r.month||1)-1]}</td><td>${_chkEsc(r.name)}</td><td>${_chkEsc(r.letter)||'—'}</td><td>${_chkEsc(r.taminType)}</td><td>${_chkEsc(r.item)}</td><td>${r.qty}</td><td>${fmt(r.total||0)}</td><td><button onclick="chkDelSaved('${r.id}')" style="background:none;border:none;cursor:pointer;color:#e57373" title="حذف">🗑</button></td></tr>`).join('')
+  const fm=($('chk-filter-month').value||'').split('-').map(Number);
+  const list=chkSaved.filter(r=>!fm[0]||(r.year===fm[0]&&r.month===fm[1]));
+  $('chk-saved-body').innerHTML=list.length?list.map(r=>`<tr><td>${chkLabel(r.month,r.year)}</td><td>${_chkEsc(r.name)}</td><td>${_chkEsc(r.letter)||'—'}</td><td>${_chkEsc(r.taminType)}</td><td>${_chkEsc(r.item)}</td><td>${r.qty}</td><td>${fmt(r.total||0)}</td><td><button onclick="chkDelSaved('${r.id}')" style="background:none;border:none;cursor:pointer;color:#e57373" title="حذف">🗑</button></td></tr>`).join('')
     :'<tr><td colspan="8" style="text-align:center;color:var(--tm)">لا توجد فحوصات محفوظة</td></tr>';
   $('chk-saved-total').textContent=list.length?('العدد: '+list.length+' — الإجمالي: '+fmt(list.reduce((a,r)=>a+(r.total||0),0))+' ج.م'):'';
 }
@@ -3467,7 +3469,7 @@ async function printCheckupsList(monthVal, taminVal){
   rows.sort((a,b)=>ms(a)-ms(b));
   const sum=rows.reduce((a,r)=>a+(r.total||0),0);
   const body=rows.map((r,i)=>`<tr><td>${i+1}</td><td>${_chkEsc(r.name)}</td><td>${_chkEsc(r.letter)||'—'}</td><td>${_chkEsc(r.taminType)}</td><td>${_chkEsc(r.item)}</td><td>${r.qty}</td><td>${fmt(r.price||0)}</td><td>${fmt(r.total||0)}</td></tr>`).join('');
-  const title=`كشف فحوصات تأمين صحي عن شهر ${CHK_MONTHS[mm-1]}${taminVal?(' — فئة التأمين: '+taminVal):''}`;
+  const title=`كشف فحوصات تأمين صحي عن شهر ${chkLabel(mm,yy)}${taminVal?(' — فئة التأمين: '+taminVal):''}`;
   const html=`<div class="inv-hdr"><div style="font-size:9pt;font-weight:900">جمهورية مصر العربية — وزارة الصحة والسكان</div>
     <div style="font-size:13pt;font-weight:900;margin:2px 0">مستشفى سوهاج العام</div>
     <div style="font-size:9.6pt;font-weight:800">${title}</div></div>
@@ -4733,7 +4735,7 @@ window.onload = init;
       <datalist id="chk-items-dl"></datalist>
     </div>
     <div class="g2" style="margin-bottom:10px">
-      <div><label class="lbl">الشهر <span style="color:#c0392b">*</span></label><select id="chk-month" class="inp"></select></div>
+      <div><label class="lbl">الشهر <span style="color:#c0392b">*</span></label><input type="month" id="chk-month" class="inp"></div>
       <div><label class="lbl">الكمية <span style="color:#c0392b">*</span></label><input type="number" id="chk-qty" class="inp" value="1" min="1" step="1" oninput="chkCalc()"></div>
     </div>
     <div style="margin-bottom:10px">
@@ -4749,7 +4751,7 @@ window.onload = init;
     <div style="border-top:2px solid var(--b);padding-top:12px">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;gap:8px;flex-wrap:wrap">
         <div style="font-weight:900;font-size:.85rem;color:var(--p)">الفحوصات المحفوظة</div>
-        <select id="chk-filter-month" class="inp" style="max-width:170px" onchange="chkRenderSaved()"></select>
+        <div style="display:flex;gap:6px;align-items:center"><input type="month" id="chk-filter-month" class="inp" style="max-width:170px" onchange="chkRenderSaved()" title="اتركه فارغاً لعرض كل الشهور"><button type="button" class="btn btn-o btn-sm" onclick="$('chk-filter-month').value='';chkRenderSaved()">كل الشهور</button></div>
       </div>
       <div style="overflow-x:auto;border-radius:8px;border:1px solid var(--b);max-height:260px;overflow-y:auto">
         <table class="tbl"><thead><tr><th>الشهر</th><th>الاسم</th><th>رقم الخطاب</th><th>فئة التأمين</th><th>نوع الفحص</th><th>الكمية</th><th>الإجمالي</th><th></th></tr></thead>
