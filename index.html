@@ -197,6 +197,7 @@ input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
     <button id="btn-data-settings" class="btn btn-o" onclick="openSettings()" style="display:none;color:#a8c4ff;border-color:rgba(255,255,255,.25);background:rgba(255,255,255,.08)">⚙ تعديل أسعار الأدوية والمستلزمات</button>
     <button id="btn-users" class="btn btn-o" onclick="openUserMgmt()" style="display:none;color:#a8c4ff;border-color:rgba(255,255,255,.25);background:rgba(255,255,255,.08)">👥 المستخدمين</button>
     <button id="btn-excel-all" class="btn btn-a" onclick="openExcelExportModal()" style="display:none">📊 تصدير إكسل</button>
+    <button id="btn-checkups" class="btn btn-a" onclick="openCheckupsModal()" style="display:none">🔬 الفحوصات</button>
     <button id="btn-print-cost" class="btn btn-a" onclick="openPrintCostModal()" style="display:none">🖨 طباعة تكلفة الفواتير</button>
     <button id="btn-new-patient" class="btn btn-g" onclick="confirmNewPatient()" style="display:none">+ مريض جديد</button>
     <button class="btn btn-r btn-sm" onclick="doLogout()" style="background:rgba(184,50,50,.7);border:1px solid rgba(255,100,100,.3)">خروج</button>
@@ -3108,14 +3109,17 @@ function openPrintCostModal(){
   $('pc-stype').value='';
   $('pc-tamin').value='';
   $('pc-tamin-wrap').style.display='none';
+  if($('pc-dept-wrap')) $('pc-dept-wrap').style.display='';
   const now=new Date();
   $('pc-month').value = now.toISOString().slice(0,7);
   $('print-cost-modal').style.display='flex';
 }
 function closePrintCostModal(){ $('print-cost-modal').style.display='none'; }
 function onPcStypeChange(){
-  $('pc-tamin-wrap').style.display = (Vv('pc-stype')==='تأمين صحي') ? '' : 'none';
-  if(Vv('pc-stype')!=='تأمين صحي') $('pc-tamin').value='';
+  const v=Vv('pc-stype');
+  $('pc-tamin-wrap').style.display = (v==='تأمين صحي' || v==='__chk') ? '' : 'none';
+  if(v!=='تأمين صحي' && v!=='__chk') $('pc-tamin').value='';
+  if($('pc-dept-wrap')) $('pc-dept-wrap').style.display = (v==='__chk') ? 'none' : '';
 }
 
 async function printCostSummary(){
@@ -3124,6 +3128,7 @@ async function printCostSummary(){
   const deptVals = Array.from(document.querySelectorAll('.pc-dept-cb:checked')).map(cb=>cb.value);
   const stypeVal = Vv('pc-stype');
   const taminVal = Vv('pc-tamin');
+  if(stypeVal==='__chk'){ await printCheckupsList(monthVal, taminVal); return; }
   if(stypeVal==='تأمين صحي' && !taminVal){
     alert('⚠️ يرجى اختيار فئة تأمين محددة (أطفال / طلبة / منتفعين) لطباعة فواتير التأمين الصحي.');
     return;
@@ -3356,6 +3361,143 @@ async function printCostSummary(){
   w.document.close();
 }
 
+/* ========== الفحوصات (للمدير فقط) ========== */
+const CHK_MONTHS=['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
+const CHK_CATS=['أشعة','تحاليل','أجهزة','خدمات أخري'];
+let chkPending=[], chkSaved=[];
+function _chkEsc(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function _chkFind(name){
+  const n=(name||'').trim();
+  for(const cat of CHK_CATS){ const x=(itemDB[cat]||[]).find(i=>i.name===n); if(x) return {cat,price:parseFloat(x.price)||0,name:x.name}; }
+  return null;
+}
+function openCheckupsModal(){
+  if(!currentUser || currentUser.role!=='admin'){ alert('⚠️ هذه الشاشة للمدير فقط'); return; }
+  const cur=new Date().getMonth()+1;
+  $('chk-month').innerHTML=CHK_MONTHS.map((m,i)=>`<option value="${i+1}"${i+1===cur?' selected':''}>${m}</option>`).join('');
+  $('chk-filter-month').innerHTML='<option value="0">كل الشهور</option>'+CHK_MONTHS.map((m,i)=>`<option value="${i+1}">${m}</option>`).join('');
+  $('chk-items-dl').innerHTML=CHK_CATS.map(cat=>(itemDB[cat]||[]).map(x=>`<option value="${_chkEsc(x.name)}" label="${cat}"></option>`).join('')).join('');
+  $('chk-name').value=''; $('chk-letter').value=''; $('chk-tamin').value=''; $('chk-item').value=''; $('chk-qty').value=1;
+  chkPending=[]; chkCalc(); chkRenderPending();
+  $('chk-modal').style.display='flex';
+  chkLoadSaved();
+}
+function closeCheckupsModal(){ $('chk-modal').style.display='none'; }
+function chkCalc(){
+  let q=parseFloat($('chk-qty').value); if(!(q>0)) q=0;
+  const f=_chkFind($('chk-item').value);
+  const price=f?f.price:0;
+  $('chk-total').value=fmt(price*Math.round(q));
+  $('chk-price-hint').textContent=f?('سعر الوحدة: '+fmt(price)+' ج.م — '+f.cat):($('chk-item').value?'⚠️ الفحص غير موجود في القوائم':'');
+}
+function chkAddRow(){
+  const name=($('chk-name').value||'').trim();
+  const letter=($('chk-letter').value||'').trim();
+  const tamin=$('chk-tamin').value;
+  const f=_chkFind($('chk-item').value);
+  let qty=Math.round(parseFloat($('chk-qty').value));
+  const month=parseInt($('chk-month').value,10);
+  if(!name){ alert('⚠️ اكتب الاسم'); return; }
+  if(!tamin){ alert('⚠️ اختر فئة التأمين'); return; }
+  if(!f){ alert('⚠️ اختر نوع الفحص من القائمة (أشعة / تحاليل / أجهزة / خدمات أخرى)'); return; }
+  if(!(qty>=1)){ alert('⚠️ الكمية عدد صحيح لا يقل عن 1'); return; }
+  chkPending.push({name,letter,taminType:tamin,item:f.name,cat:f.cat,price:f.price,qty,total:parseFloat((f.price*qty).toFixed(4)),month});
+  $('chk-item').value=''; $('chk-qty').value=1; chkCalc(); chkRenderPending();
+  $('chk-item').focus();
+}
+function chkDelPending(i){ chkPending.splice(i,1); chkRenderPending(); }
+function chkRenderPending(){
+  $('chk-pending-body').innerHTML=chkPending.length?chkPending.map((r,i)=>`<tr><td>${i+1}</td><td>${_chkEsc(r.name)}</td><td>${_chkEsc(r.letter)||'—'}</td><td>${r.taminType}</td><td>${_chkEsc(r.item)}</td><td>${r.qty}</td><td>${fmt(r.total)}</td><td>${CHK_MONTHS[r.month-1]}</td><td><button onclick="chkDelPending(${i})" style="background:none;border:none;cursor:pointer;color:#e57373">🗑</button></td></tr>`).join('')
+    :'<tr><td colspan="9" style="text-align:center;color:var(--tm)">لم تُضف فحوصات بعد</td></tr>';
+  const s=chkPending.reduce((a,r)=>a+r.total,0);
+  $('chk-pending-total').textContent=chkPending.length?('عدد البنود: '+chkPending.length+' — الإجمالي: '+fmt(s)+' ج.م'):'';
+}
+async function chkSaveAll(){
+  if(!chkPending.length){ alert('⚠️ أضف فحصاً واحداً على الأقل قبل الحفظ'); return; }
+  const btn=$('chk-save-btn'); btn.disabled=true;
+  try{
+    const year=new Date().getFullYear();
+    const batch=db.batch();
+    chkPending.forEach(r=>{
+      batch.set(db.collection('checkups').doc(), {
+        name:r.name, letter:r.letter||'', stype:'تأمين صحي', taminType:r.taminType, item:r.item, cat:r.cat,
+        price:r.price, qty:r.qty, total:r.total, month:r.month, year,
+        createdBy: currentUser?currentUser.name:'', createdAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+    });
+    await batch.commit();
+    chkPending=[]; chkRenderPending();
+    await chkLoadSaved();
+    alert('✅ تم حفظ الفحوصات. تظهر في «طباعة تكلفة الفواتير» تحت بند فحوصات.');
+  }catch(e){ console.error(e); alert('❌ تعذّر الحفظ: '+(e.code||'')+' '+(e.message||e)); }
+  finally{ btn.disabled=false; }
+}
+async function chkLoadSaved(){
+  try{
+    const snap=await db.collection('checkups').orderBy('createdAt','desc').limit(500).get();
+    chkSaved=snap.docs.map(d=>({id:d.id,...d.data()}));
+  }catch(e){ console.error(e); chkSaved=[]; $('chk-saved-total').textContent='⚠️ تعذّر جلب الفحوصات المحفوظة: '+(e.code||e.message); return; }
+  chkRenderSaved();
+}
+function chkRenderSaved(){
+  const m=parseInt($('chk-filter-month').value,10)||0;
+  const list=chkSaved.filter(r=>!m||r.month===m);
+  $('chk-saved-body').innerHTML=list.length?list.map(r=>`<tr><td>${CHK_MONTHS[(r.month||1)-1]}</td><td>${_chkEsc(r.name)}</td><td>${_chkEsc(r.letter)||'—'}</td><td>${_chkEsc(r.taminType)}</td><td>${_chkEsc(r.item)}</td><td>${r.qty}</td><td>${fmt(r.total||0)}</td><td><button onclick="chkDelSaved('${r.id}')" style="background:none;border:none;cursor:pointer;color:#e57373" title="حذف">🗑</button></td></tr>`).join('')
+    :'<tr><td colspan="8" style="text-align:center;color:var(--tm)">لا توجد فحوصات محفوظة</td></tr>';
+  $('chk-saved-total').textContent=list.length?('العدد: '+list.length+' — الإجمالي: '+fmt(list.reduce((a,r)=>a+(r.total||0),0))+' ج.م'):'';
+}
+async function chkDelSaved(id){
+  if(!confirm('حذف هذا الفحص نهائياً؟')) return;
+  try{ await db.collection('checkups').doc(id).delete(); await chkLoadSaved(); }
+  catch(e){ alert('❌ تعذّر الحذف: '+(e.code||'')+' '+(e.message||e)); }
+}
+// طباعة قائمة الفحوصات لشهر معيّن (من «طباعة تكلفة الفواتير» ← بند فحوصات)
+async function printCheckupsList(monthVal, taminVal){
+  const [yy,mm]=monthVal.split('-').map(Number);
+  let rows=[];
+  try{
+    setStatus('wait');
+    const snap=await db.collection('checkups').where('year','==',yy).where('month','==',mm).get();
+    rows=snap.docs.map(d=>d.data());
+    setStatus('ok');
+  }catch(e){ console.error(e); setStatus('err'); alert('⚠️ تعذّر جلب الفحوصات: '+(e.code||'')+' '+(e.message||e)); return; }
+  if(taminVal) rows=rows.filter(r=>r.taminType===taminVal);
+  if(!rows.length){ alert('لا توجد فحوصات محفوظة لهذا الشهر'+(taminVal?(' وفئة '+taminVal):'')); return; }
+  const ms=r=>(r.createdAt&&r.createdAt.toMillis)?r.createdAt.toMillis():0;
+  rows.sort((a,b)=>ms(a)-ms(b));
+  const sum=rows.reduce((a,r)=>a+(r.total||0),0);
+  const body=rows.map((r,i)=>`<tr><td>${i+1}</td><td>${_chkEsc(r.name)}</td><td>${_chkEsc(r.letter)||'—'}</td><td>${_chkEsc(r.taminType)}</td><td>${_chkEsc(r.item)}</td><td>${r.qty}</td><td>${fmt(r.price||0)}</td><td>${fmt(r.total||0)}</td></tr>`).join('');
+  const title=`كشف فحوصات تأمين صحي عن شهر ${CHK_MONTHS[mm-1]}${taminVal?(' — فئة التأمين: '+taminVal):''}`;
+  const html=`<div class="inv-hdr"><div style="font-size:9pt;font-weight:900">جمهورية مصر العربية — وزارة الصحة والسكان</div>
+    <div style="font-size:13pt;font-weight:900;margin:2px 0">مستشفى سوهاج العام</div>
+    <div style="font-size:9.6pt;font-weight:800">${title}</div></div>
+    <table class="pc-table"><colgroup><col style="width:5%"><col style="width:20%"><col style="width:11%"><col style="width:11%"><col style="width:25%"><col style="width:7%"><col style="width:10%"><col style="width:11%"></colgroup>
+    <thead><tr><th>م</th><th>الاسم</th><th>رقم الخطاب</th><th>فئة التأمين</th><th>نوع الفحص</th><th>الكمية</th><th>سعر الوحدة</th><th>الإجمالي</th></tr></thead>
+    <tbody>${body}<tr class="pc-tot-row"><td colspan="7">الإجمالي الكلي</td><td>${fmt(sum)}</td></tr></tbody></table>
+    <div class="inv-sigs"><div class="inv-sig">مدخل البيانات<br><br><span style="font-size:8pt;font-weight:400">الاسم: .....................</span></div>
+    <div class="inv-sig">المسؤول المالي<br><br><span style="font-size:8pt;font-weight:400">الاسم: .....................</span></div>
+    <div class="inv-sig">يعتمد<br><br><span style="font-size:8pt;font-weight:400">الاسم: .....................</span></div></div>
+    <div style="text-align:center;font-size:8pt;color:#555;margin-top:10px;border-top:1px solid #999;padding-top:5px">مستشفى سوهاج العام — تاريخ الطباعة: ${new Date().toLocaleDateString('ar-EG')}</div>`;
+  const w=window.open('','_blank','width=1000,height=800');
+  if(!w){ alert('يرجى السماح بالنوافذ المنبثقة في المتصفح'); return; }
+  w.document.write(`<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Kufi+Arabic:wght@400;700;900&display=swap" rel="stylesheet">
+<style>@page{size:A4 portrait;margin:10mm 8mm 12mm 8mm}*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:#fff;font-family:'Noto Kufi Arabic',sans-serif}body{padding:12px}
+#print-toolbar{position:fixed;top:0;left:0;right:0;background:#0f2d5e;padding:8px 16px;display:flex;gap:10px;justify-content:center;z-index:999}
+.tb-btn{border:none;border-radius:7px;font-family:inherit;font-weight:700;cursor:pointer;padding:7px 18px;font-size:.85rem}.tb-print{background:#c8973a;color:#fff}.tb-close{background:rgba(255,255,255,.15);color:#fff}
+.inv-hdr{text-align:center;border-bottom:2px solid #000;padding-bottom:6px;margin-bottom:10px;color:#000}
+.pc-table{width:100%;table-layout:fixed;border-collapse:collapse;font-size:8.5pt}
+.pc-table th,.pc-table td{border:1px solid #000;padding:4px 3px;text-align:center;overflow-wrap:break-word;line-height:1.25}.pc-table th{font-weight:900;background:#f5f5f5}
+.pc-tot-row td{font-weight:900;background:#eef2f8}.pc-table tr{page-break-inside:avoid}
+.inv-sigs{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-top:18px;page-break-inside:avoid}
+.inv-sig{text-align:center;border-top:1.5px solid #000;padding-top:6px;font-size:8.6pt;font-weight:900}
+@media print{#print-toolbar{display:none!important}body{padding:0}}</style></head><body>
+<div id="print-toolbar"><button class="tb-btn tb-print" onclick="window.print()">🖨 طباعة</button><button class="tb-btn tb-close" onclick="window.close()">✕ إغلاق</button></div>
+<div style="margin-top:45px">${html}</div></body></html>`);
+  w.document.close();
+}
+
 /* ========== SETTINGS MODAL ========== */
 function openSettings(){
   const role = currentUser ? currentUser.role : 'admin';
@@ -3541,6 +3683,12 @@ function _myItemLists(){
   const r=[]; if(n) r.push('nafaqa'); if(tm) r.push('tamin'); if(n&&tm) r.push('all');
   return r;
 }
+/* أصناف القائمة الأخرى تُخفى تماماً عن المستخدم المقيّد؛ أصناف «الجميع» تظهر له للاطلاع فقط */
+function _itemVisible(cat, x){
+  if(!LIST_OWNED_CATS.includes(cat)) return true;
+  const l=(x&&x.list)||'all';
+  return l==='all' || _myItemLists().includes(l);
+}
 function _canEditItem(cat, x){
   if(!LIST_OWNED_CATS.includes(cat)) return true;   // أشعة/تحاليل/... مفتوحة للجميع
   return _myItemLists().includes((x&&x.list)||'all');
@@ -3566,6 +3714,12 @@ function applySettingsPerms(){
       sl.innerHTML=['all','nafaqa','tamin'].map(k=>`<option value="${k}">${labels[k]}</option>`).join(''); sl.disabled=false;
     }
   }
+  const lf=$('s_list_filter');
+  if(lf){
+    const mine2=_myItemLists();
+    [...lf.options].forEach(o=>{ o.hidden = !!o.value && o.value!=='all' && !mine2.includes(o.value); o.disabled=o.hidden; });
+    if(lf.selectedOptions[0] && lf.selectedOptions[0].disabled) lf.value='';
+  }
   renderSetItems(); onAddCatChange();
 }
 const LIST_LABELS = { all:'👥 الجميع', nafaqa:'💊 نفقة الدولة', tamin:'🏥 التأمين' };
@@ -3580,7 +3734,7 @@ function renderSetItems(){
   let total=0,html='';
   cats.forEach(cat=>{
     const arr=itemDB[cat]||[];
-    let items=q?arr.filter(x=>x.name.toLowerCase().includes(q)):arr;
+    let items=(q?arr.filter(x=>x.name.toLowerCase().includes(q)):arr).filter(x=>_itemVisible(cat,x));
     if(listFilter && LIST_OWNED_CATS.includes(cat)) items=items.filter(x=>(x.list||'all')===listFilter);
     // الفئات غير المرتبطة بقائمة (أشعة، تحاليل، أجهزة...) عامة للجميع دائماً — لا تُخفى عند تفعيل فلتر نفقة/تأمين
     if(!items.length)return; total+=items.length;
@@ -3648,7 +3802,7 @@ function downloadItemDBExcel(){
   let totalItems = 0;
 
   cats.forEach(cat=>{
-    const arr = itemDB[cat] || [];
+    const arr = (itemDB[cat] || []).filter(x=>_itemVisible(cat,x));
     if(!arr.length) return;
     totalItems += arr.length;
 
@@ -3945,7 +4099,7 @@ function applyRoleUI(){
     // Hide everything
     $('main-content').style.display='none';
     $('pharm-section').style.display='none';
-    ['btn-admin','btn-users','btn-excel-all','btn-print-cost','btn-new-patient','btn-pharm-settings','btn-data-settings','current-user-badge'].forEach(id=>{
+    ['btn-admin','btn-users','btn-checkups','btn-excel-all','btn-print-cost','btn-new-patient','btn-pharm-settings','btn-data-settings','current-user-badge'].forEach(id=>{
       const el=$(id); if(el) el.style.display='none';
     });
     return;
@@ -3960,6 +4114,7 @@ function applyRoleUI(){
     // Full access
     $('main-content').style.display='';
     $('pharm-section').style.display='none';
+    if($('btn-checkups')) $('btn-checkups').style.display = (role==='admin') ? '' : 'none';
     if(role==='admin'){
       $('btn-admin').style.display='';
       $('btn-users').style.display='';
@@ -3984,6 +4139,7 @@ function applyRoleUI(){
     $('btn-users').style.display='none';
     $('btn-excel-all').style.display='none';
     $('btn-print-cost').style.display='none';
+    if($('btn-checkups')) $('btn-checkups').style.display='none';
     $('btn-new-patient').style.display='none';
     $('btn-data-settings').style.display='none';
     $('btn-pharm-settings').style.display='';
@@ -4084,7 +4240,7 @@ async function savePerms(){
       else{
         const me = await db.collection('users').doc(au.uid).get();
         diag = me.exists
-          ? '\n\n🔎 وثيقة حسابك في Firestore: الدور = «'+(me.data().role||'غير محدد')+'»'+(me.data().role!=='admin'?' (يجب أن يكون admin)':'')
+          ? '\n\n🔎 وثيقة حسابك في Firestore: الدور = «'+(me.data().role||'غير محدد')+'»'+(me.data().role!=='admin'?' (يجب أن يكون admin)':'')+'\n🔑 معرّف الوثيقة (UID): '+au.uid
           : '\n\n🔎 لا توجد وثيقة في مجموعة users باسم معرّف حسابك: '+au.uid;
       }
     }catch(e2){ diag='\n\n🔎 تعذّر فحص الحساب: '+(e2.message||e2); }
@@ -4555,6 +4711,55 @@ window.onload = init;
   </div>
 </div>
 
+<!-- CHECKUPS (الفحوصات) MODAL — للمدير فقط -->
+<div id="chk-modal" class="modal" onclick="if(event.target===this)closeCheckupsModal()" style="display:none">
+  <div class="modal-box" style="max-width:760px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;border-bottom:2px solid var(--b);padding-bottom:12px">
+      <h2 style="font-weight:900;font-size:.95rem;color:var(--p)">🔬 الفحوصات</h2>
+      <button onclick="closeCheckupsModal()" style="background:none;border:none;cursor:pointer;font-size:1.4rem;color:var(--tm)">✕</button>
+    </div>
+    <div class="g2" style="margin-bottom:10px">
+      <div><label class="lbl">الاسم <span style="color:#c0392b">*</span></label><input type="text" id="chk-name" class="inp" placeholder="اسم المريض"></div>
+      <div><label class="lbl">رقم الخطاب</label><input type="text" id="chk-letter" class="inp" placeholder="رقم الخطاب" autocomplete="off"></div>
+    </div>
+    <div class="g2" style="margin-bottom:10px">
+      <div><label class="lbl">نوع الخدمة</label><input type="text" id="chk-stype" class="inp" value="تأمين صحي" readonly style="background:#f1f3f5;font-weight:800"></div>
+      <div><label class="lbl">فئة التأمين <span style="color:#c0392b">*</span></label>
+        <select id="chk-tamin" class="inp"><option value="">— اختر —</option><option>أطفال</option><option>طلبة</option><option>منتفعين</option></select></div>
+    </div>
+    <div style="margin-bottom:10px">
+      <label class="lbl">نوع الفحص <span style="color:#c0392b">*</span> <span style="font-weight:400;color:var(--tm)">(من قوائم الأشعة والتحاليل والأجهزة وخدمات أخرى)</span></label>
+      <input type="text" id="chk-item" class="inp" list="chk-items-dl" placeholder="ابدأ بكتابة اسم الفحص ثم اختره من القائمة" oninput="chkCalc()" autocomplete="off">
+      <datalist id="chk-items-dl"></datalist>
+    </div>
+    <div class="g2" style="margin-bottom:10px">
+      <div><label class="lbl">الشهر <span style="color:#c0392b">*</span></label><select id="chk-month" class="inp"></select></div>
+      <div><label class="lbl">الكمية <span style="color:#c0392b">*</span></label><input type="number" id="chk-qty" class="inp" value="1" min="1" step="1" oninput="chkCalc()"></div>
+    </div>
+    <div style="margin-bottom:10px">
+      <div><label class="lbl">الإجمالي (ج.م)</label><input type="text" id="chk-total" class="inp" readonly value="0.00" style="background:#f1f3f5;font-weight:900;color:var(--p)"><div id="chk-price-hint" style="font-size:.68rem;color:var(--tm);margin-top:3px"></div></div>
+    </div>
+    <button type="button" onclick="chkAddRow()" class="btn btn-o" style="width:100%;justify-content:center;margin-bottom:12px">➕ إضافة إلى القائمة</button>
+    <div style="overflow-x:auto;border-radius:8px;border:1px solid var(--b);margin-bottom:8px">
+      <table class="tbl"><thead><tr><th>م</th><th>الاسم</th><th>رقم الخطاب</th><th>فئة التأمين</th><th>نوع الفحص</th><th>الكمية</th><th>الإجمالي</th><th>الشهر</th><th></th></tr></thead>
+      <tbody id="chk-pending-body"></tbody></table>
+    </div>
+    <div id="chk-pending-total" style="font-weight:800;color:var(--p);font-size:.82rem;margin-bottom:10px"></div>
+    <button type="button" id="chk-save-btn" onclick="chkSaveAll()" class="btn btn-p" style="width:100%;justify-content:center;margin-bottom:16px">💾 حفظ الفحوصات</button>
+    <div style="border-top:2px solid var(--b);padding-top:12px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;gap:8px;flex-wrap:wrap">
+        <div style="font-weight:900;font-size:.85rem;color:var(--p)">الفحوصات المحفوظة</div>
+        <select id="chk-filter-month" class="inp" style="max-width:170px" onchange="chkRenderSaved()"></select>
+      </div>
+      <div style="overflow-x:auto;border-radius:8px;border:1px solid var(--b);max-height:260px;overflow-y:auto">
+        <table class="tbl"><thead><tr><th>الشهر</th><th>الاسم</th><th>رقم الخطاب</th><th>فئة التأمين</th><th>نوع الفحص</th><th>الكمية</th><th>الإجمالي</th><th></th></tr></thead>
+        <tbody id="chk-saved-body"></tbody></table>
+      </div>
+      <div id="chk-saved-total" style="font-weight:800;color:var(--p);font-size:.8rem;margin-top:6px"></div>
+    </div>
+  </div>
+</div>
+
 <!-- PRINT COST SUMMARY MODAL -->
 <div id="print-cost-modal" class="modal" onclick="if(event.target===this)closePrintCostModal()" style="display:none">
   <div class="modal-box" style="max-width:460px">
@@ -4566,7 +4771,7 @@ window.onload = init;
       <label class="lbl">الشهر (حسب تاريخ خروج المريض)</label>
       <input type="month" id="pc-month" class="inp">
     </div>
-    <div style="margin-bottom:14px">
+    <div id="pc-dept-wrap" style="margin-bottom:14px">
       <label class="lbl">الأقسام الطبية <span style="font-weight:400;color:var(--tm)">(يمكن اختيار أكثر من قسم معاً)</span></label>
       <div id="pc-dept-list" style="max-height:150px;overflow-y:auto;border:1.5px solid var(--b);border-radius:8px;padding:8px 10px;display:flex;flex-direction:column;gap:5px"></div>
     </div>
@@ -4576,6 +4781,7 @@ window.onload = init;
         <select id="pc-stype" class="inp" onchange="onPcStypeChange()">
           <option value="">— كل الأنواع —</option>
           <option>اقتصادي</option><option>نفقة دولة</option><option>قوائم انتظار</option><option>تأمين صحي</option><option>مجاني</option>
+          <option value="__chk">🔬 فحوصات</option>
         </select>
       </div>
       <div id="pc-tamin-wrap" style="display:none">
