@@ -1386,12 +1386,12 @@ function applyAutoLinkedItems(_reason){
 
   // (6) بنك الدم:
   //   - توافق بنك دم = عدد "كيس دم" فقط (حتى لو اتصرف معه وحدات بلازما، توافق بنك دم بيفضل بعدد الأكياس بالظبط)
-  //   - لو مفيش أي كيس دم خالص واتصرف بلازما بس، توافق بنك دم = 1 دايماً مهما كان عدد وحدات البلازما
+  //   - البلازما وحدها لا تُضيف توافق بنك دم (توافق بنك دم يظهر فقط مع «كيس دم»)
   //   - فصيلة بنك دم وجهاز نقل الدم بيتحسبوا بناءً على إجمالي (كيس دم + بلازما) زي ما هو معمول من الأول
   const bloodBagQty  = _sumQtyByNames(['كيس دم']);
   const plasmaQty    = _sumQtyByNames(['وحدة بلازما']);
   const bloodQty     = bloodBagQty + plasmaQty; // إجمالي الأصناف — يُستخدم لفصيلة بنك الدم وجهاز نقل الدم
-  const bloodCompatQty = bloodBagQty>0 ? bloodBagQty : (plasmaQty>0 ? 1 : 0);
+  const bloodCompatQty = bloodBagQty; // البلازما لا تُضيف توافق
   changed = _ensureItem('بنك الدم','توافق بنك دم', bloodCompatQty, {lockedQty:true, lockDelete:true, autoKey:'link-blood-compat'}) || changed;
   if(bloodQty>0){
     // تُضاف تلقائياً بكمية 1 عند أول ظهور لبنود الدم فقط، ثم تصبح كميتها قابلة للتعديل يدوياً
