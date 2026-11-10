@@ -735,7 +735,7 @@ let depts = [
 let billItems = [], patients = [], editId = null, selItem = null;
 let _ptSearchTimer=null, _remoteSearchTicket=null, _remoteSearchBusy=false;
 let lastDoc = null, allLoaded = false, loadingMore = false;
-const PAGE_SIZE = 2000;
+const PAGE_SIZE = 150;   // كان 2000 — كل مريض يتحمّل = قراءة واحدة من حصة Firebase اليومية
 
 /* ========== HELPERS ========== */
 const $=id=>document.getElementById(id);
@@ -913,6 +913,28 @@ function _startPatientsLiveListener(){
     }, e=>console.error('patients live listener:', e));
 }
 
+/* تحديث تدريجي: يجلب فقط المرضى الأحدث من آخر مريض محمّل (بدل إعادة تحميل القائمة كلها) */
+async function refreshNewPatients(){
+  try{
+    let newest = null;
+    patients.forEach(p=>{ if(p.savedAt && p.savedAt.toMillis && (!newest || p.savedAt.toMillis() > newest.toMillis())) newest = p.savedAt; });
+    if(!newest){ loadPatients(true); return; }
+    const snap = await db.collection('patients').where('savedAt','>', newest).orderBy('savedAt','desc').limit(50).get();
+    if(snap.docs.length >= 50){ loadPatients(true); return; }   // تغييرات كثيرة — تحميل كامل
+    snap.docs.forEach(d=>{
+      if(!_stypeVisible(d.data().stype)) return;
+      const data={...d.data(), firestoreId:d.id};
+      const idx=patients.findIndex(p=>p.firestoreId===d.id);
+      if(idx>=0) patients[idx]=data; else patients.unshift(data);
+    });
+    patients.sort((a,b)=>{
+      const ta=a.savedAt&&a.savedAt.toMillis?a.savedAt.toMillis():0, tb=b.savedAt&&b.savedAt.toMillis?b.savedAt.toMillis():0;
+      return tb-ta;
+    });
+    _monthCache.clear();
+    renderPatients();
+  }catch(e){ console.error('refreshNewPatients:', e); loadPatients(true); }
+}
 function _showLiveUpdateBanner(){
   let banner = $('live-update-banner');
   if(!banner){
@@ -920,7 +942,7 @@ function _showLiveUpdateBanner(){
     banner.id = 'live-update-banner';
     banner.style.cssText = 'position:fixed;top:14px;left:50%;transform:translateX(-50%);z-index:9999;background:#0c5460;color:#fff;padding:10px 20px;border-radius:30px;font-size:.8rem;font-weight:800;box-shadow:0 6px 20px rgba(0,0,0,.25);cursor:pointer;display:flex;align-items:center;gap:8px;animation:fadeInDown .3s ease';
     banner.innerHTML = '🔄 يوجد تحديثات جديدة — اضغط للتحديث';
-    banner.onclick = ()=>{ banner.remove(); loadPatients(true); };
+    banner.onclick = ()=>{ banner.remove(); refreshNewPatients(); };
     document.body.appendChild(banner);
   }
 }
@@ -2262,7 +2284,9 @@ async function savePatient(){
       alert('✅ تم حفظ بيانات المريض:\n'+name+'\nالإجمالي: '+fmt(savedTotal)+' ج.م');
       renderPatients();
       setStatus('ok');
-      loadPendingPharmCount();
+      pendingPharmPatients = pendingPharmPatients.filter(x=>x.firestoreId!==savedDoc.firestoreId);
+      _renderPendingBadge();
+      _monthCache.clear(); _gapCache.clear();
     }catch(e){alert('❌ خطأ في الحفظ:\n'+e.message);setStatus('err');}
   } finally {
     _savingPatient = false;
@@ -2314,6 +2338,7 @@ async function deletePatient(fid){
     setStatus('save');
     const gapOk = await _recordInvoiceGap(fid, pt); // حجز رقم الفاتورة قبل الحذف
     await db.collection('patients').doc(fid).delete();
+    _monthCache.clear(); _gapCache.clear();
     if(!gapOk) alert('⚠️ تم حذف المريض لكن تعذّر حجز رقم فاتورته، فقد تتغير أرقام الفواتير التالية له.');
     patients = patients.filter(p=>p.firestoreId!==fid);
     renderPatients();
@@ -2456,22 +2481,28 @@ function onPtSearchInput(){
     if(q && !localHit) remoteTicketSearch(q);
   }, 500);
 }
-// بحث احتياطي في قاعدة البيانات نفسها برقم تذكرة بالظبط (يغطي أي مريض مش من ضمن اللي اتحمّل على الجهاز)
+// بحث احتياطي في قاعدة البيانات: برقم تذكرة بالظبط، أو باسم يبدأ بما كُتب (يغطي المرضى غير المحمّلين على الجهاز)
 async function remoteTicketSearch(ticket){
   if(_remoteSearchBusy) return;
   _remoteSearchBusy=true;
   _remoteSearchTicket=ticket;
   const el=$('patients-list');
-  el.innerHTML=`<div style="text-align:center;padding:24px;color:var(--tm);font-size:.82rem">⏳ مفيش نتيجة محمّلة على الجهاز، بيتم البحث برقم التذكرة في قاعدة البيانات...</div>`;
+  el.innerHTML=`<div style="text-align:center;padding:24px;color:var(--tm);font-size:.82rem">⏳ مفيش نتيجة محمّلة على الجهاز، بيتم البحث في قاعدة البيانات...</div>`;
   try{
-    const snap = await db.collection('patients').where('ticket','==', ticket).limit(10).get();
+    const jobs=[ db.collection('patients').where('ticket','==', ticket).limit(10).get() ];
+    if(!/^\d+$/.test(ticket)){
+      jobs.push(db.collection('patients').where('name','>=',ticket).where('name','<=',ticket+'\uf8ff').limit(20).get());
+    }
+    const snaps = await Promise.all(jobs);
     _remoteSearchBusy=false;
     if(_remoteSearchTicket!==ticket) return; // المستخدم غيّر البحث قبل ما نخلص
-    if(snap.empty){
-      el.innerHTML=`<div style="text-align:center;padding:24px;color:var(--tm);font-size:.82rem">لا نتائج — حتى بعد البحث في كل قاعدة البيانات برقم التذكرة ده بالظبط</div>`;
+    const docs=[]; const seenIds=new Set();
+    snaps.forEach(sn=>sn.docs.forEach(d=>{ if(!seenIds.has(d.id)){ seenIds.add(d.id); docs.push(d); } }));
+    if(!docs.length){
+      el.innerHTML=`<div style="text-align:center;padding:24px;color:var(--tm);font-size:.82rem">لا نتائج — حتى بعد البحث في كل قاعدة البيانات (رقم التذكرة بالظبط أو بداية الاسم)</div>`;
       return;
     }
-    snap.docs.forEach(d=>{
+    docs.forEach(d=>{
       if(!_stypeVisible(d.data().stype)) return;
       const data={...d.data(), firestoreId:d.id};
       const idx=patients.findIndex(p=>p.firestoreId===d.id);
@@ -2519,17 +2550,27 @@ function renderPatients(skipRemoteHint){
 /* ========== مرضى مسجلون من الصيدلية بانتظار استكمال البيانات ========== */
 let pendingPharmPatients = [];
 
-async function loadPendingPharmCount(){
+let _pendingFull=false, _pendingAt=0;
+function _renderPendingBadge(){
+  const el = $('pending-pharm-count');
+  if(el) el.textContent = pendingPharmPatients.length + ((!_pendingFull && pendingPharmPatients.length>=100) ? '+' : '');
+}
+/* full=false: العدّاد فقط (حد أقصى 100 قراءة) — full=true: القائمة الكاملة (مع كاش 30 ثانية) */
+async function loadPendingPharmCount(full){
   try{
-    const snap = await db.collection('patients').where('finalized','==', false).get();
+    if(full && _pendingFull && (Date.now()-_pendingAt) < 30000) { _renderPendingBadge(); return; }
+    let q = db.collection('patients').where('finalized','==', false);
+    if(!full) q = q.limit(100);
+    const snap = await q.get();
     pendingPharmPatients = snap.docs.map(d=>({...d.data(), firestoreId:d.id}));
-    const el = $('pending-pharm-count');
-    if(el) el.textContent = pendingPharmPatients.length;
+    _pendingFull = !!full || snap.docs.length<100;
+    _pendingAt = Date.now();
+    _renderPendingBadge();
   }catch(e){ console.error('loadPendingPharmCount:', e); }
 }
 
 function openPendingPharmModal(){
-  loadPendingPharmCount().then(renderPendingPharmList);
+  loadPendingPharmCount(true).then(renderPendingPharmList);
   $('pp-modal').style.display='flex';
 }
 function closePendingPharmModal(){ $('pp-modal').style.display='none'; }
@@ -2564,7 +2605,7 @@ function openExcelExportModal(){
 function closeExcelModal(){ $('excel-modal').style.display='none'; }
 
 /* ========== تحميل كل المرضى قبل التصدير ========== */
-// البرنامج يحمّل المرضى على دفعات (2000 في كل دفعة)، فكان التصدير يشمل الدفعات المحمّلة فقط.
+// البرنامج يحمّل المرضى على دفعات (150 في كل دفعة)، فكان التصدير يشمل الدفعات المحمّلة فقط.
 async function ensureAllPatientsLoaded(){
   if(allLoaded) return true;
   const notice = document.createElement('div');
@@ -2885,13 +2926,24 @@ function _invoiceNoApplies(yy,mm,stype){
   return stype==='تأمين صحي' && (yy*100+mm) >= INVOICE_NO_FROM;
 }
 // جلب مرضى شهر خروج معيّن (من قاعدة البيانات) + المحمّلين محلياً
-async function _fetchMonthPatients(yy,mm){
-  const mm2 = String(mm).padStart(2,'0');
-  const snap = await db.collection('patients')
-    .where('exitRaw','>=',`${yy}-${mm2}-01`)
-    .where('exitRaw','<=',`${yy}-${mm2}-31`)
-    .get();
-  const docs = snap.docs.map(d=>({...d.data(), firestoreId:d.id}));
+/* كاش لمرضى الشهر (5 دقائق) — طباعة فاتورة واحدة كانت تقرأ الشهر كله في كل مرة. يُمسح عند أي حفظ/حذف */
+const _monthCache = new Map(), _gapCache = new Map();
+const MONTH_CACHE_MS = 5*60*1000;
+async function _fetchMonthPatients(yy,mm,fresh){
+  const key = yy+'-'+mm;
+  let base;
+  const hit = _monthCache.get(key);
+  if(!fresh && hit && (Date.now()-hit.t) < MONTH_CACHE_MS){ base = hit.docs; }
+  else{
+    const mm2 = String(mm).padStart(2,'0');
+    const snap = await db.collection('patients')
+      .where('exitRaw','>=',`${yy}-${mm2}-01`)
+      .where('exitRaw','<=',`${yy}-${mm2}-31`)
+      .get();
+    base = snap.docs.map(d=>({...d.data(), firestoreId:d.id}));
+    _monthCache.set(key,{t:Date.now(), docs:base});
+  }
+  const docs = base.slice();
   const seen = new Set(docs.map(x=>x.firestoreId));
   patients.forEach(x=>{ if(!seen.has(x.firestoreId)) docs.push(x); });
   return docs;
@@ -2917,8 +2969,12 @@ async function _recordInvoiceGap(fid, oldData){
 }
 async function _fetchInvoiceGaps(yy,mm){
   try{
-    const snap = await db.collection('invoiceGaps').where('ym','==',yy+'-'+mm).get();
-    return snap.docs.map(d=>({fid:d.id, ...d.data()}));
+    const key=yy+'-'+mm, hit=_gapCache.get(key);
+    if(hit && (Date.now()-hit.t) < MONTH_CACHE_MS) return hit.rows.slice();
+    const snap = await db.collection('invoiceGaps').where('ym','==',key).get();
+    const rows = snap.docs.map(d=>({fid:d.id, ...d.data()}));
+    _gapCache.set(key,{t:Date.now(), rows});
+    return rows;
   }catch(e){ console.warn('fetch gaps:', e); return []; }
 }
 // أرقام الفواتير لكل مرضى (شهر + تأمين صحي + فئة التأمين) بكل الأقسام مع الأرقام المحجوزة
@@ -3009,7 +3065,7 @@ async function printCostSummary(){
   let monthDocs = [];
   try{
     setStatus('wait');
-    monthDocs = await _fetchMonthPatients(yy,mm);
+    monthDocs = await _fetchMonthPatients(yy,mm,true);   // تقرير الشهر دايمًا من السيرفر (أحدث بيانات)
     setStatus('ok');
   }catch(err){
     console.error('جلب مرضى الشهر:', err);
@@ -3296,7 +3352,10 @@ async function chkSaveAll(){
 }
 async function chkLoadSaved(){
   try{
-    const snap=await db.collection('checkups').orderBy('createdAt','desc').limit(500).get();
+    const _fm=(($('chk-filter-month')||{}).value||'').split('-').map(Number);
+    const snap = _fm[0]
+      ? await db.collection('checkups').where('year','==',_fm[0]).where('month','==',_fm[1]).get()
+      : await db.collection('checkups').orderBy('createdAt','desc').limit(100).get();
     chkSaved=snap.docs.map(d=>({id:d.id,...d.data()}));
   }catch(e){ console.error(e); chkSaved=[]; $('chk-saved-total').textContent='⚠️ تعذّر جلب الفحوصات المحفوظة: '+(e.code||e.message); return; }
   chkRenderSaved();
@@ -4122,6 +4181,7 @@ async function deletePharmPatient(fid, name){
   try{
     const gapOk = await _recordInvoiceGap(fid); // حجز رقم الفاتورة قبل الحذف
     await db.collection('patients').doc(fid).delete();
+    _monthCache.clear(); _gapCache.clear();
     if(!gapOk) alert('⚠️ تم حذف المريض لكن تعذّر حجز رقم فاتورته، فقد تتغير أرقام الفواتير التالية له.');
     pharmPatients = pharmPatients.filter(p=>p.firestoreId!==fid);
     renderPharmPatients();
@@ -4181,6 +4241,7 @@ async function saveNewPharmPatient(){
 
   try{
     const ref = await db.collection('patients').add(newPt);
+    _monthCache.clear();
     closeNewPharmPatientModal();
     pharmPatients.unshift({...newPt, firestoreId: ref.id, savedAt: new Date()});
     renderPharmPatients();
@@ -4345,6 +4406,7 @@ async function savePharmItems(){
     });
 
     db.collection('auditLog').add({action:'pharm_save', patient:pharmCurrentPatient.name, items:finalItems.length, user:currentUser.name, role:currentUser.role, at:firebase.firestore.FieldValue.serverTimestamp()}).catch(()=>{});
+    _monthCache.clear();
     alert('✅ تم حفظ الصرف للمريض: ' + pharmCurrentPatient.name);
     const idx = pharmPatients.findIndex(p=>p.firestoreId===fid);
     const localDoc = {...updated, firestoreId: fid, savedAt: pharmPatients[idx]?pharmPatients[idx].savedAt:new Date(), pharmSavedAt:new Date()};
@@ -4469,7 +4531,7 @@ window.onload = init;
     <div style="border-top:2px solid var(--b);padding-top:12px">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;gap:8px;flex-wrap:wrap">
         <div style="font-weight:900;font-size:.85rem;color:var(--p)">الفحوصات المحفوظة</div>
-        <div style="display:flex;gap:6px;align-items:center"><input type="month" id="chk-filter-month" class="inp" style="max-width:170px" onchange="chkRenderSaved()" title="اتركه فارغاً لعرض كل الشهور"><button type="button" class="btn btn-o btn-sm" onclick="$('chk-filter-month').value='';chkRenderSaved()">كل الشهور</button></div>
+        <div style="display:flex;gap:6px;align-items:center"><input type="month" id="chk-filter-month" class="inp" style="max-width:170px" onchange="chkLoadSaved()" title="اتركه فارغاً لعرض آخر 100 فحص"><button type="button" class="btn btn-o btn-sm" onclick="$('chk-filter-month').value='';chkRenderSaved()">كل الشهور</button></div>
       </div>
       <div style="overflow-x:auto;border-radius:8px;border:1px solid var(--b);max-height:260px;overflow-y:auto">
         <table class="tbl"><thead><tr><th>الشهر</th><th>الاسم</th><th>رقم الخطاب</th><th>فئة التأمين</th><th>نوع الفحص</th><th>الكمية</th><th>الإجمالي</th><th></th></tr></thead>
