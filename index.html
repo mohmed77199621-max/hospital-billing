@@ -409,18 +409,18 @@ input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
         <button class="btn btn-a btn-sm" onclick="openPendingPharmModal()">🆕 مرضى من الصيدلية (<span id="pending-pharm-count">0</span>)</button>
         <span id="pt-count" class="badge bp">جاري التحميل...</span>
-        <input type="text" id="pt-search" class="inp" style="width:200px;font-size:.78rem" placeholder="بحث باسم أو رقم تذكرة..." oninput="onPtSearchInput()">
+        <input type="text" id="pt-search" class="inp" style="width:250px;font-size:.78rem" placeholder="بحث باسم أو رقم تذكرة (في قاعدة البيانات)..." oninput="onPtSearchInput()" onkeydown="if(event.key==='Enter'){ptSearchNow()}">
         <button class="btn btn-o btn-sm" onclick="loadPatients(true)" title="تحديث القائمة">🔄 تحديث</button>
       </div>
     </div>
     <div id="patients-list"><div style="text-align:center;padding:24px;color:var(--tm);font-size:.82rem">جاري التحميل من قاعدة البيانات...</div></div>
     <!-- زر تحميل المزيد -->
     <div id="load-more-info" style="display:none;text-align:center;padding:6px 0 2px;font-size:.72rem;color:var(--tm)">
-      يعرض النظام آخر <strong>2000</strong> مريض — اضغط للتحميل السابق
+      يعرض النظام آخر <strong>150</strong> مريض — اضغط للتحميل السابق، أو ابحث في قاعدة البيانات مباشرة
     </div>
     <div style="text-align:center;margin-top:10px">
       <button id="load-more-btn" onclick="loadPatients(false)" class="btn btn-o" style="display:none;font-size:.78rem;gap:6px">
-        ⬇ تحميل 2000 مريض إضافيين
+        ⬇ تحميل 150 مريض إضافيين
       </button>
     </div>
   </div>
@@ -628,7 +628,7 @@ input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
         </div>
         <div style="background:#f7f8f9;padding:14px;border-radius:10px">
           <div style="font-size:.74rem;font-weight:900;color:var(--t);margin-bottom:10px">🔍 بحث</div>
-          <input type="text" id="s_filter" placeholder="ابحث في الأصناف..." class="inp" oninput="renderSetItems()" style="margin-bottom:7px">
+          <input type="text" id="s_filter" placeholder="ابحث باسم الصنف أو الكود أو السعر..." class="inp" oninput="renderSetItems()" style="margin-bottom:7px">
           <label style="font-size:.68rem;color:var(--tm);font-weight:700;display:block;margin-bottom:4px">تصفية حسب الملكية:</label>
           <select id="s_list_filter" class="inp" onchange="renderSetItems()">
             <option value="">الكل</option>
@@ -733,7 +733,8 @@ let depts = [
   "مبتسرين","داخلي كلي"
 ];
 let billItems = [], patients = [], editId = null, selItem = null;
-let _ptSearchTimer=null, _remoteSearchTicket=null, _remoteSearchBusy=false;
+let _ptSearchTimer=null, _searchActive=false, _searchIds=null, _searchAddedIds=[], _searchSeq=0;
+const SEARCH_LIMIT=50;
 let lastDoc = null, allLoaded = false, loadingMore = false;
 const PAGE_SIZE = 150;   // كان 2000 — كل مريض يتحمّل = قراءة واحدة من حصة Firebase اليومية
 
@@ -956,7 +957,7 @@ function updateLoadMoreBtn(state){
     btn.innerHTML='⏳ جاري التحميل...';
   } else if(state==='more'){
     btn.disabled=false;
-    btn.innerHTML='⬇ تحميل 2000 مريض إضافيين';
+    btn.innerHTML='⬇ تحميل '+PAGE_SIZE+' مريض إضافيين';
     btn.style.display='inline-flex';
     if(info) info.style.display='block';
   } else {
@@ -2469,61 +2470,87 @@ function clearForm(){
   if(currentUser && Array.isArray(currentUser.allowedStypes) && currentUser.allowedStypes.length===1){ $('p_stype').value=currentUser.allowedStypes[0]; try{ onStypeChange(); }catch(e){} }
 }
 
+function _toEnDigits(t){ return String(t).replace(/[٠-٩]/g,d=>'٠١٢٣٤٥٦٧٨٩'.indexOf(d)); }
+function _clearPtSearch(){
+  _searchActive=false; _searchIds=null; _searchSeq++;
+  // إزالة المرضى الذين أُضيفوا للقائمة بسبب البحث فقط (القائمة الأصلية المحمّلة تبقى كما هي)
+  if(_searchAddedIds.length){ const rm=new Set(_searchAddedIds); patients=patients.filter(p=>!rm.has(p.firestoreId)); }
+  _searchAddedIds=[];
+  renderPatients();
+}
 function onPtSearchInput(){
   clearTimeout(_ptSearchTimer);
-  _remoteSearchTicket=null; // كل ضغطة حرف جديدة تلغي بحث السيرفر السابق (بحث مختلف)
-  renderPatients();
-  // بعد وقفة بسيطة عن الكتابة، لو مفيش نتيجة محليًا، دوّر على رقم التذكرة في السيرفر مباشرة
-  _ptSearchTimer=setTimeout(()=>{
-    const q=(Vv('pt-search')||'').trim();
-    const ql=q.toLowerCase();
-    const localHit = q && patients.some(p=>(p.name||'').toLowerCase().includes(ql)||(p.ticket||'').includes(q));
-    if(q && !localHit) remoteTicketSearch(q);
-  }, 500);
+  const q=_toEnDigits((Vv('pt-search')||'').trim());
+  if(!q){ _clearPtSearch(); return; }
+  _searchActive=true; _searchSeq++; _searchIds=null;
+  $('pt-count').innerText='بحث في قاعدة البيانات';
+  $('patients-list').innerHTML=`<div style="text-align:center;padding:24px;color:var(--tm);font-size:.82rem">${q.length<2?'اكتب حرفين على الأقل للبحث في قاعدة البيانات':'⏳ جاري البحث في قاعدة البيانات...'}</div>`;
+  updateLoadMoreBtn('done');
+  if(q.length<2) return;
+  _ptSearchTimer=setTimeout(()=>runPtSearch(q), 600);   // بعد وقفة بسيطة عن الكتابة
 }
-// بحث احتياطي في قاعدة البيانات: برقم تذكرة بالظبط، أو باسم يبدأ بما كُتب (يغطي المرضى غير المحمّلين على الجهاز)
-async function remoteTicketSearch(ticket){
-  if(_remoteSearchBusy) return;
-  _remoteSearchBusy=true;
-  _remoteSearchTicket=ticket;
+function ptSearchNow(){
+  clearTimeout(_ptSearchTimer);
+  const q=_toEnDigits((Vv('pt-search')||'').trim());
+  if(q.length>=2){ _searchActive=true; runPtSearch(q); }
+}
+/* البحث يتم في قاعدة البيانات فقط (وليس في المرضى المحمّلين):
+   رقم التذكرة يبدأ بما كُتب + الاسم يبدأ بما كُتب (مع قبول أ/إ/ا في أول حرف) */
+async function runPtSearch(q){
+  const seq=++_searchSeq;
   const el=$('patients-list');
-  el.innerHTML=`<div style="text-align:center;padding:24px;color:var(--tm);font-size:.82rem">⏳ مفيش نتيجة محمّلة على الجهاز، بيتم البحث في قاعدة البيانات...</div>`;
+  el.innerHTML=`<div style="text-align:center;padding:24px;color:var(--tm);font-size:.82rem">⏳ جاري البحث في قاعدة البيانات...</div>`;
   try{
-    const jobs=[ db.collection('patients').where('ticket','==', ticket).limit(10).get() ];
-    if(!/^\d+$/.test(ticket)){
-      jobs.push(db.collection('patients').where('name','>=',ticket).where('name','<=',ticket+'\uf8ff').limit(20).get());
+    const col=db.collection('patients');
+    const prefixQ=(f,v)=>col.where(f,'>=',v).where(f,'<=',v+'\uf8ff').limit(SEARCH_LIMIT).get();
+    const jobs=[ prefixQ('ticket',q) ];
+    if(!/^\d+$/.test(q)){
+      const alif=['ا','أ','إ','آ'];
+      const vars=new Set([q]);
+      if(alif.includes(q[0])) alif.forEach(a=>vars.add(a+q.slice(1)));
+      vars.forEach(v=>jobs.push(prefixQ('name',v)));
     }
-    const snaps = await Promise.all(jobs);
-    _remoteSearchBusy=false;
-    if(_remoteSearchTicket!==ticket) return; // المستخدم غيّر البحث قبل ما نخلص
-    const docs=[]; const seenIds=new Set();
-    snaps.forEach(sn=>sn.docs.forEach(d=>{ if(!seenIds.has(d.id)){ seenIds.add(d.id); docs.push(d); } }));
-    if(!docs.length){
-      el.innerHTML=`<div style="text-align:center;padding:24px;color:var(--tm);font-size:.82rem">لا نتائج — حتى بعد البحث في كل قاعدة البيانات (رقم التذكرة بالظبط أو بداية الاسم)</div>`;
-      return;
-    }
-    docs.forEach(d=>{
-      if(!_stypeVisible(d.data().stype)) return;
-      const data={...d.data(), firestoreId:d.id};
-      const idx=patients.findIndex(p=>p.firestoreId===d.id);
-      if(idx>=0) patients[idx]=data; else patients.push(data);
+    const snaps=await Promise.all(jobs);
+    if(seq!==_searchSeq) return;   // المستخدم غيّر البحث قبل ما نخلص
+    const docs=new Map(); let capped=false;
+    snaps.forEach(sn=>{ if(sn.docs.length>=SEARCH_LIMIT) capped=true; sn.docs.forEach(d=>docs.set(d.id,d)); });
+    const ids=new Set();
+    docs.forEach((d,id)=>{
+      const data={...d.data(), firestoreId:id};
+      const idx=patients.findIndex(p=>p.firestoreId===id);
+      if(idx>=0) patients[idx]=data; else { patients.push(data); _searchAddedIds.push(id); }
+      ids.add(id);
     });
-    renderPatients(true);
+    _searchIds=ids;
+    renderPatients();
+    if(capped){
+      const note=document.createElement('div');
+      note.style.cssText='text-align:center;padding:8px;color:#b9770e;font-size:.74rem';
+      note.textContent='⚠️ ظهر أول '+SEARCH_LIMIT+' نتيجة — اكتب أكثر من الاسم أو رقم التذكرة لتضييق البحث';
+      el.appendChild(note);
+    }
   }catch(e){
-    _remoteSearchBusy=false;
-    console.error('remoteTicketSearch:', e);
-    el.innerHTML=`<div style="text-align:center;padding:24px;color:var(--tm);font-size:.82rem">تعذّر البحث في قاعدة البيانات: ${e.message}</div>`;
+    console.error('runPtSearch:', e);
+    el.innerHTML=`<div style="text-align:center;padding:24px;color:#c0392b;font-size:.82rem">تعذّر البحث في قاعدة البيانات: ${e.message}</div>`;
   }
 }
 function renderPatients(skipRemoteHint){
-  const q=(Vv('pt-search')||'').toLowerCase();
   const _vis=patients.filter(_ptVisible);
-  const list=q?_vis.filter(p=>(p.name||'').toLowerCase().includes(q)||(p.ticket||'').includes(q)):_vis;
-  $('pt-count').innerText=_vis.length+(allLoaded?'':'+')+' مريض محمّل';
+  let list;
+  const _ms=p=>(p.savedAt&&p.savedAt.toMillis)?p.savedAt.toMillis():0;
+  if(_searchActive){
+    // وضع البحث: نتائج قاعدة البيانات فقط (لا بحث في المحمّلين)
+    list=_searchIds?_vis.filter(p=>_searchIds.has(p.firestoreId)).sort((a,b)=>_ms(b)-_ms(a)):[];
+    if(_searchIds) $('pt-count').innerText=list.length+' نتيجة بحث';
+  } else {
+    list=_vis;
+    $('pt-count').innerText=_vis.length+(allLoaded?'':'+')+' مريض محمّل';
+  }
   const el=$('patients-list');
   if(!list.length){
-    el.innerHTML=`<div style="text-align:center;padding:24px;color:var(--tm);font-size:.82rem">${q?(skipRemoteHint?'لا نتائج':'لا نتائج — لو ده رقم تذكرة، البرنامج هيدوّر تلقائيًا في قاعدة البيانات كمان'):'لا يوجد مرضى محفوظون بعد'}</div>`;
-    updateLoadMoreBtn(allLoaded?'done':'more');
+    if(_searchActive && !_searchIds) return;   // لسه في انتظار نتيجة البحث — لا نمسح رسالة الانتظار
+    el.innerHTML=`<div style="text-align:center;padding:24px;color:var(--tm);font-size:.82rem">${_searchActive?'لا نتائج في قاعدة البيانات (رقم التذكرة أو بداية الاسم)':'لا يوجد مرضى محفوظون بعد'}</div>`;
+    updateLoadMoreBtn((_searchActive||allLoaded)?'done':'more');
     return;
   }
   el.innerHTML=list.map(pt=>`
@@ -2544,7 +2571,7 @@ function renderPatients(skipRemoteHint){
         <button onclick="deletePatient('${pt.firestoreId}')" class="btn btn-r btn-sm">🗑 حذف</button>
       </div>
     </div>`).join('');
-  updateLoadMoreBtn(allLoaded?'done':'more');
+  updateLoadMoreBtn((_searchActive||allLoaded)?'done':'more');
 }
 
 /* ========== مرضى مسجلون من الصيدلية بانتظار استكمال البيانات ========== */
@@ -3025,6 +3052,8 @@ function openPrintCostModal(){
   $('pc-stype').value='';
   $('pc-tamin').value='';
   $('pc-tamin-wrap').style.display='none';
+  if($('pc-section-wrap')) $('pc-section-wrap').style.display='none';
+  if($('pc-section')) $('pc-section').value='';
   if($('pc-dept-wrap')) $('pc-dept-wrap').style.display='';
   const now=new Date();
   $('pc-month').value = now.toISOString().slice(0,7);
@@ -3036,6 +3065,8 @@ function onPcStypeChange(){
   $('pc-tamin-wrap').style.display = (v==='تأمين صحي' || v==='__chk') ? '' : 'none';
   if(v!=='تأمين صحي' && v!=='__chk') $('pc-tamin').value='';
   if($('pc-dept-wrap')) $('pc-dept-wrap').style.display = (v==='__chk') ? 'none' : '';
+  if($('pc-section-wrap')) $('pc-section-wrap').style.display = (v==='__chk') ? '' : 'none';
+  if(v!=='__chk' && $('pc-section')) $('pc-section').value='';
 }
 
 async function printCostSummary(){
@@ -3044,7 +3075,11 @@ async function printCostSummary(){
   const deptVals = Array.from(document.querySelectorAll('.pc-dept-cb:checked')).map(cb=>cb.value);
   const stypeVal = Vv('pc-stype');
   const taminVal = Vv('pc-tamin');
-  if(stypeVal==='__chk'){ await printCheckupsList(monthVal, taminVal); return; }
+  if(stypeVal==='__chk'){
+    const sectionVal = Vv('pc-section');
+    if(!sectionVal){ alert('⚠️ اختر البند (الاشعة / العلاج الطبيعي / رسم العصب / الايكو / الجلدية) لطباعة الفحوصات'); return; }
+    await printCheckupsList(monthVal, taminVal, sectionVal); return;
+  }
   if(stypeVal==='تأمين صحي' && !taminVal){
     alert('⚠️ يرجى اختيار فئة تأمين محددة (أطفال / طلبة / منتفعين) لطباعة فواتير التأمين الصحي.');
     return;
@@ -3281,6 +3316,7 @@ async function printCostSummary(){
 const CHK_MONTHS=['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
 function chkLabel(m,y){ return (CHK_MONTHS[(m||1)-1]||'')+(y?(' '+y):''); }
 const CHK_CATS=['أشعة','تحاليل','أجهزة','خدمات أخري'];
+const CHK_SECTIONS=['الاشعة','العلاج الطبيعي','رسم العصب','الايكو','الجلدية'];   // البند (إجباري)
 let chkPending=[], chkSaved=[];
 function _chkEsc(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 function _chkFind(name){
@@ -3294,7 +3330,7 @@ function openCheckupsModal(){
   $('chk-month').value=_n.getFullYear()+'-'+String(_n.getMonth()+1).padStart(2,'0');
   $('chk-filter-month').value='';
   $('chk-items-dl').innerHTML=CHK_CATS.map(cat=>(itemDB[cat]||[]).map(x=>`<option value="${_chkEsc(x.name)}" label="${cat}"></option>`).join('')).join('');
-  $('chk-name').value=''; $('chk-letter').value=''; $('chk-tamin').value=''; $('chk-item').value=''; $('chk-qty').value=1;
+  $('chk-name').value=''; $('chk-letter').value=''; $('chk-tamin').value=''; $('chk-section').value=''; $('chk-item').value=''; $('chk-qty').value=1;
   chkPending=[]; chkCalc(); chkRenderPending();
   $('chk-modal').style.display='flex';
   chkLoadSaved();
@@ -3311,6 +3347,7 @@ function chkAddRow(){
   const name=($('chk-name').value||'').trim();
   const letter=($('chk-letter').value||'').trim();
   const tamin=$('chk-tamin').value;
+  const section=$('chk-section').value;
   const f=_chkFind($('chk-item').value);
   let qty=Math.round(parseFloat($('chk-qty').value));
   const _mv=($('chk-month').value||'').split('-').map(Number);
@@ -3318,16 +3355,17 @@ function chkAddRow(){
   if(!name){ alert('⚠️ اكتب الاسم'); return; }
   if(!year||!month){ alert('⚠️ اختر الشهر والسنة'); return; }
   if(!tamin){ alert('⚠️ اختر فئة التأمين'); return; }
+  if(!section){ alert('⚠️ اختر البند (الاشعة / العلاج الطبيعي / رسم العصب / الايكو / الجلدية)'); return; }
   if(!f){ alert('⚠️ اختر نوع الفحص من القائمة (أشعة / تحاليل / أجهزة / خدمات أخرى)'); return; }
   if(!(qty>=1)){ alert('⚠️ الكمية عدد صحيح لا يقل عن 1'); return; }
-  chkPending.push({name,letter,taminType:tamin,item:f.name,cat:f.cat,price:f.price,qty,total:parseFloat((f.price*qty).toFixed(4)),month,year});
+  chkPending.push({name,letter,taminType:tamin,section,item:f.name,cat:f.cat,price:f.price,qty,total:parseFloat((f.price*qty).toFixed(4)),month,year});
   $('chk-item').value=''; $('chk-qty').value=1; chkCalc(); chkRenderPending();
   $('chk-item').focus();
 }
 function chkDelPending(i){ chkPending.splice(i,1); chkRenderPending(); }
 function chkRenderPending(){
-  $('chk-pending-body').innerHTML=chkPending.length?chkPending.map((r,i)=>`<tr><td>${i+1}</td><td>${_chkEsc(r.name)}</td><td>${_chkEsc(r.letter)||'—'}</td><td>${r.taminType}</td><td>${_chkEsc(r.item)}</td><td>${r.qty}</td><td>${fmt(r.total)}</td><td>${chkLabel(r.month,r.year)}</td><td><button onclick="chkDelPending(${i})" style="background:none;border:none;cursor:pointer;color:#e57373">🗑</button></td></tr>`).join('')
-    :'<tr><td colspan="9" style="text-align:center;color:var(--tm)">لم تُضف فحوصات بعد</td></tr>';
+  $('chk-pending-body').innerHTML=chkPending.length?chkPending.map((r,i)=>`<tr><td>${i+1}</td><td>${_chkEsc(r.name)}</td><td>${_chkEsc(r.letter)||'—'}</td><td>${r.taminType}</td><td>${_chkEsc(r.section)}</td><td>${_chkEsc(r.item)}</td><td>${r.qty}</td><td>${fmt(r.total)}</td><td>${chkLabel(r.month,r.year)}</td><td><button onclick="chkDelPending(${i})" style="background:none;border:none;cursor:pointer;color:#e57373">🗑</button></td></tr>`).join('')
+    :'<tr><td colspan="10" style="text-align:center;color:var(--tm)">لم تُضف فحوصات بعد</td></tr>';
   const s=chkPending.reduce((a,r)=>a+r.total,0);
   $('chk-pending-total').textContent=chkPending.length?('عدد البنود: '+chkPending.length+' — الإجمالي: '+fmt(s)+' ج.م'):'';
 }
@@ -3338,7 +3376,7 @@ async function chkSaveAll(){
     const batch=db.batch();
     chkPending.forEach(r=>{
       batch.set(db.collection('checkups').doc(), {
-        name:r.name, letter:r.letter||'', stype:'تأمين صحي', taminType:r.taminType, item:r.item, cat:r.cat,
+        name:r.name, letter:r.letter||'', stype:'تأمين صحي', taminType:r.taminType, section:r.section, item:r.item, cat:r.cat,
         price:r.price, qty:r.qty, total:r.total, month:r.month, year:r.year,
         createdBy: currentUser?currentUser.name:'', createdAt: firebase.firestore.FieldValue.serverTimestamp()
       });
@@ -3363,8 +3401,8 @@ async function chkLoadSaved(){
 function chkRenderSaved(){
   const fm=($('chk-filter-month').value||'').split('-').map(Number);
   const list=chkSaved.filter(r=>!fm[0]||(r.year===fm[0]&&r.month===fm[1]));
-  $('chk-saved-body').innerHTML=list.length?list.map(r=>`<tr><td>${chkLabel(r.month,r.year)}</td><td>${_chkEsc(r.name)}</td><td>${_chkEsc(r.letter)||'—'}</td><td>${_chkEsc(r.taminType)}</td><td>${_chkEsc(r.item)}</td><td>${r.qty}</td><td>${fmt(r.total||0)}</td><td><button onclick="chkDelSaved('${r.id}')" style="background:none;border:none;cursor:pointer;color:#e57373" title="حذف">🗑</button></td></tr>`).join('')
-    :'<tr><td colspan="8" style="text-align:center;color:var(--tm)">لا توجد فحوصات محفوظة</td></tr>';
+  $('chk-saved-body').innerHTML=list.length?list.map(r=>`<tr><td>${chkLabel(r.month,r.year)}</td><td>${_chkEsc(r.name)}</td><td>${_chkEsc(r.letter)||'—'}</td><td>${_chkEsc(r.taminType)}</td><td>${_chkEsc(r.section)||'—'}</td><td>${_chkEsc(r.item)}</td><td>${r.qty}</td><td>${fmt(r.total||0)}</td><td><button onclick="chkDelSaved('${r.id}')" style="background:none;border:none;cursor:pointer;color:#e57373" title="حذف">🗑</button></td></tr>`).join('')
+    :'<tr><td colspan="9" style="text-align:center;color:var(--tm)">لا توجد فحوصات محفوظة</td></tr>';
   $('chk-saved-total').textContent=list.length?('العدد: '+list.length+' — الإجمالي: '+fmt(list.reduce((a,r)=>a+(r.total||0),0))+' ج.م'):'';
 }
 async function chkDelSaved(id){
@@ -3373,7 +3411,7 @@ async function chkDelSaved(id){
   catch(e){ alert('❌ تعذّر الحذف: '+(e.code||'')+' '+(e.message||e)); }
 }
 // طباعة قائمة الفحوصات لشهر معيّن (من «طباعة تكلفة الفواتير» ← بند فحوصات)
-async function printCheckupsList(monthVal, taminVal){
+async function printCheckupsList(monthVal, taminVal, sectionVal){
   const [yy,mm]=monthVal.split('-').map(Number);
   let rows=[];
   try{
@@ -3383,12 +3421,13 @@ async function printCheckupsList(monthVal, taminVal){
     setStatus('ok');
   }catch(e){ console.error(e); setStatus('err'); alert('⚠️ تعذّر جلب الفحوصات: '+(e.code||'')+' '+(e.message||e)); return; }
   if(taminVal) rows=rows.filter(r=>r.taminType===taminVal);
-  if(!rows.length){ alert('لا توجد فحوصات محفوظة لهذا الشهر'+(taminVal?(' وفئة '+taminVal):'')); return; }
+  if(sectionVal) rows=rows.filter(r=>r.section===sectionVal);   // البند المختار فقط
+  if(!rows.length){ alert('لا توجد فحوصات محفوظة لهذا الشهر'+(taminVal?(' وفئة '+taminVal):'')+(sectionVal?(' وبند '+sectionVal):'')); return; }
   const ms=r=>(r.createdAt&&r.createdAt.toMillis)?r.createdAt.toMillis():0;
   rows.sort((a,b)=>ms(a)-ms(b));
   const sum=rows.reduce((a,r)=>a+(r.total||0),0);
   const body=rows.map((r,i)=>`<tr><td>${i+1}</td><td>${_chkEsc(r.name)}</td><td>${_chkEsc(r.letter)||'—'}</td><td>${_chkEsc(r.taminType)}</td><td>${_chkEsc(r.item)}</td><td>${r.qty}</td><td>${fmt(r.price||0)}</td><td>${fmt(r.total||0)}</td></tr>`).join('');
-  const title=`كشف فحوصات تأمين صحي عن شهر ${chkLabel(mm,yy)}${taminVal?(' — فئة التأمين: '+taminVal):''}`;
+  const title=`كشف فحوصات تأمين صحي${sectionVal?(' — بند: '+sectionVal):''} عن شهر ${chkLabel(mm,yy)}${taminVal?(' — فئة التأمين: '+taminVal):''}`;
   const html=`<div class="inv-hdr"><div style="font-size:9pt;font-weight:900">جمهورية مصر العربية — وزارة الصحة والسكان</div>
     <div style="font-size:13pt;font-weight:900;margin:2px 0">مستشفى سوهاج العام</div>
     <div style="font-size:9.6pt;font-weight:800">${title}</div></div>
@@ -3531,6 +3570,18 @@ function applySettingsPerms(){
 const LIST_LABELS = { all:'👥 الجميع', nafaqa:'💊 نفقة الدولة', tamin:'🏥 التأمين' };
 const LIST_COLORS = { all:{bg:'#eef2ff',c:'var(--p)'}, nafaqa:{bg:'#fff3cd',c:'#856404'}, tamin:{bg:'#d1ecf1',c:'#0c5460'} };
 
+/* بحث الأصناف: بالاسم أو الكود أو السعر (مطابقة جزئية أو رقمية) */
+function _itemMatch(x,q){
+  q=_toEnDigits(q).trim();
+  if(!q) return true;
+  if((x.name||'').toLowerCase().includes(q)) return true;
+  if(String(x.code||'').toLowerCase().includes(q)) return true;
+  const pr=parseFloat(x.price);
+  if(String(x.price==null?'':x.price).includes(q)) return true;
+  const qn=parseFloat(q.replace(',','.'));
+  if(!isNaN(qn) && !isNaN(pr) && Math.abs(pr-qn)<0.005) return true;
+  return false;
+}
 function renderSetItems(){
   const q=(Vv('s_filter')||'').toLowerCase();
   const listFilter = Vv('s_list_filter')||'';
@@ -3540,7 +3591,7 @@ function renderSetItems(){
   let total=0,html='';
   cats.forEach(cat=>{
     const arr=itemDB[cat]||[];
-    let items=(q?arr.filter(x=>x.name.toLowerCase().includes(q)):arr).filter(x=>_itemVisible(cat,x));
+    let items=(q?arr.filter(x=>_itemMatch(x,q)):arr).filter(x=>_itemVisible(cat,x));
     if(listFilter && LIST_OWNED_CATS.includes(cat)) items=items.filter(x=>(x.list||'all')===listFilter);
     // الفئات غير المرتبطة بقائمة (أشعة، تحاليل، أجهزة...) عامة للجميع دائماً — لا تُخفى عند تفعيل فلتر نفقة/تأمين
     if(!items.length)return; total+=items.length;
@@ -4510,6 +4561,10 @@ window.onload = init;
         <select id="chk-tamin" class="inp"><option value="">— اختر —</option><option>أطفال</option><option>طلبة</option><option>منتفعين</option></select></div>
     </div>
     <div style="margin-bottom:10px">
+      <label class="lbl">البند <span style="color:#c0392b">*</span></label>
+      <select id="chk-section" class="inp"><option value="">— اختر البند —</option><option>الاشعة</option><option>العلاج الطبيعي</option><option>رسم العصب</option><option>الايكو</option><option>الجلدية</option></select>
+    </div>
+    <div style="margin-bottom:10px">
       <label class="lbl">نوع الفحص <span style="color:#c0392b">*</span> <span style="font-weight:400;color:var(--tm)">(من قوائم الأشعة والتحاليل والأجهزة وخدمات أخرى)</span></label>
       <input type="text" id="chk-item" class="inp" list="chk-items-dl" placeholder="ابدأ بكتابة اسم الفحص ثم اختره من القائمة" oninput="chkCalc()" autocomplete="off">
       <datalist id="chk-items-dl"></datalist>
@@ -4523,7 +4578,7 @@ window.onload = init;
     </div>
     <button type="button" onclick="chkAddRow()" class="btn btn-o" style="width:100%;justify-content:center;margin-bottom:12px">➕ إضافة إلى القائمة</button>
     <div style="overflow-x:auto;border-radius:8px;border:1px solid var(--b);margin-bottom:8px">
-      <table class="tbl"><thead><tr><th>م</th><th>الاسم</th><th>رقم الخطاب</th><th>فئة التأمين</th><th>نوع الفحص</th><th>الكمية</th><th>الإجمالي</th><th>الشهر</th><th></th></tr></thead>
+      <table class="tbl"><thead><tr><th>م</th><th>الاسم</th><th>رقم الخطاب</th><th>فئة التأمين</th><th>البند</th><th>نوع الفحص</th><th>الكمية</th><th>الإجمالي</th><th>الشهر</th><th></th></tr></thead>
       <tbody id="chk-pending-body"></tbody></table>
     </div>
     <div id="chk-pending-total" style="font-weight:800;color:var(--p);font-size:.82rem;margin-bottom:10px"></div>
@@ -4531,10 +4586,10 @@ window.onload = init;
     <div style="border-top:2px solid var(--b);padding-top:12px">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;gap:8px;flex-wrap:wrap">
         <div style="font-weight:900;font-size:.85rem;color:var(--p)">الفحوصات المحفوظة</div>
-        <div style="display:flex;gap:6px;align-items:center"><input type="month" id="chk-filter-month" class="inp" style="max-width:170px" onchange="chkLoadSaved()" title="اتركه فارغاً لعرض آخر 100 فحص"><button type="button" class="btn btn-o btn-sm" onclick="$('chk-filter-month').value='';chkRenderSaved()">كل الشهور</button></div>
+        <div style="display:flex;gap:6px;align-items:center"><input type="month" id="chk-filter-month" class="inp" style="max-width:170px" onchange="chkLoadSaved()" title="اتركه فارغاً لعرض آخر 100 فحص"><button type="button" class="btn btn-o btn-sm" onclick="$('chk-filter-month').value='';chkLoadSaved()">كل الشهور</button></div>
       </div>
       <div style="overflow-x:auto;border-radius:8px;border:1px solid var(--b);max-height:260px;overflow-y:auto">
-        <table class="tbl"><thead><tr><th>الشهر</th><th>الاسم</th><th>رقم الخطاب</th><th>فئة التأمين</th><th>نوع الفحص</th><th>الكمية</th><th>الإجمالي</th><th></th></tr></thead>
+        <table class="tbl"><thead><tr><th>الشهر</th><th>الاسم</th><th>رقم الخطاب</th><th>فئة التأمين</th><th>البند</th><th>نوع الفحص</th><th>الكمية</th><th>الإجمالي</th><th></th></tr></thead>
         <tbody id="chk-saved-body"></tbody></table>
       </div>
       <div id="chk-saved-total" style="font-weight:800;color:var(--p);font-size:.8rem;margin-top:6px"></div>
@@ -4565,6 +4620,10 @@ window.onload = init;
           <option>اقتصادي</option><option>نفقة دولة</option><option>قوائم انتظار</option><option>تأمين صحي</option><option>مجاني</option>
           <option value="__chk">🔬 فحوصات</option>
         </select>
+      </div>
+      <div id="pc-section-wrap" style="display:none">
+        <label class="lbl" style="color:#c0392b;font-weight:900">البند <span>*</span></label>
+        <select id="pc-section" class="inp" style="border-color:#c0392b"><option value="">— اختر البند —</option><option>الاشعة</option><option>العلاج الطبيعي</option><option>رسم العصب</option><option>الايكو</option><option>الجلدية</option></select>
       </div>
       <div id="pc-tamin-wrap" style="display:none">
         <label class="lbl" style="color:#1565c0;font-weight:900">🏥 فئة التأمين</label>
