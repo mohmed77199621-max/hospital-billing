@@ -473,7 +473,7 @@ input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
       <div class="sec-title" style="margin-bottom:0" id="pharm-section-title">المرضى المنتظرون — صرف الأدوية والمستلزمات</div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
         <span id="pharm-pt-count" class="badge bp">0 مريض</span>
-        <input type="text" id="pharm-search" class="inp" style="width:200px;font-size:.78rem" placeholder="بحث باسم أو رقم تذكرة..." oninput="renderPharmPatients()">
+        <input type="text" id="pharm-search" class="inp" style="width:250px;font-size:.78rem" placeholder="بحث في قاعدة البيانات باسم أو رقم تذكرة..." oninput="onPharmSearchInput()" onkeydown="if(event.key==='Enter'){pharmSearchNow()}">
         <button class="btn btn-o btn-sm" onclick="loadPharmPatients()">🔄 تحديث</button>
         <button class="btn btn-g btn-sm" onclick="openNewPharmPatientModal()">+ مريض جديد</button>
       </div>
@@ -1477,21 +1477,45 @@ function delItem(id){
   renderBill();
 }
 
-/* ========== فحص تكرار رقم التذكرة ========== */
-function checkTicketDuplicate(){
+/* ========== فحص تكرار رقم التذكرة (لكل سنة على حدة — رقم التذكرة يبدأ من جديد كل سنة) ========== */
+// سنة التذكرة = سنة تاريخ الدخول، ثم الخروج، ثم وقت الحفظ (للمرضى المسجلين من الصيدلية قبل إدخال التواريخ)
+function _ptYearOf(x){
+  if(!x) return 0;
+  const yr=v=>{
+    if(!v) return 0;
+    let m=String(v).match(/^(\d{4})-/); if(m) return +m[1];
+    m=String(v).match(/(\d{4})$/); if(m) return +m[1];
+    return 0;
+  };
+  let y = yr(x.entryRaw)||yr(x.entry)||yr(x.exitRaw)||yr(x.exit);
+  if(!y){ const ms=_savedMs(x); if(ms) y=new Date(ms).getFullYear(); }
+  return y;
+}
+// يبحث عن مريض بنفس رقم التذكرة (ونفس القسم لو محدد) في نفس السنة، ويتجاهل سجل المريض نفسه
+async function _findTicketDup(ticket, dept, year, excludeId){
+  let q = db.collection('patients').where('ticket','==', ticket);
+  if(dept) q = q.where('dept','==', dept);
+  const snap = await q.limit(30).get();   // الأرجح مريض واحد لكل سنة
+  const hit = snap.docs.find(d=> d.id!==excludeId && _ptYearOf(d.data())===year);
+  return hit ? {id:hit.id, ...hit.data()} : null;
+}
+async function checkTicketDuplicate(){
   const ticket = $('p_ticket').value.trim();
   const msgDiv = $('ticket-msg');
   if(!ticket){ msgDiv.style.display='none'; return; }
 
-  // إذا كنا في وضع التعديل، تجاهل التحقق من نفس المريض
-  const duplicate = patients.find(p => p.ticket === ticket && p.id !== editId);
+  // نفس رقم التذكرة في نفس القسم ونفس السنة فقط (سنة جديدة = رقم جديد) — وفي وضع التعديل نتجاهل نفس المريض
+  const year = _ptYearOf({entryRaw:Vv('p_entry'), exitRaw:Vv('p_exit')}) || new Date().getFullYear();
+  let duplicate = null;
+  try{ duplicate = await _findTicketDup(ticket, ($('p_dept')||{}).value||'', year, editId); }
+  catch(e){ console.warn('ticket dup check:', e); msgDiv.style.display='none'; return; }
 
   if(duplicate){
     msgDiv.style.display = 'block';
     msgDiv.style.background = '#fff3cd';
     msgDiv.style.border = '1.5px solid #f0ad4e';
     msgDiv.style.color = '#856404';
-    msgDiv.innerHTML = `⚠️ رقم التذكرة <strong>${ticket}</strong> مسجل مسبقاً<br>
+    msgDiv.innerHTML = `⚠️ رقم التذكرة <strong>${ticket}</strong> مسجل مسبقاً في سنة ${year}<br>
       👤 الاسم: <strong>${duplicate.name||'—'}</strong><br>
       🏥 القسم: <strong>${duplicate.dept||'—'}</strong><br>
       📅 تاريخ الدخول: <strong>${duplicate.entry||'—'}</strong>`;
@@ -1500,7 +1524,7 @@ function checkTicketDuplicate(){
     msgDiv.style.background = '#d4edda';
     msgDiv.style.border = '1.5px solid #28a745';
     msgDiv.style.color = '#155724';
-    msgDiv.innerHTML = '✅ رقم التذكرة غير مكرر';
+    msgDiv.innerHTML = '✅ رقم التذكرة غير مكرر في سنة '+year;
     // أخفِ رسالة النجاح بعد 3 ثواني
     setTimeout(()=>{ msgDiv.style.display='none'; }, 3000);
   }
@@ -2224,18 +2248,13 @@ async function savePatient(){
       if(!stateDecisions.length){ openDecisionsModal(true); return; }
     }
 
-    // منع تكرار رقم التذكرة في نفس القسم (يُسمح بنفس الرقم في قسم مختلف)
+    // منع تكرار رقم التذكرة في نفس القسم ونفس السنة (يُسمح بنفس الرقم في قسم مختلف أو في سنة مختلفة)
     // عند التعديل (editId) نتجاهل سجل المريض نفسه من فحص التكرار
     try{
-      const dupSnap = await db.collection('patients')
-        .where('ticket','==', ticket)
-        .where('dept','==', dept)
-        .limit(2) // كفاية نعرف فيه تكرار ولا لأ (واحد ممكن يكون المريض نفسه عند التعديل)
-        .get();
-      const dup = dupSnap.docs.find(d=>d.id !== editId);
-      if(dup){
-        const dd = dup.data();
-        alert('⚠️ تم تسجيل هذا المريض من قبل\nرقم التذكرة: '+ticket+'\nالقسم: '+dept+'\nالاسم: '+(dd.name||'—')+'\nتاريخ الدخول: '+(dd.entry||'—'));
+      const _tYear = _ptYearOf({entryRaw:entry, exitRaw:exit}) || new Date().getFullYear();
+      const dd = await _findTicketDup(ticket, dept, _tYear, editId);
+      if(dd){
+        alert('⚠️ تم تسجيل هذا المريض من قبل في نفس السنة ('+_tYear+')\nرقم التذكرة: '+ticket+'\nالقسم: '+dept+'\nالاسم: '+(dd.name||'—')+'\nتاريخ الدخول: '+(dd.entry||'—'));
         return;
       }
     }catch(e){
@@ -2261,7 +2280,7 @@ async function savePatient(){
           let old = patients.find(p=>p.firestoreId===editId);
           if(!old){ const od = await db.collection('patients').doc(editId).get(); if(od.exists) old = od.data(); }
           if(old){
-            const k = x=>{ const ym=_exitYM(x); return (ym?ym[0]+'-'+ym[1]:'')+'|'+(x.stype||'')+'|'+(x.stype==='تأمين صحي'?(x.taminType||''):''); };
+            const k = x=>{ const ym=_exitYM(x); return (ym?ym[0]+'-'+ym[1]:'')+'|'+(x.stype||'')+'|'+(x.stype==='تأمين صحي'?((x.taminType||'')+'|'+(x.dept||'')):''); };
             if(k(old)!==k(pt)) await _recordInvoiceGap(editId, old); // انتقل لمجموعة أخرى: يبقى رقمه القديم محجوزاً
             if(k(old)===k(pt)){
               const oldYM=_exitYM(old);
@@ -2487,33 +2506,39 @@ function onPtSearchInput(){
   $('patients-list').innerHTML=`<div style="text-align:center;padding:24px;color:var(--tm);font-size:.82rem">${q.length<2?'اكتب حرفين على الأقل للبحث في قاعدة البيانات':'⏳ جاري البحث في قاعدة البيانات...'}</div>`;
   updateLoadMoreBtn('done');
   if(q.length<2) return;
-  _ptSearchTimer=setTimeout(()=>runPtSearch(q), 600);   // بعد وقفة بسيطة عن الكتابة
+  _ptSearchTimer=setTimeout(()=>runPtSearch(q), 300);   // بعد وقفة بسيطة عن الكتابة
 }
 function ptSearchNow(){
   clearTimeout(_ptSearchTimer);
   const q=_toEnDigits((Vv('pt-search')||'').trim());
   if(q.length>=2){ _searchActive=true; runPtSearch(q); }
 }
-/* البحث يتم في قاعدة البيانات فقط (وليس في المرضى المحمّلين):
-   رقم التذكرة يبدأ بما كُتب + الاسم يبدأ بما كُتب (مع قبول أ/إ/ا في أول حرف) */
+/* بحث مباشر في قاعدة البيانات (رقم التذكرة يبدأ بما كُتب + الاسم يبدأ بما كُتب مع قبول أ/إ/ا في أول حرف)
+   كل استعلام يعمل بالتوازي، وبتُرسل النتائج جزئياً أول بأول (onPartial) لتظهر بسرعة بدل انتظار آخر استعلام */
+async function _dbSearchDocs(q, onPartial){
+  const col=db.collection('patients');
+  const docs=new Map(); let capped=false;
+  const run=(f,v)=>col.where(f,'>=',v).where(f,'<=',v+'\uf8ff').limit(SEARCH_LIMIT).get().then(sn=>{
+    if(sn.docs.length>=SEARCH_LIMIT) capped=true;
+    sn.docs.forEach(d=>docs.set(d.id,d));
+    if(onPartial) onPartial(docs);
+  });
+  const jobs=[ run('ticket',q) ];
+  if(!/^\d+$/.test(q)){
+    const alif=['ا','أ','إ','آ'];
+    const vars=new Set([q]);
+    if(alif.includes(q[0])) alif.forEach(a=>vars.add(a+q.slice(1)));
+    vars.forEach(v=>jobs.push(run('name',v)));
+  }
+  await Promise.all(jobs);
+  return {docs, capped};
+}
 async function runPtSearch(q){
   const seq=++_searchSeq;
+  const t0=performance.now();
   const el=$('patients-list');
   el.innerHTML=`<div style="text-align:center;padding:24px;color:var(--tm);font-size:.82rem">⏳ جاري البحث في قاعدة البيانات...</div>`;
-  try{
-    const col=db.collection('patients');
-    const prefixQ=(f,v)=>col.where(f,'>=',v).where(f,'<=',v+'\uf8ff').limit(SEARCH_LIMIT).get();
-    const jobs=[ prefixQ('ticket',q) ];
-    if(!/^\d+$/.test(q)){
-      const alif=['ا','أ','إ','آ'];
-      const vars=new Set([q]);
-      if(alif.includes(q[0])) alif.forEach(a=>vars.add(a+q.slice(1)));
-      vars.forEach(v=>jobs.push(prefixQ('name',v)));
-    }
-    const snaps=await Promise.all(jobs);
-    if(seq!==_searchSeq) return;   // المستخدم غيّر البحث قبل ما نخلص
-    const docs=new Map(); let capped=false;
-    snaps.forEach(sn=>{ if(sn.docs.length>=SEARCH_LIMIT) capped=true; sn.docs.forEach(d=>docs.set(d.id,d)); });
+  const apply=(docs)=>{
     const ids=new Set();
     docs.forEach((d,id)=>{
       const data={...d.data(), firestoreId:id};
@@ -2522,8 +2547,17 @@ async function runPtSearch(q){
       ids.add(id);
     });
     _searchIds=ids;
-    renderPatients();
-    if(capped){
+  };
+  try{
+    const r=await _dbSearchDocs(q,(docs)=>{
+      if(seq!==_searchSeq || !docs.size) return;   // نعرض أول ما يوصل أي نتيجة
+      apply(docs); renderPatients();
+    });
+    if(seq!==_searchSeq) return;   // المستخدم غيّر البحث قبل ما نخلص
+    apply(r.docs); renderPatients();
+    const sec=((performance.now()-t0)/1000).toFixed(1);
+    if(_searchIds && _searchIds.size) $('pt-count').innerText += ' — '+sec+' ث';
+    if(r.capped){
       const note=document.createElement('div');
       note.style.cssText='text-align:center;padding:8px;color:#b9770e;font-size:.74rem';
       note.textContent='⚠️ ظهر أول '+SEARCH_LIMIT+' نتيجة — اكتب أكثر من الاسم أو رقم التذكرة لتضييق البحث';
@@ -3004,15 +3038,16 @@ async function _fetchInvoiceGaps(yy,mm){
     return rows;
   }catch(e){ console.warn('fetch gaps:', e); return []; }
 }
-// أرقام الفواتير لكل مرضى (شهر + تأمين صحي + فئة التأمين) بكل الأقسام مع الأرقام المحجوزة
+// أرقام الفواتير لمرضى (شهر + تأمين صحي + فئة التأمين + قسم واحد) من 1 تصاعدياً مع الأرقام المحجوزة
+// المريض الجديد ينزل أسفل الجدول، والتعديل يُبقي مكانه، والحذف يترك مكانه شرطة ويأخذ التالي الرقم التالي
 // يرجع { map: firestoreId→رقم، gaps: [{no, dept}] }
-function _buildInvoiceNoMap(monthDocs, yy, mm, taminVal, gapDocs){
+function _buildInvoiceNoMap(monthDocs, yy, mm, taminVal, gapDocs, deptVal){
   const group = monthDocs.filter(pt=>{
     const ym=_exitYM(pt);
-    return ym && ym[0]===yy && ym[1]===mm && pt.stype==='تأمين صحي' && pt.taminType===taminVal;
+    return ym && ym[0]===yy && ym[1]===mm && pt.stype==='تأمين صحي' && pt.taminType===taminVal && (pt.dept||'')===(deptVal||'');
   });
   const ids = new Set(group.map(p=>p.firestoreId));
-  const gapItems = (gapDocs||[]).filter(g=>g.taminType===taminVal && !ids.has(g.fid)).map(g=>({gap:g, ms:+g.seqMs||0}));
+  const gapItems = (gapDocs||[]).filter(g=>g.taminType===taminVal && (g.dept||'')===(deptVal||'') && !ids.has(g.fid)).map(g=>({gap:g, ms:+g.seqMs||0}));
   const items = group.map(p=>({pt:p, ms:_savedMs(p)})).concat(gapItems);
   items.sort((x,y)=>{
     if(x.ms!==y.ms) return x.ms-y.ms;
@@ -3033,7 +3068,7 @@ async function getInvoiceNumber(pt){
     const ym=_exitYM(pt);
     if(!ym || !_invoiceNoApplies(ym[0],ym[1],pt.stype)) return '';
     const [docs, gaps] = await Promise.all([_fetchMonthPatients(ym[0],ym[1]), _fetchInvoiceGaps(ym[0],ym[1])]);
-    return _buildInvoiceNoMap(docs, ym[0], ym[1], pt.taminType, gaps).map[pt.firestoreId] || '';
+    return _buildInvoiceNoMap(docs, ym[0], ym[1], pt.taminType, gaps, pt.dept).map[pt.firestoreId] || '';
   }catch(e){ console.error('getInvoiceNumber:', e); return ''; }
 }
 
@@ -3124,14 +3159,15 @@ async function printCostSummary(){
   // الترتيب: الأقدم حفظاً في الأعلى والأحدث (أو من عُدّل تاريخ خروجه) في الأسفل
   filtered = _sortForList(filtered, yy, mm, stypeVal);
 
-  // ترقيم الفواتير (تأمين صحي + فئة تأمين، من 11/2026): الرقم = ترتيب المريض بين كل مرضى الشهر والفئة
-  const useInvNo = _invoiceNoApplies(yy,mm,stypeVal) && !!taminVal;
+  // ترقيم الفواتير (تأمين صحي + فئة تأمين + قسم واحد فقط، من 11/2026): الرقم = ترتيب المريض في جدول القسم (من 1 تصاعدياً)
+  // لو اختير أكثر من قسم أو لم يُختر قسم: لا يظهر رقم الفاتورة ويظهر المسلسل العادي (م)
+  const useInvNo = _invoiceNoApplies(yy,mm,stypeVal) && !!taminVal && deptVals.length===1;
   let invNoMap = null, invGaps = [];
   if(useInvNo){
     const gapDocs = await _fetchInvoiceGaps(yy,mm);
-    const r = _buildInvoiceNoMap(monthDocs, yy, mm, taminVal, gapDocs);
+    const r = _buildInvoiceNoMap(monthDocs, yy, mm, taminVal, gapDocs, deptVals[0]);
     invNoMap = r.map;
-    invGaps = r.gaps.filter(g=>!deptVals.length || deptVals.includes(g.dept));
+    invGaps = r.gaps;
   }
 
   const {hdr, rows, tot, drugsTotal, suppliesTotal, screwsTotal, invoiceTotal} = buildCostSummaryRows(filtered);
@@ -4146,6 +4182,7 @@ async function loadPharmPatients(){
   const role = currentUser ? currentUser.role : '';
   const myStype = STYPES_FOR_ROLE[role];
   if(!myStype){ pharmPatients=[]; renderPharmPatients(); return; }
+  _phResetSearch(); if($('pharm-search')) $('pharm-search').value='';
   $('pharm-patients-list').innerHTML = `<div style="text-align:center;padding:24px;color:var(--tm)">⏳ جاري التحميل...</div>`;
   const banner = $('pharm-live-update-banner'); if(banner) banner.remove();
 
@@ -4197,17 +4234,87 @@ function _startPharmLiveNotifier(myStype){
     }, e=>console.error('pharm live notifier:', e));
 }
 
+/* ===== بحث الصيدلي: في قاعدة البيانات كلها (ليس المحمّلين فقط) — لمرضى نوع خدمته فقط ===== */
+let _phSearchTimer=null, _phSearchActive=false, _phSearchIds=null, _phSearchAdded=[], _phSearchSeq=0;
+function _phResetSearch(){
+  _phSearchActive=false; _phSearchIds=null; _phSearchSeq++; clearTimeout(_phSearchTimer);
+  if(_phSearchAdded.length){ const rm=new Set(_phSearchAdded); pharmPatients=pharmPatients.filter(p=>!rm.has(p.firestoreId)); }
+  _phSearchAdded=[];
+}
+function onPharmSearchInput(){
+  clearTimeout(_phSearchTimer);
+  const q=_toEnDigits(($('pharm-search').value||'').trim());
+  if(!q){ _phResetSearch(); renderPharmPatients(); return; }
+  _phSearchActive=true; _phSearchSeq++; _phSearchIds=null;
+  $('pharm-pt-count').textContent='بحث في قاعدة البيانات';
+  $('pharm-patients-list').innerHTML=`<div style="text-align:center;padding:24px;color:var(--tm)">${q.length<2?'اكتب حرفين على الأقل للبحث في قاعدة البيانات':'⏳ جاري البحث في قاعدة البيانات...'}</div>`;
+  if(q.length<2) return;
+  _phSearchTimer=setTimeout(()=>runPharmSearch(q), 300);
+}
+function pharmSearchNow(){
+  clearTimeout(_phSearchTimer);
+  const q=_toEnDigits(($('pharm-search').value||'').trim());
+  if(q.length>=2){ _phSearchActive=true; runPharmSearch(q); }
+}
+async function runPharmSearch(q){
+  const seq=++_phSearchSeq;
+  const t0=performance.now();
+  const role = currentUser ? currentUser.role : '';
+  const myStypes = STYPES_FOR_ROLE[role] || [];
+  const el=$('pharm-patients-list');
+  el.innerHTML=`<div style="text-align:center;padding:24px;color:var(--tm)">⏳ جاري البحث في قاعدة البيانات...</div>`;
+  const apply=(docs)=>{
+    const ids=new Set();
+    docs.forEach((d,id)=>{
+      const x=d.data();
+      if(!myStypes.includes(x.stype)) return;   // الصيدلي يرى مرضى نوع خدمته فقط
+      const data={...x, firestoreId:id};
+      const idx=pharmPatients.findIndex(p=>p.firestoreId===id);
+      if(idx>=0) pharmPatients[idx]=data; else { pharmPatients.push(data); _phSearchAdded.push(id); }
+      ids.add(id);
+    });
+    _phSearchIds=ids;
+  };
+  try{
+    const r=await _dbSearchDocs(q,(docs)=>{
+      if(seq!==_phSearchSeq || !docs.size) return;
+      apply(docs); renderPharmPatients();
+    });
+    if(seq!==_phSearchSeq) return;
+    apply(r.docs); renderPharmPatients();
+    const sec=((performance.now()-t0)/1000).toFixed(1);
+    if(_phSearchIds && _phSearchIds.size) $('pharm-pt-count').textContent += ' — '+sec+' ث';
+    if(r.capped){
+      const note=document.createElement('div');
+      note.style.cssText='text-align:center;padding:8px;color:#b9770e;font-size:.74rem';
+      note.textContent='⚠️ ظهر أول '+SEARCH_LIMIT+' نتيجة — اكتب أكثر من الاسم أو رقم التذكرة لتضييق البحث';
+      el.appendChild(note);
+    }
+  }catch(e){
+    console.error('runPharmSearch:', e);
+    el.innerHTML=`<div style="text-align:center;padding:24px;color:#c0392b">تعذّر البحث في قاعدة البيانات: ${e.message}</div>`;
+  }
+}
+
 function renderPharmPatients(){
   const role = currentUser ? currentUser.role : '';
   $('pharm-section-title').textContent = role==='nafaqa'
     ? 'مرضى نفقة الدولة — صرف الأدوية والمستلزمات'
     : 'مرضى التأمين الصحي — صرف الأدوية والمستلزمات';
-  const q = ($('pharm-search').value||'').toLowerCase();
-  const list = pharmPatients.filter(p=> !q || (p.name||'').toLowerCase().includes(q) || (p.ticket||'').includes(q));
-  $('pharm-pt-count').textContent = list.length + ' مريض';
+  let list;
+  if(_phSearchActive){
+    // وضع البحث: نتائج قاعدة البيانات فقط
+    const _ms=p=>(p.savedAt&&p.savedAt.toMillis)?p.savedAt.toMillis():0;
+    list = _phSearchIds ? pharmPatients.filter(p=>_phSearchIds.has(p.firestoreId)).sort((a,b)=>_ms(b)-_ms(a)) : [];
+    if(_phSearchIds) $('pharm-pt-count').textContent = list.length + ' نتيجة بحث';
+  } else {
+    list = pharmPatients;
+    $('pharm-pt-count').textContent = list.length + ' مريض';
+  }
   const el = $('pharm-patients-list');
   if(!list.length){
-    el.innerHTML = `<div style="text-align:center;padding:24px;color:var(--tm)">لا يوجد مرضى منتظرون</div>`;
+    if(_phSearchActive && !_phSearchIds) return;   // لسه في انتظار النتيجة
+    el.innerHTML = `<div style="text-align:center;padding:24px;color:var(--tm)">${_phSearchActive?'لا نتائج في قاعدة البيانات (رقم التذكرة أو بداية الاسم)':'لا يوجد مرضى منتظرون'}</div>`;
     return;
   }
   el.innerHTML = list.map(pt=>`
@@ -4266,14 +4373,12 @@ async function saveNewPharmPatient(){
   const role = currentUser.role;
   const myStype = STYPE_FOR_ROLE[role];
 
-  // منع تكرار رقم التذكرة في نفس القسم (يسمح بنفس الرقم في قسم مختلف)
+  // منع تكرار رقم التذكرة في نفس القسم ونفس السنة (يسمح بنفس الرقم في قسم مختلف أو سنة مختلفة)
   try{
-    const dupSnap = await db.collection('patients')
-      .where('ticket','==', ticket)
-      .where('dept','==', dept)
-      .limit(1).get();
-    if(!dupSnap.empty){
-      errEl.textContent='⚠️ تم تسجيل هذا المريض من قبل (رقم التذكرة ' + ticket + ' مسجل بالفعل في قسم ' + dept + ')';
+    const _yr = new Date().getFullYear();
+    const dupPt = await _findTicketDup(ticket, dept, _yr, null);
+    if(dupPt){
+      errEl.textContent='⚠️ تم تسجيل هذا المريض من قبل (رقم التذكرة ' + ticket + ' مسجل بالفعل في قسم ' + dept + ' لسنة ' + _yr + ')';
       errEl.style.display='block';
       return;
     }
