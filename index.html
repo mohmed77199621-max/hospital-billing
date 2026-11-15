@@ -733,6 +733,7 @@ let depts = [
   "مبتسرين","داخلي كلي"
 ];
 let billItems = [], patients = [], editId = null, selItem = null;
+let _bloodSetOff = false;   // true = المستخدم حذف «جهاز نقل دم» عمداً فلا يُضاف تلقائياً مرة أخرى
 let _ptSearchTimer=null, _searchActive=false, _searchIds=null, _searchAddedIds=[], _searchSeq=0;
 const SEARCH_LIMIT=50;
 let lastDoc = null, allLoaded = false, loadingMore = false;
@@ -1403,7 +1404,12 @@ function applyAutoLinkedItems(_reason){
   } else {
     changed = _removeAutoByKey('link-blood-type') || changed;
   }
-  changed = _ensureItem('مستلزمات','جهاز نقل دم', bloodQty, {lockedQty:true, lockDelete:true, autoKey:'link-blood-set'}) || changed;
+  // جهاز نقل الدم: يُضاف تلقائياً بإجمالي (كيس دم + بلازما)، ويمكن حذفه يدوياً — وبعد حذفه لا يعود تلقائياً
+  // (يعود الوضع الافتراضي فقط لو اختفت بنود الدم كلها من الفاتورة)
+  if(bloodQty<=0) _bloodSetOff = false;
+  if(!_bloodSetOff){
+    changed = _ensureItem('مستلزمات','جهاز نقل دم', bloodQty, {lockedQty:true, lockDelete:false, autoKey:'link-blood-set'}) || changed;
+  }
 
   // (4) أشعة عادية + أقسام عناية محددة → رسوم جهاز متنقل أشعة (خدمات أخري)
   const xrayQty = _sumQtyByNames(['اشعة عادية','أشعة عادية','اشعة مسالك عادية','أشعة مسالك عادية','اشعة عادية علي الفقرات','أشعة عادية علي الفقرات']);
@@ -1472,6 +1478,7 @@ function delItem(id){
     alert('⚠️ هذا البند مُضاف تلقائياً ولا يمكن حذفه (يتحكم به النظام).');
     return;
   }
+  if(it && (it.autoKey==='link-blood-set' || _normName(it.name)===_normName('جهاز نقل دم'))) _bloodSetOff = true;
   billItems=billItems.filter(x=>x.id!==id);
   applyAutoLinkedItems('delete');
   renderBill();
@@ -1581,6 +1588,7 @@ function updateItemPrice(id, val){ markFormDirty();
 }
 function renderBill(){
   billItems.forEach(x=>{ if(x.autoKey==='link-cvp-fee'){ x.lockedQty=false; x.lockDelete=false; } });
+  billItems.forEach(x=>{ if(x.autoKey==='link-blood-set'){ x.lockDelete=false; } });   // جهاز نقل الدم قابل للحذف
   const tb=$('bill-body');
   if(!billItems.length){
     tb.innerHTML='<tr><td colspan="6" style="text-align:center;padding:22px;color:var(--tm);font-size:.8rem">لا توجد بنود — أضف الأدوية والمستلزمات والفحوصات</td></tr>';
@@ -2180,6 +2188,7 @@ function getFormData(){
     oxyDays: getDeptTag(Vv('p_dept'))==='nicu' ? (parseFloat(Vv('p_oxy_days'))||0) : null,
     obs:Vv('p_obs'),
     notes:Vv('p_notes').trim(),
+    bloodSetOff: !!_bloodSetOff,
     entry:fmtDate(Vv('p_entry')), exit:fmtDate(Vv('p_exit')),
     entryRaw:Vv('p_entry'),   exitRaw:Vv('p_exit'),
     days, fixed:JSON.parse(JSON.stringify(fixed)),
@@ -2345,6 +2354,7 @@ function editPatient(fid){
   $('p_entry').value=pt.entryRaw||''; $('p_exit').value=pt.exitRaw||''; $('stay_days').value=pt.days||0; calcTotal();
   const fm={fStay:'f_stay',fMed:'f_med',fNur:'f_nur',fDoc:'f_doc',fAnes:'f_anes',fOr:'f_or',fEcg:'f_ecg',fPhysio:'f_physio',fOxy:'f_oxy'};
   Object.entries(fm).forEach(([k,id])=>$(id).value=pt[k]||0);
+  _bloodSetOff = !!pt.bloodSetOff;
   billItems=JSON.parse(JSON.stringify(pt.items||[])).map(it=>({...it, id: it.id!=null ? it.id : (Date.now()+Math.random())}));
   // أضف الأصناف الافتراضية الغير موجودة (بكمية 0)
   setTimeout(()=>loadDefaultBillItems(pt.stype), 50);
@@ -2483,7 +2493,7 @@ function clearForm(){
   $('p_group').value=''; $('group-wrap').style.display='none';
   $('p_oxy_days').value=''; $('oxy-days-wrap').style.display='none';
   ['f_stay','f_med','f_nur','f_doc','f_anes','f_or','f_ecg','f_physio','f_oxy'].forEach(id=>$(id).value=0);
-  billItems=[];
+  billItems=[]; _bloodSetOff=false;
   // تحميل الأصناف الافتراضية بكمية 0
   setTimeout(()=>loadDefaultBillItems(), 50); $('stay_days').value=0; renderBill();
   if(currentUser && Array.isArray(currentUser.allowedStypes) && currentUser.allowedStypes.length===1){ $('p_stype').value=currentUser.allowedStypes[0]; try{ onStypeChange(); }catch(e){} }
