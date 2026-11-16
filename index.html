@@ -255,7 +255,7 @@ input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
       <div class="card">
         <div class="sec-title">بيانات المريض الإدارية</div>
         <div style="display:flex;flex-direction:column;gap:10px">
-          <div><label class="lbl">اسم المريض رباعياً</label><input type="text" id="p_name" class="inp" placeholder="الاسم الكامل للمريض" oninput="markFormDirty()"></div>
+          <div><label class="lbl">اسم المريض رباعياً</label><input type="text" id="p_name" class="inp" placeholder="الاسم الكامل للمريض" oninput="_onlyLetters(this);markFormDirty()"></div>
           <div class="g2">
             <div>
               <label class="lbl">رقم التذكرة</label>
@@ -501,7 +501,7 @@ input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
       <button onclick="closeNewPharmPatientModal()" style="background:none;border:none;cursor:pointer;font-size:1.4rem;color:var(--tm)">✕</button>
     </div>
     <div style="display:flex;flex-direction:column;gap:10px">
-      <div><label class="lbl">اسم المريض</label><input type="text" id="np_name" class="inp" placeholder="الاسم الكامل للمريض"></div>
+      <div><label class="lbl">اسم المريض</label><input type="text" id="np_name" class="inp" placeholder="الاسم الكامل للمريض" oninput="_onlyLetters(this)"></div>
       <div><label class="lbl">القسم الطبي</label><select id="np_dept" class="inp"></select></div>
       <div><label class="lbl">رقم التذكرة</label><input type="text" id="np_ticket" class="inp"></div>
       <div id="np-err" style="color:#c0392b;font-size:.74rem;font-weight:700;display:none"></div>
@@ -1260,7 +1260,7 @@ function filterDD(){
     dd.innerHTML=list.map(x=>{
       return `<div class="dd-item" onmousedown="pickItem(this)"
         data-name="${x.name.replace(/"/g,'&quot;')}"
-        data-price="${x.price}" data-code="${(x.code||'').replace(/"/g,'&quot;')}">${x.name}${x.code?` <span style="color:#856404;font-size:.7rem">[${x.code}]</span>`:''} &mdash; <b>${x.price} ج.م</b></div>`;
+        data-price="${x.price}" data-code="${(_codeOf(x,cat)||'').replace(/"/g,'&quot;')}">${x.name}${_codeOf(x,cat)?` <span style="color:#856404;font-size:.7rem">[${_codeOf(x,cat)}]</span>`:''} &mdash; <b>${x.price} ج.م</b></div>`;
     }).join('');
     dd.style.display='block';
   } else dd.style.display='none';
@@ -1596,7 +1596,7 @@ function renderBill(){
   }
   tb.innerHTML=billItems.map((i,n)=>`<tr class="${i.qty===0?'zero-qty-row ':''} ${i.isDefault&&i.qty===0?'bill-card-default':i.qty>0?'bill-card-added':''}" id="bill-row-${i.id}">
     <td style="color:var(--tm);font-size:.72rem">${n+1}</td>
-    <td style="font-weight:700">${i.name}${i.code?`<span style="font-size:.62rem;color:#856404;margin-right:5px">[${i.code}]</span>`:''}</td>
+    <td style="font-weight:700">${i.name}${(i.code && isNafaqaLike(Vv('p_stype')))?`<span style="font-size:.62rem;color:#856404;margin-right:5px">[${i.code}]</span>`:''}</td>
     <td style="text-align:center"><span class="badge bp">${i.cat}</span></td>
     <td style="text-align:center">
       <input type="number" value="${i.qty}" min="0.01" step="0.01" ${i.lockedQty?'disabled':''}
@@ -1918,11 +1918,18 @@ function buildDecisionsPage(c){
   return {html, warnings: res.warnings};
 }
 
+/* الأكواد خاصة بأصناف نفقة الدولة فقط: أصناف التأمين والاقتصادي وأصناف «الجميع» لا كود لها */
+function _codeOf(x, cat){
+  if(!x || !x.code) return '';
+  if(LIST_OWNED_CATS.includes(cat)) return (x.list==='nafaqa') ? x.code : '';
+  return x.code;
+}
 function _itemCode(it, stype){
+  if(!isNafaqaLike(stype)) return '';   // لا كود لمرضى التأمين / الاقتصادي / المجاني
   if(it.code) return it.code;
   try{
-    const pools = [ itemDB[it.cat]||[] ];
-    for(const arr of pools){ const f = arr.find(x=>x.name===it.name && x.code); if(f) return f.code; }
+    const f = (itemDB[it.cat]||[]).find(x=>x.name===it.name && _codeOf(x,it.cat));
+    if(f) return _codeOf(f,it.cat);
   }catch(e){}
   return '';
 }
@@ -2229,6 +2236,7 @@ async function savePatient(){
     const oxyDaysRaw = Vv('p_oxy_days').trim();
 
     if(!name)  { alert('⚠️ يرجى إدخال اسم المريض');            return; }
+    if(_nameHasInvalid(name)){ alert('⚠️ اسم المريض يجب أن يحتوي على حروف فقط (بدون أرقام أو رموز) — صحّح الاسم ثم احفظ'); $('p_name').focus(); return; }
     if(!ticket){ alert('⚠️ يرجى إدخال رقم التذكرة');           return; }
     if(!dept)  { alert('⚠️ يرجى اختيار القسم الطبي');          return; }
     if(!stype) { alert('⚠️ يرجى اختيار نوع الخدمة');           return; }
@@ -2665,12 +2673,52 @@ function renderPendingPharmList(){
 
 
 /* ========== EXCEL EXPORT ========== */
+/* ===== الاسم: حروف ومسافات فقط (بدون أرقام أو رموز) ===== */
+function _onlyLetters(el){
+  const v=el.value, c=v.replace(/[^\p{L}\p{M}\s]/gu,'');
+  if(c!==v){
+    const pos=el.selectionStart, d=v.length-c.length;
+    el.value=c;
+    try{ el.setSelectionRange(Math.max(0,pos-d), Math.max(0,pos-d)); }catch(e){}
+  }
+}
+function _nameHasInvalid(name){ return /[^\p{L}\p{M}\s]/u.test(name||''); }
+
+/* ===== تصدير الإكسل: مرضى الشهور المختارة (حسب تاريخ الخروج) من قاعدة البيانات مباشرة ===== */
+function _excelSelectAll(on){ document.querySelectorAll('.excel-mo').forEach(c=>c.checked=on); }
+async function _fetchExcelPatients(){
+  const sel=[...document.querySelectorAll('.excel-mo:checked')].map(c=>c.value).sort();
+  if(!sel.length){ alert('⚠️ اختر شهراً واحداً على الأقل (حسب تاريخ الخروج)'); return null; }
+  const notice=document.createElement('div');
+  notice.style.cssText='position:fixed;top:16px;left:50%;transform:translateX(-50%);background:#1e3a8a;color:#fff;padding:10px 20px;border-radius:10px;z-index:99999;font-weight:700;font-size:.85rem;box-shadow:0 4px 14px rgba(0,0,0,.25)';
+  document.body.appendChild(notice);
+  const list=[], seen=new Set();
+  try{
+    for(let i=0;i<sel.length;i++){
+      const [yy,mm]=sel[i].split('-').map(Number), mm2=String(mm).padStart(2,'0');
+      notice.textContent='⏳ جاري تحميل مرضى '+chkLabel(mm,yy)+' ('+(i+1)+'/'+sel.length+')...';
+      const snap=await db.collection('patients')
+        .where('exitRaw','>=',`${yy}-${mm2}-01`)
+        .where('exitRaw','<=',`${yy}-${mm2}-31`).get();
+      snap.docs.forEach(d=>{ if(!seen.has(d.id)){ seen.add(d.id); list.push({...d.data(), firestoreId:d.id}); } });
+    }
+  }catch(e){
+    notice.remove();
+    alert('❌ تعذّر تحميل المرضى من قاعدة البيانات: '+(e.message||e));
+    return null;
+  }
+  notice.remove();
+  return {list:list.filter(_ptVisible), label:sel.join('_')};
+}
 function openExcelExportModal(){
-  if(!patients.length){alert('لا يوجد مرضي محفوظون');return;}
-  // ضع تاريخ اليوم كحد أقصى افتراضي
-  const today = new Date().toISOString().slice(0,10);
-  $('excel-to').value = today;
-  $('excel-from').value = '';
+  // قائمة آخر 24 شهراً (حسب تاريخ الخروج) — الشهر الحالي محدد افتراضياً
+  const now=new Date(); let html='';
+  for(let i=0;i<24;i++){
+    const d=new Date(now.getFullYear(), now.getMonth()-i, 1), y=d.getFullYear(), m=d.getMonth()+1;
+    const v=y+'-'+String(m).padStart(2,'0');
+    html+=`<label style="display:flex;align-items:center;gap:6px;font-size:.78rem;cursor:pointer;padding:4px 6px;border-radius:6px"><input type="checkbox" class="excel-mo" value="${v}" ${i===0?'checked':''}> ${chkLabel(m,y)}</label>`;
+  }
+  $('excel-months').innerHTML=html;
   $('excel-modal').style.display = 'flex';
 }
 function closeExcelModal(){ $('excel-modal').style.display='none'; }
@@ -2702,31 +2750,9 @@ async function ensureAllPatientsLoaded(){
 /* ========== تصدير الشيت التفصيلي ========== */
 async function exportDetailedExcel(){
   closeExcelModal();
-  if(!(await ensureAllPatientsLoaded())) return;
-  if(!patients.length){alert('لا يوجد مرضي محفوظون');return;}
-
-  const fromVal = $('excel-from').value;
-  const toVal   = $('excel-to').value;
-  const fromDate = fromVal ? new Date(fromVal+'T00:00:00') : null;
-  const toDate   = toVal   ? new Date(toVal  +'T23:59:59') : null;
-
-  function parseD(str){
-    if(!str) return null;
-    if(str.includes('/')){const[d,m,y]=str.split('/');return new Date(`${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}T00:00:00`);}
-    return new Date(str+'T00:00:00');
-  }
-
-  let filtered = patients.filter(_ptVisible);
-  if(fromDate||toDate){
-    filtered = filtered.filter(pt=>{
-      const ed = parseD(pt.entry||pt.entryRaw);
-      if(!ed) return true;
-      if(fromDate && ed<fromDate) return false;
-      if(toDate   && ed>toDate)   return false;
-      return true;
-    });
-  }
-  if(!filtered.length){alert('لا يوجد مرضي في هذه الفترة');return;}
+  const _r = await _fetchExcelPatients(); if(!_r) return;
+  const filtered = _r.list;
+  if(!filtered.length){alert('لا يوجد مرضي في الشهور المختارة');return;}
 
   // شيت التفاصيل
   const hdr = [
@@ -2773,54 +2799,25 @@ async function exportDetailedExcel(){
   XLSX.utils.book_append_sheet(wb, ws, 'بيانات تفصيلية');
 
   const today = new Date().toISOString().slice(0,10);
-  const rangeLabel = (fromVal||toVal)?`_${fromVal||'البداية'}_الي_${toVal||'النهاية'}`:'_الكل';
+  const rangeLabel = '_'+_r.label;
   XLSX.writeFile(wb, 'تفصيلي_أشعة_تحاليل_بنك_دم_شرائح_أجهزة_خدمات_اخري'+rangeLabel+'_'+today+'.xlsx');
 }
 /* ========================================= */
 
 async function exportAllExcel(){
   closeExcelModal();
-  if(!(await ensureAllPatientsLoaded())) return;
-  if(!patients.length){alert('لا يوجد مرضي محفوظون');return;}
+  const _r = await _fetchExcelPatients(); if(!_r) return;
+  const filtered = _r.list;
 
-  // فلتر التاريخ
-  const fromVal = $('excel-from').value;
-  const toVal   = $('excel-to').value;
-  const fromDate = fromVal ? new Date(fromVal + 'T00:00:00') : null;
-  const toDate   = toVal   ? new Date(toVal   + 'T23:59:59') : null;
-
-  // دالة تحويل تاريخ النص إلى Date
-  function parsePatientDate(str){
-    if(!str) return null;
-    if(str.includes('/')){
-      const [d,m,y] = str.split('/');
-      return new Date(`${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}T00:00:00`);
-    }
-    return new Date(str + 'T00:00:00');
-  }
-
-  // تحويل Date إلى رقم Excel (serial date) لكي يُعرض كتاريخ حقيقي في Excel
+  // تحويل التاريخ إلى رقم Excel (serial date) لكي يُعرض كتاريخ حقيقي في Excel
   function toExcelDate(str){
     return dateToExcelSerial(str);
   }
 
-  let filtered = patients.filter(_ptVisible);
-  if(fromDate || toDate){
-    filtered = filtered.filter(pt=>{
-      const entryDate = parsePatientDate(pt.entry || pt.entryRaw);
-      if(!entryDate) return true; // إذا لم يوجد تاريخ، اشمله
-      if(fromDate && entryDate < fromDate) return false;
-      if(toDate   && entryDate > toDate)   return false;
-      return true;
-    });
-  }
-
   if(!filtered.length){
-    alert('لا يوجد مرضي في هذه الفترة الزمنية');return;
+    alert('لا يوجد مرضي في الشهور المختارة');return;
   }
 
-  const fromLabel = fromVal || 'الكل';
-  const toLabel   = toVal   || 'الكل';
   const hdr=[
     'رقم التذكرة','اسم المريض','القسم الطبي','نوع الخدمة','فئة التأمين','المجموعة','رقم الخطاب / القرار',
     'تاريخ الدخول','تاريخ الخروج','مدة الإقامة (يوم)',
@@ -2890,7 +2887,7 @@ async function exportAllExcel(){
   const wb=XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb,ws,'سجل المرضي');
 
-  const rangeLabel = (fromVal||toVal) ? `_${fromLabel}_الي_${toLabel}` : '_الكل';
+  const rangeLabel = '_'+_r.label;
   XLSX.writeFile(wb,'سجل_مرضي_سوهاج'+rangeLabel+'_'+new Date().toISOString().slice(0,10)+'.xlsx', {bookSST:false, cellStyles:true});
 }
 
@@ -3390,7 +3387,8 @@ function chkCalc(){
   $('chk-price-hint').textContent=f?('سعر الوحدة: '+fmt(price)+' ج.م — '+f.cat):($('chk-item').value?'⚠️ الفحص غير موجود في القوائم':'');
 }
 function chkAddRow(){
-  const name=($('chk-name').value||'').trim();
+  const name=($('chk-name').value||'').trim().replace(/\s+/g,' ');
+  if(name && _nameHasInvalid(name)){ alert('⚠️ الاسم يجب أن يحتوي على حروف فقط (بدون أرقام أو رموز)'); return; }
   const letter=($('chk-letter').value||'').trim();
   const tamin=$('chk-tamin').value;
   const section=$('chk-section').value;
@@ -3660,7 +3658,7 @@ function renderSetItems(){
           </div>
           <div style="display:flex;align-items:center;gap:5px;flex-shrink:0;flex-wrap:wrap">
             ${listSelect}
-            <input type="text" value="${(x.code||'').replace(/"/g,'&quot;')}" placeholder="الكود" title="كود الصنف" ${dis} onchange="updateDBCode('${cat}',${realIdx},this.value)" style="width:80px;padding:3px 6px;border:1px solid var(--b);border-radius:5px;font-size:.72rem;text-align:center;font-family:'Noto Kufi Arabic',sans-serif">
+            ${(curList==='nafaqa' || !isOwnedCat) ? `<input type="text" value="${(x.code||'').replace(/"/g,'&quot;')}" placeholder="الكود" title="كود الصنف" ${dis} onchange="updateDBCode('${cat}',${realIdx},this.value)" style="width:80px;padding:3px 6px;border:1px solid var(--b);border-radius:5px;font-size:.72rem;text-align:center;font-family:'Noto Kufi Arabic',sans-serif">` : ''}
             <input type="number" value="${x.price}" min="0" step="0.01" title="السعر" ${dis}
               style="width:76px;padding:3px 6px;border:1px solid var(--b);border-radius:5px;font-size:.75rem;font-weight:800;color:var(--p);text-align:center;font-family:'Noto Kufi Arabic',sans-serif"
               onchange="updateDBPrice('${cat}',${realIdx},this.value)">
@@ -3710,6 +3708,7 @@ function delDBItem(cat,idx){
 }
 function updateDBCode(cat,idx,val){
   if(!_canEditItem(cat,itemDB[cat][idx])){alert('⚠️ لا تملك صلاحية تعديل هذا الصنف');renderSetItems();return;}
+  if(LIST_OWNED_CATS.includes(cat) && itemDB[cat][idx].list!=='nafaqa'){ alert('⚠️ الكود متاح لأصناف نفقة الدولة فقط'); renderSetItems(); return; }
   itemDB[cat][idx].code = String(val||'').trim();
   if(!itemDB[cat][idx].code) delete itemDB[cat][idx].code;
   saveSettings();
@@ -3736,8 +3735,12 @@ function addNewItem(){
   if(!itemDB[cat])itemDB[cat]=[];
   if(itemDB[cat].find(x=>x.name===name)){alert('هذا الصنف موجود بالفعل في القائمة');return;}
   const entry={name,price};
-  const _code=(Vv('s_code')||'').trim(); if(_code) entry.code=_code;
+  const _code=(Vv('s_code')||'').trim();
   if(LIST_OWNED_CATS.includes(cat)) entry.list = _myNewItemList() || Vv('s_list') || 'all';
+  if(_code){
+    if(LIST_OWNED_CATS.includes(cat) && entry.list!=='nafaqa'){ alert('⚠️ الكود متاح لأصناف نفقة الدولة فقط — اختر قائمة «نفقة الدولة» أو اترك الكود فارغاً'); return; }
+    entry.code=_code;
+  }
   if(!_canEditItem(cat, entry)){ alert('⚠️ لا تملك صلاحية إضافة صنف لهذه القائمة'); return; }
   itemDB[cat].push(entry);
   $('s_name').value=''; $('s_price').value=''; if($('s_code')) $('s_code').value='';
@@ -4369,50 +4372,62 @@ function openNewPharmPatientModal(){
 }
 function closeNewPharmPatientModal(){ $('np-modal').style.display='none'; }
 
+let _npSaving = false;
 async function saveNewPharmPatient(){
-  const name = ($('np_name').value||'').trim();
+  if(_npSaving) return;   // منع الضغط المتكرر على زر الحفظ
+  const errEl = $('np-err');
+  const showErr = m=>{ errEl.textContent=m; errEl.style.display='block'; };
+  errEl.style.display='none';
+  const name = ($('np_name').value||'').trim().replace(/\s+/g,' ');
   const dept = $('np_dept').value;
   const ticket = ($('np_ticket').value||'').trim();
-  const errEl = $('np-err');
-  errEl.style.display='none';
 
-  if(!name){ errEl.textContent='⚠️ يرجى إدخال اسم المريض'; errEl.style.display='block'; return; }
-  if(!dept){ errEl.textContent='⚠️ يرجى اختيار القسم الطبي'; errEl.style.display='block'; return; }
-  if(!ticket){ errEl.textContent='⚠️ يرجى إدخال رقم التذكرة'; errEl.style.display='block'; return; }
+  if(!name){ showErr('⚠️ يرجى إدخال اسم المريض'); return; }
+  if(_nameHasInvalid(name)){ showErr('⚠️ الاسم يجب أن يحتوي على حروف فقط (بدون أرقام أو رموز)'); return; }
+  if(!dept){ showErr('⚠️ يرجى اختيار القسم الطبي'); return; }
+  if(!ticket){ showErr('⚠️ يرجى إدخال رقم التذكرة'); return; }
 
   const role = currentUser.role;
   const myStype = STYPE_FOR_ROLE[role];
-
-  // منع تكرار رقم التذكرة في نفس القسم ونفس السنة (يسمح بنفس الرقم في قسم مختلف أو سنة مختلفة)
+  const btn = document.querySelector('#np-modal button[onclick="saveNewPharmPatient()"]');
+  _npSaving = true;
+  if(btn){ btn.disabled=true; btn.style.opacity='.7'; }
   try{
+    // 1) فحص قاعدة البيانات: نفس رقم التذكرة + نفس القسم + نفس السنة → لا يُحفظ
     const _yr = new Date().getFullYear();
     const dupPt = await _findTicketDup(ticket, dept, _yr, null);
     if(dupPt){
-      errEl.textContent='⚠️ تم تسجيل هذا المريض من قبل (رقم التذكرة ' + ticket + ' مسجل بالفعل في قسم ' + dept + ' لسنة ' + _yr + ')';
-      errEl.style.display='block';
+      showErr('⚠️ تم تسجيل هذا المريض من قبل (رقم التذكرة ' + ticket + ' مسجل بالفعل في قسم ' + dept + ' لسنة ' + _yr + ') — الاسم: ' + (dupPt.name||'—'));
       return;
     }
-  }catch(e){
-    errEl.textContent='❌ خطأ في التحقق من رقم التذكرة: '+e.message; errEl.style.display='block'; return;
-  }
-
-  const newPt = {
-    name, dept, ticket, stype: myStype,
-    items: [], fixed: [], feesSum:0, itemsSum:0, total:0,
-    fStay:0, fMed:0, fNur:0, fDoc:0, fAnes:0, fOr:0, fEcg:0, fPhysio:0, fOxy:0,
-    finalized: false, // لم يُكمل مدخل البيانات بياناته بعد
-    savedAt: firebase.firestore.FieldValue.serverTimestamp(),
-    savedBy: currentUser.name, savedByRole: currentUser.role,
-  };
-
-  try{
-    const ref = await db.collection('patients').add(newPt);
+    const newPt = {
+      name, dept, ticket, stype: myStype,
+      items: [], fixed: [], feesSum:0, itemsSum:0, total:0,
+      fStay:0, fMed:0, fNur:0, fDoc:0, fAnes:0, fOr:0, fEcg:0, fPhysio:0, fOxy:0,
+      finalized: false, // لم يُكمل مدخل البيانات بياناته بعد
+      savedAt: firebase.firestore.FieldValue.serverTimestamp(),
+      savedBy: currentUser.name, savedByRole: currentUser.role,
+    };
+    // 2) رقم مستند ثابت (سنة+قسم+تذكرة) داخل Transaction: حتى لو ضغط مستخدمان في نفس اللحظة يُحفظ واحد فقط
+    const docId = 'ph_'+_yr+'_'+encodeURIComponent(dept)+'_'+encodeURIComponent(ticket);
+    const ref = db.collection('patients').doc(docId);
+    await db.runTransaction(async tx=>{
+      const sn = await tx.get(ref);
+      if(sn.exists) throw new Error('DUP_TICKET');
+      tx.set(ref, newPt);
+    });
     _monthCache.clear();
     closeNewPharmPatientModal();
     pharmPatients.unshift({...newPt, firestoreId: ref.id, savedAt: new Date()});
     renderPharmPatients();
     openPharmModal(ref.id);
-  }catch(e){ errEl.textContent='❌ خطأ في الحفظ: '+e.message; errEl.style.display='block'; }
+  }catch(e){
+    if(e && e.message==='DUP_TICKET') showErr('⚠️ تم تسجيل هذا المريض من قبل (رقم التذكرة ' + ticket + ' مسجل بالفعل في قسم ' + dept + ')');
+    else showErr('❌ خطأ في الحفظ: '+(e.message||e));
+  }finally{
+    _npSaving = false;
+    if(btn){ btn.disabled=false; btn.style.opacity=''; }
+  }
 }
 
 function openPharmModal(fid){
@@ -4461,7 +4476,7 @@ function filterPharmDD(){
   if(!filtered.length){ dd.style.display='none'; return; }
   dd.innerHTML = filtered.map(x=>`
     <div class="dd-item" onmousedown="selectPharmItem('${x.name.replace(/'/g,"\\'")}')">
-      ${x.name}${x.code?` <span style="color:#856404;font-size:.7rem">[${x.code}]</span>`:''}
+      ${x.name}${_codeOf(x,Vv('ph_cat'))?` <span style="color:#856404;font-size:.7rem">[${_codeOf(x,Vv('ph_cat'))}]</span>`:''}
       <span style="float:left;color:var(--p);font-weight:900">${x.price} ج.م</span>
     </div>`).join('');
   dd.style.display='block';
@@ -4488,7 +4503,7 @@ function addPharmItem(){
   const existing = pharmBillItems.find(x=>x.name===name && x.cat===cat);
   if(existing){ existing.qty+=qty; existing.total=parseFloat((existing.qty*existing.price).toFixed(2)); }
   else {
-    pharmBillItems.push({id: Date.now()+Math.random(), cat, name, qty, price:item.price, ...(item.code?{code:item.code}:{}), total:parseFloat((qty*item.price).toFixed(2)), returned:0, addedBy:currentUser?currentUser.name:''});
+    pharmBillItems.push({id: Date.now()+Math.random(), cat, name, qty, price:item.price, ...(_codeOf(item,cat)?{code:_codeOf(item,cat)}:{}), total:parseFloat((qty*item.price).toFixed(2)), returned:0, addedBy:currentUser?currentUser.name:''});
   }
   renderPharmBill();
   $('ph_q').value=''; $('ph_qty').value=1;
@@ -4518,7 +4533,7 @@ function renderPharmBill(){
     const netTotal = parseFloat((net*it.price).toFixed(2));
     return `<tr>
       <td>${i+1}</td>
-      <td>${it.name}${it.code?`<span style="font-size:.62rem;color:#856404;margin-right:4px">[${it.code}]</span>`:''}${it.addedBy?`<span style="font-size:.6rem;color:var(--tm);margin-right:4px">(${it.addedBy})</span>`:''}</td>
+      <td>${it.name}${(it.code && currentUser && currentUser.role==='nafaqa')?`<span style="font-size:.62rem;color:#856404;margin-right:4px">[${it.code}]</span>`:''}${it.addedBy?`<span style="font-size:.6rem;color:var(--tm);margin-right:4px">(${it.addedBy})</span>`:''}</td>
       <td>${it.cat}</td>
       <td style="text-align:center">${it.qty}</td>
       <td style="text-align:center">${it.price}</td>
@@ -4637,19 +4652,14 @@ window.onload = init;
       <h2 style="font-weight:900;font-size:.95rem;color:var(--p)">📊 تصدير سجل المرضى — إكسل</h2>
       <button onclick="closeExcelModal()" style="background:none;border:none;cursor:pointer;font-size:1.4rem;color:var(--tm)">✕</button>
     </div>
-    <div style="font-size:.82rem;color:var(--tm);margin-bottom:14px">اختر الفترة الزمنية للتصدير:</div>
-    <div class="g2" style="margin-bottom:14px">
-      <div>
-        <label class="lbl">من تاريخ</label>
-        <input type="date" id="excel-from" class="inp">
-      </div>
-      <div>
-        <label class="lbl">إلى تاريخ</label>
-        <input type="date" id="excel-to" class="inp">
-      </div>
+    <div style="font-size:.82rem;color:var(--tm);margin-bottom:8px">اختر شهراً أو أكثر للتصدير <strong>(حسب تاريخ الخروج)</strong>:</div>
+    <div style="display:flex;gap:8px;margin-bottom:8px">
+      <button class="btn btn-o" style="padding:4px 10px;font-size:.74rem" onclick="_excelSelectAll(true)">تحديد الكل</button>
+      <button class="btn btn-o" style="padding:4px 10px;font-size:.74rem" onclick="_excelSelectAll(false)">إلغاء التحديد</button>
     </div>
-    <div style="font-size:.78rem;color:var(--tm);margin-bottom:16px;background:#f0f4ff;padding:8px 12px;border-radius:8px">
-      💡 اتركهما فارغين لتصدير جميع المرضى
+    <div id="excel-months" style="display:grid;grid-template-columns:repeat(3,1fr);gap:2px;max-height:230px;overflow-y:auto;border:1px solid var(--b);border-radius:8px;padding:8px;margin-bottom:12px"></div>
+    <div style="font-size:.76rem;color:var(--tm);margin-bottom:16px;background:#f0f4ff;padding:8px 12px;border-radius:8px">
+      💡 يتم جلب المرضى من قاعدة البيانات مباشرة (بدون تحميل كل المرضى)، والقراءات بعدد مرضى الشهور المختارة فقط.
     </div>
     <div style="display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap">
       <button onclick="closeExcelModal()" class="btn btn-o">إلغاء</button>
@@ -4667,7 +4677,7 @@ window.onload = init;
       <button onclick="closeCheckupsModal()" style="background:none;border:none;cursor:pointer;font-size:1.4rem;color:var(--tm)">✕</button>
     </div>
     <div class="g2" style="margin-bottom:10px">
-      <div><label class="lbl">الاسم <span style="color:#c0392b">*</span></label><input type="text" id="chk-name" class="inp" placeholder="اسم المريض"></div>
+      <div><label class="lbl">الاسم <span style="color:#c0392b">*</span></label><input type="text" id="chk-name" class="inp" placeholder="اسم المريض" oninput="_onlyLetters(this)"></div>
       <div><label class="lbl">رقم الخطاب</label><input type="text" id="chk-letter" class="inp" placeholder="رقم الخطاب" autocomplete="off"></div>
     </div>
     <div class="g2" style="margin-bottom:10px">
